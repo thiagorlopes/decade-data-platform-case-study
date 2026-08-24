@@ -15,21 +15,22 @@ Lorem ipsum
 
 ## Prerequisites
 
-- Python 3.10–3.12
+- Docker Engine + Docker Compose v2
 - `make`, `git`
-- (optional) DuckDB CLI for `make shell` — install with `curl -L https://install.duckdb.org | bash`
+
+Everything else (Python, dbt, DuckDB CLI) is bundled inside the image. No host-side Python setup required.
 
 ## Installation
 
 ```bash
-make install
+make install     # builds the docker image
 ```
 
 ## Build
 
 ```bash
-make check     # prove the wiring: lists the declared dbt sources
-make build     # run all dbt models and tests
-make shell     # open duckdb CLI on the warehouse (requires DuckDB CLI)
-make help      # list all targets
+make check       # prove the wiring: lists the declared dbt sources
+make build       # run all dbt models and tests
+make shell       # open duckdb CLI on the warehouse (inside container)
+make help        # list all targets
 ```

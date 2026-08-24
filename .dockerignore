@@ -1,0 +1,12 @@
+.venv/
+.git/
+.github/
+target/
+dbt_packages/
+logs/
+warehouse.duckdb
+warehouse.duckdb.wal
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+notebooks/
