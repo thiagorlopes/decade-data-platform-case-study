@@ -43,13 +43,13 @@ make help        # list all targets
 
 ## Architecture
 
-During past interviews, it became apparent that Decade uses Databricks extensively for its data workflows. For that reason, the chosen architecture in this case is based on this premise. The idea is that learnings from this case could be extended to production. 
+Decade runs its data workflows on Databricks, so the target architecture for this case is Databricks-native — the shape below is what production looks like, and the case is designed so the work transfers directly.
 
-The destination architecture is based on [Developer best practices on Databricks](https://docs.databricks.com/gcp/en/developers/best-practices) Databricks official documentation. 
+It follows the Databricks [developer best practices](https://docs.databricks.com/gcp/en/developers/best-practices). The doc scales workspace count to team size — two workspaces (dev/prod) for teams up to five engineers, three (dev/staging/prod) beyond that — with git as the source of truth ("if it isn't in version control, it doesn't exist") and CI/CD gating promotion between environments. The diagram below is the doc's illustration of one such production deployment workflow at scale, included here for reference rather than as the shape this case commits to:
 
 <img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
 
-However, we won't start from the get go with databricks. The case needs to be reproducible. So, we are starting with this simplified architecture.
+The case study ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any laptop with no account required; the same dbt models run against Databricks when promoted. The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace — a profile change, not a rewrite — which also closes the one tradeoff this shortcut carries: SQL dialect drift between the two engines.
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 
