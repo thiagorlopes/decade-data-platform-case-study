@@ -16,11 +16,17 @@ Lorem ipsum
 
 ## Installation
 
-Lorem ipsum
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
 
 ## Build
 
-Lorem ipsum
+```bash
+dbt parse --project-dir . --profiles-dir .
+dbt build --project-dir . --profiles-dir .
+```
 
 ## Initializing Environment
 

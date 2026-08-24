@@ -221,3 +221,13 @@ __marimo__/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# dbt
+target/
+dbt_packages/
+logs/
+.user.yml
+
+# Local duckdb warehouse
+warehouse.duckdb
+warehouse.duckdb.wal
