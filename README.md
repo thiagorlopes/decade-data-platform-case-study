@@ -62,6 +62,4 @@ This case study solution ships a two-environment slice of that target: **DuckDB 
 - **Loading raw** — picking up only the new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen before. Not implemented here: raw was handed to us as two static parquet files, so there are no "new arrivals". This is what the Databricks target ([Architecture](#architecture)) turns on.
 - **Building canonical from raw** — reprocessing only the raw rows newer than the last canonical build (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
 
-Cost: DuckDB reads even a flat parquet file in chunks and skips those whose timestamps fall below the watermark. The second incremental doesn't degenerate into a full scan just because raw isn't partitioned.
-
 
