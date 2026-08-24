@@ -2,19 +2,3 @@ name: decade
 version: 1.0.0
 profile: decade
 config-version: 2
-
-model-paths: ["models"]
-seed-paths: ["seeds"]
-macro-paths: ["macros"]
-test-paths: ["tests"]
-target-path: "target"
-clean-targets: ["target", "dbt_packages"]
-
-models:
-  decade:
-    canonical:
-      +materialized: view
-      +schema: canonical
-    consumption:
-      +materialized: view
-      +schema: consumption

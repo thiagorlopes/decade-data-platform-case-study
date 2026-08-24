@@ -2,9 +2,7 @@ version: 2
 
 sources:
   - name: raw_openfinance
-    description: >
-      Raw Open Finance Brasil payloads as delivered by upstream institutions.
-      Two parquet files; snapshot cadence irregular and per-institution.
+    description: Raw Open Finance Brasil payloads as delivered by upstream institutions.
     meta:
       external_location: "data/raw/raw_{name}.parquet"
     tables:

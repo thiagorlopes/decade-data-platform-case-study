@@ -24,7 +24,6 @@ pip install -r requirements.txt
 ## Build
 
 ```bash
-dbt parse --project-dir . --profiles-dir .
 dbt build --project-dir . --profiles-dir .
 ```
 
