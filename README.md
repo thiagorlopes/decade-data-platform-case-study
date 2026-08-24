@@ -17,14 +17,15 @@ Lorem ipsum
 ## Installation
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+make install
 ```
 
 ## Build
 
 ```bash
-dbt build --project-dir . --profiles-dir .
+make build     # run all dbt models and tests
+make shell     # open duckdb CLI on the warehouse
+make help      # list all targets
 ```
 
 ## Initializing Environment
