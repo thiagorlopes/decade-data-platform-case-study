@@ -41,7 +41,7 @@ make shell       # open duckdb CLI on the warehouse (inside container)
 make help        # list all targets
 ```
 
-## Architecture
+## Target Architecture & Environments
 
 Decade runs its data workflows on Databricks, so the target architecture for this case is Databricks-native. The shape below is what production could look like, and the case is designed so the work could be transfered if considered appropriate by the Decade Data Team.
 
