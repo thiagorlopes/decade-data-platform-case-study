@@ -1,12 +1,9 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS builder
 
 ARG DUCKDB_VERSION=1.5.5
 ARG TARGETARCH
 
-WORKDIR /workspace
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl unzip make \
+RUN apt-get update && apt-get install -y --no-install-recommends curl unzip \
  && rm -rf /var/lib/apt/lists/*
 
 RUN case "$TARGETARCH" in \
@@ -15,11 +12,18 @@ RUN case "$TARGETARCH" in \
       *) echo "Unsupported arch: $TARGETARCH" && exit 1 ;; \
     esac \
  && curl -sL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-${DUCKDB_ARCH}.zip" -o /tmp/duckdb.zip \
- && unzip /tmp/duckdb.zip -d /usr/local/bin/ \
- && rm /tmp/duckdb.zip \
- && chmod +x /usr/local/bin/duckdb
+ && unzip /tmp/duckdb.zip -d /out/
 
-COPY requirements.txt /workspace/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --no-compile --prefix=/install -r /tmp/requirements.txt
+
+
+FROM python:3.12-slim
+
+WORKDIR /workspace
+
+COPY --from=builder /install /usr/local
+COPY --from=builder /out/duckdb /usr/local/bin/duckdb
+RUN chmod +x /usr/local/bin/duckdb
 
 CMD ["/bin/bash"]
