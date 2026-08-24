@@ -20,7 +20,11 @@ Lorem ipsum
 
 Everything the pipeline needs (Python, dbt, DuckDB CLI) is bundled inside the image. No host-side Python setup required.
 
-Notebook exploration (`notebooks/`) uses jupyterlab + pandas + pyarrow. Those are dev-only and kept out of the image — install them into a local venv with `pip install -r requirements-dev.txt` if you need to re-run the notebook.
+Notebook exploration (`notebooks/`) uses jupyterlab + pandas + pyarrow. Those are dev-only and kept out of the image — install them into a local venv if you need to re-run the notebook:
+
+```bash
+pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
+```
 
 ## Installation
 
