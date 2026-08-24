@@ -40,3 +40,17 @@ make build       # run all dbt models and tests
 make shell       # open duckdb CLI on the warehouse (inside container)
 make help        # list all targets
 ```
+
+## Architecture
+
+During past interviews, it became apparent that Decade uses Databricks extensively for its data workflows. For that reason, the chosen architecture in this case is based on this premise. The idea is that learnings from this case could be extended to production. 
+
+The destination architecture is based on [Developer best practices on Databricks](https://docs.databricks.com/gcp/en/developers/best-practices) Databricks official documentation. 
+
+<img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
+
+However, we won't start from the get go with databricks. The case needs to be reproducible. So, we are starting with this simplified architecture.
+
+<img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
+
+
