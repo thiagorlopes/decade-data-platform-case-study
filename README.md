@@ -53,11 +53,13 @@ This case study solution ships a two-environment slice of that target: **DuckDB 
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 
-## Data flow — where "incremental" applies
+## Data flow — two kinds of "incremental"
 
-Two independent incremental mechanisms live in this pipeline. Do not conflate them:
+"Incremental" means two different things in this pipeline. Don't confuse them.
 
-- **Ingestion tier** — *"which arrival files have I loaded into raw?"* File-level, checkpoint-tracked. **Out of scope for this dev slice**: raw was delivered as static parquet files, so there is no arrival stream to demonstrate. **In scope for the target architecture** described in [Architecture](#architecture): promoting to the Databricks dev workspace turns this on as first-class — Auto Loader appends new files into a Hive-partitioned Bronze table (`data/raw/{table}/ingestion_date=YYYY-MM-DD/*.parquet`), tracked by its own checkpoint state. Sources yml gains `hive_partitioning=true` on the `external_location`; canonical models are unchanged.
-- **Processing tier** — *"which arrival times have I already built canonical for?"* SQL watermark on `ingested_at`, dbt `is_incremental()` filter, MERGE on `unique_key`. **This is what §3.2 of the brief asks for, and what this repo ships.** DuckDB's parquet reader handles per-row-group predicate pushdown against the flat raw file, so the processing-tier incremental doesn't pay full-scan cost even without hive partitioning — the same mechanism Databricks/Spark uses on Delta files at production scale.
+- **Loading raw** — picking up only the new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen before. Not implemented here: raw was handed to us as two static parquet files, so there are no "new arrivals". This is what the Databricks target ([Architecture](#architecture)) turns on.
+- **Building canonical from raw** — reprocessing only the raw rows newer than the last canonical build (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
+
+Cost: DuckDB reads even a flat parquet file in chunks and skips those whose timestamps fall below the watermark. The second incremental doesn't degenerate into a full scan just because raw isn't partitioned.
 
 
