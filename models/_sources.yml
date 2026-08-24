@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: raw_openfinance
+    description: Raw Open Finance Brasil payloads as delivered by upstream institutions.
+    meta:
+      external_location: "data/raw/raw_{name}.parquet"
+    tables:
+      - name: positions
+        description: One row per position record as delivered. Balance snapshots.
+      - name: transactions
+        description: One row per transaction record as delivered. Movements.

@@ -1,0 +1,6 @@
+services:
+  dbt:
+    build: .
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
