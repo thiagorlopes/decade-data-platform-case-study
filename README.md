@@ -20,7 +20,7 @@ Lorem ipsum
 
 Everything the pipeline needs (Python, dbt, DuckDB CLI) is bundled inside the image. No host-side Python setup required.
 
-Notebook exploration (`notebooks/`) uses jupyterlab + pandas + pyarrow. Those are dev-only and kept out of the image — install them into a local venv if you need to re-run the notebook:
+Notebook exploration (`notebooks/`) uses jupyterlab + pandas + pyarrow. Those are dev-only and kept out of the image. Install them into a local venv if you need to re-run the notebook:
 
 ```bash
 pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
@@ -55,11 +55,11 @@ This case study solution ships a two-environment slice of that target: **DuckDB 
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 
-## Data flow — two kinds of "incremental"
+## Data flow: two kinds of "incremental"
 
 "Incremental" means two different things in this pipeline. Don't confuse them.
 
-- **Loading raw** — picking up only the new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen before. Not implemented here: raw was handed to us as two static parquet files, so there are no "new arrivals". This is what the Databricks target ([Architecture](#architecture)) turns on.
-- **Building canonical from raw** — reprocessing only the raw rows newer than the last canonical build (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
+- **Loading raw**: picking up only the new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen before. Not implemented here: raw was handed to us as two static parquet files, so there are no "new arrivals". This is what the Databricks target ([Architecture](#architecture)) turns on.
+- **Building canonical from raw**: reprocessing only the raw rows newer than the last canonical build (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
 
 
