@@ -18,7 +18,9 @@ Lorem ipsum
 - Docker Engine + Docker Compose v2
 - `make`, `git`
 
-Everything else (Python, dbt, DuckDB CLI) is bundled inside the image. No host-side Python setup required.
+Everything the pipeline needs (Python, dbt, DuckDB CLI) is bundled inside the image. No host-side Python setup required.
+
+Notebook exploration (`notebooks/`) uses jupyterlab + pandas + pyarrow. Those are dev-only and kept out of the image — install them into a local venv with `pip install -r requirements-dev.txt` if you need to re-run the notebook.
 
 ## Installation
 

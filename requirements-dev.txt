@@ -1,0 +1,4 @@
+-r requirements.txt
+jupyterlab==4.6.3
+pandas==2.2.3
+pyarrow==17.0.0
