@@ -51,6 +51,24 @@ models:
           - accepted_values:
               values: &ofb_indexers [CDI, DI, TR, IPCA, IGP_M, IGP_DI, INPC, BCP, TLC, SELIC, PRE_FIXADO, OUTROS]
               config: *dq_warn_stored
+      - name: rate_type
+        data_tests:
+          # D3: EnumRateType
+          - accepted_values:
+              values: &rate_types [EXPONENCIAL, LINEAR]
+              config: *dq_warn_stored
+      - name: rate_periodicity
+        data_tests:
+          # D3: EnumRatePeriodicity
+          - accepted_values:
+              values: &rate_periodicities [MENSAL, ANUAL, DIARIO, SEMESTRAL]
+              config: *dq_warn_stored
+      - name: calculation
+        data_tests:
+          # D3: EnumCalculation
+          - accepted_values:
+              values: &calculations [DIAS_UTEIS, DIAS_CORRIDOS]
+              config: *dq_warn_stored
       - name: issue_unit_price
         data_tests:
           - not_null: {config: *dq_warn_stored}
@@ -84,6 +102,10 @@ models:
       - name: investment_type
         data_tests:
           - not_null: {config: *dq_warn_stored}
+          # D3: EnumInvestimentType (sic, spec's own spelling)
+          - accepted_values:
+              values: [CRA, CRI, DEBENTURES]
+              config: *dq_warn_stored
       - name: tax_exempt
         data_tests:
           - not_null: {config: *dq_warn_stored}
@@ -95,6 +117,21 @@ models:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
               values: *ofb_indexers
+              config: *dq_warn_stored
+      - name: rate_type
+        data_tests:
+          - accepted_values:
+              values: *rate_types
+              config: *dq_warn_stored
+      - name: rate_periodicity
+        data_tests:
+          - accepted_values:
+              values: *rate_periodicities
+              config: *dq_warn_stored
+      - name: calculation
+        data_tests:
+          - accepted_values:
+              values: *calculations
               config: *dq_warn_stored
       - name: issue_unit_price
         data_tests:
@@ -114,6 +151,12 @@ models:
           - accepted_values:
               values: [SIM, NAO]
               config: *dq_warn_stored
+      - name: voucher_payment_periodicity
+        data_tests:
+          # D3: VoucherPaymentPeriodicity, wider than rate_periodicity
+          - accepted_values:
+              values: &voucher_periodicities [MENSAL, TRIMESTRAL, SEMESTRAL, ANUAL, IRREGULAR, OUTROS]
+              config: *dq_warn_stored
       - name: purchase_date
         data_tests:
           - not_null: {config: *dq_warn_stored}
@@ -131,6 +174,12 @@ models:
       - name: fund_cnpj
         data_tests:
           - not_null: {config: *dq_warn_stored}
+      - name: anbima_category
+        data_tests:
+          # D3: anbimaCategory
+          - accepted_values:
+              values: [ACOES, RENDA_FIXA, MULTIMERCADO, CAMBIAL]
+              config: *dq_warn_stored
 
   - name: stg_openfinance__treasure_titles_positions_detail
     data_tests:
@@ -160,13 +209,13 @@ models:
         data_tests:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
-              values: [MENSAL, ANUAL, DIARIO, SEMESTRAL]
+              values: *rate_periodicities
               config: *dq_warn_stored
       - name: calculation
         data_tests:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
-              values: [DIAS_UTEIS, DIAS_CORRIDOS]
+              values: *calculations
               config: *dq_warn_stored
       - name: due_date
         data_tests:
@@ -179,6 +228,11 @@ models:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
               values: [SIM, NAO]
+              config: *dq_warn_stored
+      - name: voucher_payment_periodicity
+        data_tests:
+          - accepted_values:
+              values: *voucher_periodicities
               config: *dq_warn_stored
 
   - name: stg_openfinance__variable_incomes_positions_detail
