@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: fct_variable_incomes_positions
+  - name: int_variable_incomes_positions
     description: One row per lot. Natural key of the physical holding is (isin_code, ticker).
     data_tests: &lot_grain
       - dbt_utils.unique_combination_of_columns:
@@ -20,27 +20,27 @@ models:
         description: False when the lot arrived with a detail payload only (balances columns are NULL).
         data_tests: [not_null]
 
-  - name: fct_funds_positions
+  - name: int_funds_positions
     description: One row per lot. Natural key of the physical holding is (cnpj_number).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: fct_bank_fixed_incomes_positions
+  - name: int_bank_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, issuer_cnpj, issue_date, due_date).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: fct_credit_fixed_incomes_positions
+  - name: int_credit_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, debtor_cnpj, due_date).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: fct_treasure_titles_positions
+  - name: int_treasure_titles_positions
     description: One row per lot. Natural key is (isin_code).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: fct_bank_fixed_incomes_transactions
+  - name: stg_openfinance__bank_fixed_incomes_transactions
     description: One row per transaction.
     data_tests: &txn_grain
       - dbt_utils.unique_combination_of_columns:
@@ -53,22 +53,22 @@ models:
       - name: transaction_id
         data_tests: [not_null]
 
-  - name: fct_credit_fixed_incomes_transactions
+  - name: stg_openfinance__credit_fixed_incomes_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns
 
-  - name: fct_funds_transactions
+  - name: stg_openfinance__funds_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns
 
-  - name: fct_treasure_titles_transactions
+  - name: stg_openfinance__treasure_titles_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns
 
-  - name: fct_variable_incomes_transactions
+  - name: stg_openfinance__variable_incomes_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns
