@@ -14,7 +14,7 @@ SELECT
     CAST(ingested_at AS TIMESTAMP) AS ingested_at,
     {{ payload_field('issuerInstitutionCnpjNumber',             'VARCHAR', required=true) }}        AS issuer_cnpj,
     {{ payload_field('isinCode',                                'VARCHAR') }}                       AS isin_code,
-    {{ payload_field('investmentType',                          'VARCHAR', required=true) }}        AS product_type,
+    {{ payload_field('investmentType',                          'VARCHAR', required=true) }}        AS investment_type,
     {{ payload_field('remuneration.preFixedRate',               'DECIMAL(12,6)') }}                 AS pre_fixed_rate,
     {{ payload_field('remuneration.postFixedIndexerPercentage', 'DECIMAL(12,6)') }}                 AS post_fixed_indexer_percentage,
     {{ payload_field('remuneration.rateType',                   'VARCHAR') }}                       AS rate_type,

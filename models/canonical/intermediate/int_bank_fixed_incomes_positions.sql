@@ -13,11 +13,10 @@ SELECT
     coalesce(det.party_id,         bal.party_id)         AS party_id,
     coalesce(det.account_id,       bal.account_id)       AS account_id,
     coalesce(det.connection_id,    bal.connection_id)    AS connection_id,
-    -- greatest() ignores NULLs in DuckDB, so one-sided lots keep their arrival time
     greatest(det.ingested_at, bal.ingested_at) AS ingested_at,
     det.issuer_cnpj,
     det.isin_code,
-    det.product_type,
+    det.investment_type,
     det.indexer,
     det.pre_fixed_rate,
     det.post_fixed_indexer_percentage,

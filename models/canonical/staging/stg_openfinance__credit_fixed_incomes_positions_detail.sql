@@ -14,7 +14,7 @@ SELECT
     CAST(ingested_at AS TIMESTAMP) AS ingested_at,
     {{ payload_field('issuerInstitutionCnpjNumber',             'VARCHAR') }}                       AS issuer_cnpj,
     {{ payload_field('isinCode',                                'VARCHAR') }}                       AS isin_code,
-    {{ payload_field('investmentType',                          'VARCHAR', required=true) }}        AS product_type,
+    {{ payload_field('investmentType',                          'VARCHAR', required=true) }}        AS investment_type,
     {{ payload_field('debtorCnpjNumber',                        'VARCHAR') }}                       AS debtor_cnpj,
     {{ payload_field('debtorName',                              'VARCHAR') }}                       AS debtor_name,
     {{ payload_field('taxExemptProduct',                        'VARCHAR', required=true) }}        AS tax_exempt,
