@@ -6,72 +6,199 @@ models:
     data_tests: &lot_grain
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, investment_id]
-    columns: &lot_columns
-      - name: snapshot_id
+    columns:
+      - &c_snapshot_id
+        name: snapshot_id
         data_tests: [not_null]
-      - name: investment_id
+      - &c_investment_id
+        name: investment_id
         data_tests: [not_null]
-      - name: account_id
+      - &c_account_id
+        name: account_id
         data_tests: [not_null]
-      - name: has_detail
+      - &c_has_detail
+        name: has_detail
         description: False when the lot arrived with a balances payload only (detail columns are NULL).
         data_tests: [not_null]
-      - name: has_balances
+      - &c_has_balances
+        name: has_balances
         description: False when the lot arrived with a detail payload only (balances columns are NULL).
         data_tests: [not_null]
-      - name: ingested_at
+      - &c_ingested_at
+        name: ingested_at
         description: Arrival time of the record; the incremental watermark.
         data_tests: [not_null]
 
   - name: int_funds_positions
     description: One row per lot. Natural key of the physical holding is (fund_cnpj).
     data_tests: *lot_grain
-    columns: *lot_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_account_id
+      - *c_has_detail
+      - *c_has_balances
+      - *c_ingested_at
+      - name: anbima_category
+        description: '{{ doc("ofb_anbima_category") }}'
 
   - name: int_bank_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, issuer_cnpj, issue_date, due_date).
     data_tests: *lot_grain
-    columns: *lot_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_account_id
+      - *c_has_detail
+      - *c_has_balances
+      - *c_ingested_at
+      - name: product_type
+        description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
 
   - name: int_credit_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, debtor_cnpj, due_date).
     data_tests: *lot_grain
-    columns: *lot_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_account_id
+      - *c_has_detail
+      - *c_has_balances
+      - *c_ingested_at
+      - name: product_type
+        description: '{{ doc("ofb_product_type__credit_fixed_incomes") }}'
+      - name: tax_exempt
+        description: '{{ doc("ofb_tax_exempt") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
 
   - name: int_treasure_titles_positions
     description: One row per lot. Natural key is (isin_code).
     data_tests: *lot_grain
-    columns: *lot_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_account_id
+      - *c_has_detail
+      - *c_has_balances
+      - *c_ingested_at
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
 
   - name: stg_openfinance__bank_fixed_incomes_transactions
-    description: One row per transaction.
+    description: One row per transaction. 1:1 flatten of raw BANK_FIXED_INCOMES transaction payloads.
     data_tests: &txn_grain
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, payload_source, investment_id, transaction_id]
-    columns: &txn_columns
-      - name: snapshot_id
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - &c_transaction_id
+        name: transaction_id
         data_tests: [not_null]
-      - name: investment_id
-        data_tests: [not_null]
-      - name: transaction_id
-        data_tests: [not_null]
+      - &c_movement_type
+        name: movement_type
+        description: '{{ doc("ofb_movement_type") }}'
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__bank_fixed_incomes") }}'
+      - &c_transaction_type_additional_info
+        name: transaction_type_additional_info
+        description: '{{ doc("ofb_transaction_type_additional_info") }}'
 
   - name: stg_openfinance__credit_fixed_incomes_transactions
-    description: One row per transaction.
+    description: One row per transaction. 1:1 flatten of raw CREDIT_FIXED_INCOMES transaction payloads.
     data_tests: *txn_grain
-    columns: *txn_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_transaction_id
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__credit_fixed_incomes") }}'
+      - *c_transaction_type_additional_info
 
   - name: stg_openfinance__funds_transactions
-    description: One row per transaction.
+    description: One row per transaction. 1:1 flatten of raw FUNDS transaction payloads.
     data_tests: *txn_grain
-    columns: *txn_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_transaction_id
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__funds") }}'
+      - *c_transaction_type_additional_info
 
   - name: stg_openfinance__treasure_titles_transactions
-    description: One row per transaction.
+    description: One row per transaction. 1:1 flatten of raw TREASURE_TITLES transaction payloads.
     data_tests: *txn_grain
-    columns: *txn_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_transaction_id
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__treasure_titles") }}'
+      - *c_transaction_type_additional_info
 
   - name: stg_openfinance__variable_incomes_transactions
-    description: One row per transaction.
+    description: One row per transaction. 1:1 flatten of raw VARIABLE_INCOMES transaction payloads.
     data_tests: *txn_grain
-    columns: *txn_columns
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_transaction_id
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__variable_incomes") }}'
+      - *c_transaction_type_additional_info
+
+  - name: stg_openfinance__bank_fixed_incomes_positions_detail
+    description: 1:1 flatten of raw BANK_FIXED_INCOMES detail payloads into typed columns, in spec order.
+    columns:
+      - name: product_type
+        description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+
+  - name: stg_openfinance__credit_fixed_incomes_positions_detail
+    description: 1:1 flatten of raw CREDIT_FIXED_INCOMES detail payloads into typed columns, in spec order.
+    columns:
+      - name: product_type
+        description: '{{ doc("ofb_product_type__credit_fixed_incomes") }}'
+      - name: tax_exempt
+        description: '{{ doc("ofb_tax_exempt") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+
+  - name: stg_openfinance__funds_positions_detail
+    description: 1:1 flatten of raw FUNDS detail payloads into typed columns, in spec order.
+    columns:
+      - name: anbima_category
+        description: '{{ doc("ofb_anbima_category") }}'
+
+  - name: stg_openfinance__treasure_titles_positions_detail
+    description: 1:1 flatten of raw TREASURE_TITLES detail payloads into typed columns, in spec order.
+    columns:
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+
+  - name: stg_openfinance__variable_incomes_positions_detail
+    description: 1:1 flatten of raw VARIABLE_INCOMES detail payloads into typed columns, in spec order.
+
+  - name: stg_openfinance__bank_fixed_incomes_positions_balances
+    description: 1:1 flatten of raw BANK_FIXED_INCOMES balances payloads into typed columns, in spec order.
+
+  - name: stg_openfinance__credit_fixed_incomes_positions_balances
+    description: 1:1 flatten of raw CREDIT_FIXED_INCOMES balances payloads into typed columns, in spec order.
+
+  - name: stg_openfinance__funds_positions_balances
+    description: 1:1 flatten of raw FUNDS balances payloads into typed columns, in spec order.
+
+  - name: stg_openfinance__treasure_titles_positions_balances
+    description: 1:1 flatten of raw TREASURE_TITLES balances payloads into typed columns, in spec order.
+
+  - name: stg_openfinance__variable_incomes_positions_balances
+    description: 1:1 flatten of raw VARIABLE_INCOMES balances payloads into typed columns, in spec order.
