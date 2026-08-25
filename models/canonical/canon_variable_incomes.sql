@@ -19,4 +19,4 @@ SELECT
     {{ payload_field('bal', 'quantity',                    'DECIMAL(24,8)') }} AS quantity,
     {{ payload_field('bal', 'closingPrice.amount',         'DECIMAL(18,4)') }} AS closing_price,
     {{ payload_field('bal', 'grossAmount.currency',        'VARCHAR') }}       AS currency
-{{ lot_join('VARIABLE_INCOMES') }}
+{{ from_positions('VARIABLE_INCOMES') }}

@@ -31,4 +31,4 @@ SELECT
     {{ payload_field('bal', 'blockedBalance.amount',          'DECIMAL(18,4)') }} AS blocked_amount,
     {{ payload_field('bal', 'purchaseUnitPrice.amount',       'DECIMAL(18,4)') }} AS purchase_unit_price,
     {{ payload_field('bal', 'grossAmount.currency',           'VARCHAR') }}       AS currency
-{{ lot_join('BANK_FIXED_INCOMES') }}
+{{ from_positions('BANK_FIXED_INCOMES') }}

@@ -21,4 +21,4 @@ SELECT
     {{ payload_field('bal', 'quotaQuantity',                            'DECIMAL(24,8)') }} AS quota_quantity,
     {{ payload_field('bal', 'quotaGrossPriceValue.amount',              'DECIMAL(18,4)') }} AS quota_price,
     {{ payload_field('bal', 'grossAmount.currency',                     'VARCHAR') }}       AS currency
-{{ lot_join('FUNDS') }}
+{{ from_positions('FUNDS') }}
