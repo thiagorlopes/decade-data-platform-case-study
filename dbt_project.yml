@@ -2,3 +2,10 @@ name: decade
 version: 1.0.0
 profile: decade
 config-version: 2
+
+models:
+  decade:
+    canonical:
+      +materialized: table
+    consumption:
+      +materialized: view
