@@ -7,9 +7,11 @@ config-version: 2
 models:
   decade:
     canonical:
-      +materialized: incremental
-      +unique_key: [snapshot_id, investment_id]
       staging:
         +materialized: view
+      intermediate:
+        +materialized: incremental
+        +incremental_strategy: delete+insert
+        +unique_key: [snapshot_id, investment_id]
     consumption:
       +materialized: view

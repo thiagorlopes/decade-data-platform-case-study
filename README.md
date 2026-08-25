@@ -8,6 +8,7 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Prerequisites](#prerequisites)**<br>
 **[Installation](#installation)**<br>
 **[Build](#build)**<br>
+**[Data quality](#data-quality-detect-resolve-guarantee)**<br>
 
 ## General Information
 
@@ -72,4 +73,48 @@ Incremental means two different things in this pipeline.
 - **Loading raw**: picking up only the new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen before. Not implemented here: raw was handed to us as two static parquet files, so there are no "new arrivals". This is what the Databricks target ([Architecture](#architecture)) turns on.
 - **Building canonical from raw**: reprocessing only the raw rows newer than the last canonical build (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
 
+## Data quality: detect, resolve, guarantee
+
+Provider defects (§2.2) split into within-record (a required field empty, a value in the wrong form, a legal value outside its enum, a cross-field contradiction) and across-record (the same holding under two ids, holdings that freeze under a new id, a zero-then-nonzero valuation). The pipeline splits their handling across three layers so each layer has one job:
+
+```
+dbt build (every run)
+
+raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental) ─→ CANONICAL fct ─→ consumers/
+                         DETECT                          RESOLVE                    GUARANTEE
+
+  ┌────────────────────────────┐   ┌─────────────────────────┐   ┌──────────────────────────┐
+  │ envelope (ours) → ERROR    │   │ no payload tests here   │   │ output contract → ERROR  │
+  │   not_null snapshot_id     │   │ logic instead:          │   │   not_null natural key   │
+  │   not_null investment_id   │   │   normalize forms       │   │   not_null reference_dt  │
+  │   not_null ingested_at     │   │     (strip CNPJ tail,   │   │   grain uniqueness       │
+  │   unique grain             │   │      map IPC-A → IPCA)  │   │   enums clean post-map   │
+  │   build DIES: bug is ours  │   │   build dq_flags[]      │   │   build DIES: our        │
+  ├────────────────────────────┤   │     for what cannot be  │   │     resolution failed    │
+  │ payload (theirs) → WARN    │   │     repaired            │   ├──────────────────────────┤
+  │   not_null required        │   │   dedupe across records │   │ dq_flags column → WARN   │
+  │   format regex             │   └─────────────────────────┘   │   count stays visible    │
+  │   accepted_values          │                                 └──────────────────────────┘
+  │   cross-field rules        │
+  │   store_failures: true     │
+  └────────────────────────────┘
+              │
+              ▼
+   main_dbt_test__audit.*  ◀── provider defect ledger (row-level, queryable)
+```
+
+| Owner                           | Layer | Severity              | On failure                                       |
+|---------------------------------|-------|-----------------------|--------------------------------------------------|
+| Us (envelope: ids, grain)       | stg   | error                 | Build halts. Fix ingestion.                      |
+| Provider (payload content)      | stg   | warn + store_failures | Build continues. Rows land in audit ledger.      |
+| Us (resolution logic)           | fct   | error                 | Build halts. `int_` transform is buggy.          |
+| Provider (unrepairable rows)    | fct   | warn via `dq_flags`   | Row admitted with a flag. Consumer decides.      |
+
+How a consumer finds out which happened (§2.2's closing question):
+
+- **Row-level**: `dq_flags` column on the fct table (`['missing:purchase_date']`, etc.).
+- **Run-level**: `main_dbt_test__audit.*` — one row per warned row, per test, per run.
+- **Contract-level**: `contracts/` (symlink to `_canonical.yml`) — what fct promises is *never* wrong, enforced as error.
+
+**State today**: the DETECT column is in (`models/canonical/staging/_staging_quality.yml`, notebook `06_within_record_defects.ipynb`). RESOLVE and GUARANTEE are the next models to land against this shape.
 
