@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: holdings_variable_incomes
+    description: Physical holdings. Lots regrouped by natural key (isin_code, ticker); one row per snapshot x holding.
+  - name: holdings_funds
+    description: Physical holdings. Lots regrouped by natural key (fund_cnpj); one row per snapshot x holding.
+  - name: holdings_bank_fixed_incomes
+    description: Physical holdings. Lots regrouped by natural key (isin_code, issuer_cnpj, issue_date, due_date); one row per snapshot x holding.
+  - name: holdings_credit_fixed_incomes
+    description: Physical holdings. Lots regrouped by natural key (isin_code, debtor_cnpj, due_date); one row per snapshot x holding.
+  - name: holdings_treasure_titles
+    description: Physical holdings. Lots regrouped by natural key (isin_code); one row per snapshot x holding.
+  - name: portfolio
+    description: Union of the five holdings views under one schema, for cross-family questions.
+    columns:
+      - name: investment_type
+        description: 'Source family of the row. Enum: VARIABLE_INCOMES, FUNDS, BANK_FIXED_INCOMES, CREDIT_FIXED_INCOMES, TREASURE_TITLES.'
+      - name: instrument
+        description: Family-specific instrument label (ticker, fund name, ISIN or product name).
