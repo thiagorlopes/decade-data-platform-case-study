@@ -21,14 +21,14 @@ SELECT
     {{ payload_field('det', 'clearingCode',                            'VARCHAR') }}       AS clearing_code,
     {{ payload_field('det', 'purchaseDate',                            'DATE') }}          AS purchase_date,
     {{ payload_field('det', 'gracePeriodDate',                         'DATE') }}          AS grace_period_date,
+    {{ payload_field('bal', 'referenceDateTime',              'TIMESTAMP') }}     AS reference_datetime,
     {{ payload_field('bal', 'quantity',                       'DECIMAL(24,8)') }} AS quantity,
     {{ payload_field('bal', 'updatedUnitPrice.amount',        'DECIMAL(18,4)') }} AS updated_unit_price,
-    {{ payload_field('bal', 'purchaseUnitPrice.amount',       'DECIMAL(18,4)') }} AS purchase_unit_price,
     {{ payload_field('bal', 'grossAmount.amount',             'DECIMAL(18,4)') }} AS gross_amount,
     {{ payload_field('bal', 'netAmount.amount',               'DECIMAL(18,4)') }} AS net_amount,
-    {{ payload_field('bal', 'blockedBalance.amount',          'DECIMAL(18,4)') }} AS blocked_amount,
     {{ payload_field('bal', 'incomeTax.amount',               'DECIMAL(18,4)') }} AS income_tax,
     {{ payload_field('bal', 'financialTransactionTax.amount', 'DECIMAL(18,4)') }} AS transaction_tax,
-    {{ payload_field('bal', 'grossAmount.currency',           'VARCHAR') }}       AS currency,
-    {{ payload_field('bal', 'referenceDateTime',              'TIMESTAMP') }}     AS reference_datetime
+    {{ payload_field('bal', 'blockedBalance.amount',          'DECIMAL(18,4)') }} AS blocked_amount,
+    {{ payload_field('bal', 'purchaseUnitPrice.amount',       'DECIMAL(18,4)') }} AS purchase_unit_price,
+    {{ payload_field('bal', 'grossAmount.currency',           'VARCHAR') }}       AS currency
 {{ lot_join('BANK_FIXED_INCOMES') }}
