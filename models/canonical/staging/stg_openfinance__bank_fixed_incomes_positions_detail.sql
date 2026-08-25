@@ -1,5 +1,7 @@
 -- 1:1 flatten of raw BANK_FIXED_INCOMES detail payloads into typed columns, in spec order.
--- Spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/bank-fixed-incomes/1.1.0.yml
+-- API: GET /investments/{investmentId} — bank-fixed-incomes v1.1.0
+-- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/bank-fixed-incomes/1.1.0.yml#L81
+-- Payload schema #/components/schemas/IdentifyProduct: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/bank-fixed-incomes/1.1.0.yml#L581
 SELECT
     snapshot_id,
     investment_id,
@@ -9,12 +11,13 @@ SELECT
     party_id,
     account_id,
     connection_id,
+    CAST(ingested_at AS TIMESTAMP) AS ingested_at,
     {{ payload_field('issuerInstitutionCnpjNumber',             'VARCHAR') }}                       AS issuer_cnpj,
     {{ payload_field('isinCode',                                'VARCHAR') }}                       AS isin_code,
     {{ payload_field('investmentType',                          'VARCHAR') }}                       AS product_type,
     {{ payload_field('remuneration.indexer',                    'VARCHAR') }}                       AS indexer,
     {{ payload_field('remuneration.preFixedRate',               'DECIMAL(12,6)') }}                 AS pre_fixed_rate,
-    {{ payload_field('remuneration.postFixedIndexerPercentage', 'DECIMAL(12,6)') }}                 AS post_fixed_indexer_pct,
+    {{ payload_field('remuneration.postFixedIndexerPercentage', 'DECIMAL(12,6)') }}                 AS post_fixed_indexer_percentage,
     {{ payload_field('issueUnitPrice.amount',                   'DECIMAL(25,10)', required=true) }} AS issue_unit_price,
     {{ payload_field('dueDate',                                 'DATE', required=true) }}           AS due_date,
     {{ payload_field('issueDate',                               'DATE', required=true) }}           AS issue_date,

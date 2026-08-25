@@ -1,5 +1,7 @@
 -- 1:1 flatten of raw CREDIT_FIXED_INCOMES detail payloads into typed columns, in spec order.
--- Spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/credit-fixed-incomes/1.1.0.yml
+-- API: GET /investments/{investmentId} — credit-fixed-incomes v1.1.0
+-- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/credit-fixed-incomes/1.1.0.yml#L82
+-- Payload schema #/components/schemas/CreditFixedIdentification: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/credit-fixed-incomes/1.1.0.yml#L556
 SELECT
     snapshot_id,
     investment_id,
@@ -9,6 +11,7 @@ SELECT
     party_id,
     account_id,
     connection_id,
+    CAST(ingested_at AS TIMESTAMP) AS ingested_at,
     {{ payload_field('issuerInstitutionCnpjNumber',             'VARCHAR') }}                       AS issuer_cnpj,
     {{ payload_field('isinCode',                                'VARCHAR') }}                       AS isin_code,
     {{ payload_field('investmentType',                          'VARCHAR') }}                       AS product_type,
@@ -17,7 +20,7 @@ SELECT
     {{ payload_field('taxExemptProduct',                        'VARCHAR') }}                       AS tax_exempt,
     {{ payload_field('remuneration.indexer',                    'VARCHAR') }}                       AS indexer,
     {{ payload_field('remuneration.preFixedRate',               'DECIMAL(12,6)') }}                 AS pre_fixed_rate,
-    {{ payload_field('remuneration.postFixedIndexerPercentage', 'DECIMAL(12,6)') }}                 AS post_fixed_indexer_pct,
+    {{ payload_field('remuneration.postFixedIndexerPercentage', 'DECIMAL(12,6)') }}                 AS post_fixed_indexer_percentage,
     {{ payload_field('issueUnitPrice.amount',                   'DECIMAL(25,10)', required=true) }} AS issue_unit_price,
     {{ payload_field('issueDate',                               'DATE', required=true) }}           AS issue_date,
     {{ payload_field('dueDate',                                 'DATE', required=true) }}           AS due_date,

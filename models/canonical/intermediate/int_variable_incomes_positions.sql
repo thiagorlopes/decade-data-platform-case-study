@@ -13,6 +13,8 @@ SELECT
     coalesce(det.party_id,         bal.party_id)         AS party_id,
     coalesce(det.account_id,       bal.account_id)       AS account_id,
     coalesce(det.connection_id,    bal.connection_id)    AS connection_id,
+    -- max of the two arrival times; coalesce pairing keeps greatest() away from NULLs
+    greatest(coalesce(det.ingested_at, bal.ingested_at), coalesce(bal.ingested_at, det.ingested_at)) AS ingested_at,
     det.issuer_cnpj,
     det.isin_code,
     det.ticker,
@@ -26,3 +28,10 @@ SELECT
 FROM {{ ref('stg_openfinance__variable_incomes_positions_detail') }} AS det
 FULL JOIN {{ ref('stg_openfinance__variable_incomes_positions_balances') }} AS bal
     USING (snapshot_id, investment_id)
+{% if is_incremental() %}
+-- watermark on arrival time: late records carry a fresh ingested_at and still land;
+-- a re-delivered record passes the filter and overwrites via unique_key;
+-- reprocessing after a transform fix = dbt build --full-refresh
+WHERE greatest(coalesce(det.ingested_at, bal.ingested_at), coalesce(bal.ingested_at, det.ingested_at))
+    > (SELECT max(ingested_at) FROM {{ this }})
+{% endif %}

@@ -3,10 +3,12 @@ version: 1.0.0
 profile: decade
 config-version: 2
 
+# materialization rationale: README.md § Materializations
 models:
   decade:
     canonical:
-      +materialized: table
+      +materialized: incremental
+      +unique_key: [snapshot_id, investment_id]
       staging:
         +materialized: view
     consumption:
