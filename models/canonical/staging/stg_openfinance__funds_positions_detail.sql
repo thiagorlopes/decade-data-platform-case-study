@@ -1,4 +1,5 @@
 -- 1:1 flatten of raw FUNDS detail payloads into typed columns, in spec order.
+-- Spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/funds/1.1.0.yml
 SELECT
     snapshot_id,
     investment_id,

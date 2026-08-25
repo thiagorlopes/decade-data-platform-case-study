@@ -1,4 +1,5 @@
 -- 1:1 flatten of raw VARIABLE_INCOMES balances payloads into typed columns, in spec order.
+-- Spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/variable-incomes/1.3.0.yml
 SELECT
     snapshot_id,
     investment_id,
