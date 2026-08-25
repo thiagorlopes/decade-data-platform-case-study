@@ -1,12 +1,9 @@
 -- One row per lot (snapshot_id, investment_id): the lot's detail and balances
 -- staging rows joined into a single record.
--- FULL JOIN because some lots arrive with balances only (no detail payload);
--- has_detail / has_balances mark which payloads actually arrived.
+-- FULL JOIN because some lots arrive with balances only (no detail payload).
 SELECT
     snapshot_id,
     investment_id,
-    det.snapshot_id IS NOT NULL AS has_detail,
-    bal.snapshot_id IS NOT NULL AS has_balances,
     coalesce(det.snapshot_created_at, bal.snapshot_created_at) AS snapshot_created_at,
     coalesce(det.institution_id,   bal.institution_id)   AS institution_id,
     coalesce(det.institution_name, bal.institution_name) AS institution_name,

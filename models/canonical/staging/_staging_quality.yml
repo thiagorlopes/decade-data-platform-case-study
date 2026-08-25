@@ -1,0 +1,458 @@
+version: 2
+
+# Within-record defect detection (case study section 2.2, first tier).
+# Staging is the detection layer for two owners:
+#
+#   Envelope (ours). Columns our ingestion attaches: snapshot_id,
+#   investment_id, snapshot_created_at, institution_id, institution_name,
+#   party_id, account_id, connection_id, ingested_at, plus the grain.
+#   Default severity (error): a null or duplicated grain means our
+#   pipeline is broken and the build must halt.
+#
+#   Payload (provider's). Columns flattened from the provider JSON.
+#   Severity warn with store_failures: the build keeps running and
+#   failing rows land in the audit schema as the provider defect ledger.
+#   Nothing is repaired or dropped here. Four checks the OFB spec would
+#   catch if providers respected it:
+#     required field arriving empty         -> not_null
+#     right concept, wrong form             -> expression_is_true (regex)
+#     legal value outside the enumeration   -> accepted_values
+#     field contradicts another in payload  -> expression_is_true (comparison)
+
+models:
+  - name: stg_openfinance__bank_fixed_incomes_positions_detail
+    data_tests:
+      - &lot_grain
+        dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, investment_id]
+      # CNPJ must be exactly 14 digits, providers send decimal tails
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_cnpj_form
+          expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          config: &dq_warn_stored
+            severity: warn
+            store_failures: true
+      # 0001-01-01 is .NET DateTime.MinValue: a missing purchase date in
+      # a real-looking date costume. Named explicitly so it doesn't leak
+      # into the cross-field rules below as a false positive.
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_purchase_date_not_sentinel
+          expression: "purchase_date <> DATE '0001-01-01'"
+          config: *dq_warn_stored
+      # cross-field date ordering. sentinel rows excluded so they don't
+      # double-warn: they belong to the dedicated sentinel check above.
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_purchase_after_issue
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date >= issue_date"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_issue_before_due
+          expression: "issue_date <= due_date"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_purchase_before_due
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date <= due_date"
+          config: *dq_warn_stored
+    columns:
+      # envelope. Default severity (error).
+      - &env_snapshot_id       {name: snapshot_id,         data_tests: [not_null]}
+      - &env_investment_id     {name: investment_id,       data_tests: [not_null]}
+      - &env_snapshot_created  {name: snapshot_created_at, data_tests: [not_null]}
+      - &env_institution_id    {name: institution_id,      data_tests: [not_null]}
+      - &env_institution_name  {name: institution_name,    data_tests: [not_null]}
+      - &env_party_id          {name: party_id,            data_tests: [not_null]}
+      - &env_account_id        {name: account_id,          data_tests: [not_null]}
+      - &env_connection_id     {name: connection_id,       data_tests: [not_null]}
+      - &env_ingested_at       {name: ingested_at,         data_tests: [not_null]}
+      # fields the OFB spec marks required
+      - name: issuer_cnpj
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: investment_type
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          # EnumInvestmentType
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L666
+          - accepted_values:
+              values: [CDB, RDB, LCI, LCA]
+              config: *dq_warn_stored
+      - name: indexer
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          # EnumBankFixedIncomeIndexer
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L675
+          - accepted_values:
+              values: &ofb_indexers [CDI, DI, TR, IPCA, IGP_M, IGP_DI, INPC, BCP, TLC, SELIC, PRE_FIXADO, OUTROS]
+              config: *dq_warn_stored
+      - name: rate_type
+        data_tests:
+          # EnumRateType
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L747
+          - accepted_values:
+              values: &rate_types [EXPONENCIAL, LINEAR]
+              config: *dq_warn_stored
+      - name: rate_periodicity
+        data_tests:
+          # EnumRatePeriodicity
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L755
+          - accepted_values:
+              values: &rate_periodicities [MENSAL, ANUAL, DIARIO, SEMESTRAL]
+              config: *dq_warn_stored
+      - name: calculation
+        data_tests:
+          # EnumCalculation
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L765
+          - accepted_values:
+              values: &calculations [DIAS_UTEIS, DIAS_CORRIDOS]
+              config: *dq_warn_stored
+      - name: issue_unit_price
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_unit_price_currency
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: due_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: purchase_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: grace_period_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+
+  - name: stg_openfinance__credit_fixed_incomes_positions_detail
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_debtor_cnpj_form
+          expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_purchase_date_not_sentinel
+          expression: "purchase_date <> DATE '0001-01-01'"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_purchase_after_issue
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date >= issue_date"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_issue_before_due
+          expression: "issue_date <= due_date"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_purchase_before_due
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date <= due_date"
+          config: *dq_warn_stored
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - name: investment_type
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          # EnumInvestimentType (sic, spec's own spelling)
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/credit-fixed-incomes/1.1.0-beta.1.yml#L882
+          - accepted_values:
+              values: [CRA, CRI, DEBENTURES]
+              config: *dq_warn_stored
+      - name: tax_exempt
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [SIM, NAO]
+              config: *dq_warn_stored
+      - name: indexer
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: *ofb_indexers
+              config: *dq_warn_stored
+      - name: rate_type
+        data_tests:
+          - accepted_values:
+              values: *rate_types
+              config: *dq_warn_stored
+      - name: rate_periodicity
+        data_tests:
+          - accepted_values:
+              values: *rate_periodicities
+              config: *dq_warn_stored
+      - name: calculation
+        data_tests:
+          - accepted_values:
+              values: *calculations
+              config: *dq_warn_stored
+      - name: issue_unit_price
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_unit_price_currency
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: due_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: voucher_payment_indicator
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [SIM, NAO]
+              config: *dq_warn_stored
+      - name: voucher_payment_periodicity
+        data_tests:
+          # VoucherPaymentPeriodicity, wider than rate_periodicity
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/credit-fixed-incomes/1.1.0-beta.1.yml#L1340
+          - accepted_values:
+              values: &voucher_periodicities [MENSAL, TRIMESTRAL, SEMESTRAL, ANUAL, IRREGULAR, OUTROS]
+              config: *dq_warn_stored
+      - name: purchase_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+
+  - name: stg_openfinance__funds_positions_detail
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: dq_funds_detail_cnpj_form
+          expression: "regexp_matches(fund_cnpj, '^[0-9]{14}$')"
+          config: *dq_warn_stored
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - name: fund_name
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: fund_cnpj
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: anbima_category
+        data_tests:
+          # anbimaCategory
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/funds/1.1.0-beta.1.yml#L420
+          - accepted_values:
+              values: [ACOES, RENDA_FIXA, MULTIMERCADO, CAMBIAL]
+              config: *dq_warn_stored
+
+  - name: stg_openfinance__treasure_titles_positions_detail
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_detail_purchase_date_not_sentinel
+          expression: "purchase_date <> DATE '0001-01-01'"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_detail_purchase_before_due
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date <= due_date"
+          config: *dq_warn_stored
+      # ISIN must be 2 letters, 9 alphanumerics, 1 check digit
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_detail_isin_form
+          expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
+          config: *dq_warn_stored
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - name: isin_code
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: product_name
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: indexer
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: *ofb_indexers
+              config: *dq_warn_stored
+      - name: rate_periodicity
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: *rate_periodicities
+              config: *dq_warn_stored
+      - name: calculation
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: *calculations
+              config: *dq_warn_stored
+      - name: due_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: purchase_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: voucher_payment_indicator
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [SIM, NAO]
+              config: *dq_warn_stored
+      - name: voucher_payment_periodicity
+        data_tests:
+          - accepted_values:
+              values: *voucher_periodicities
+              config: *dq_warn_stored
+
+  - name: stg_openfinance__variable_incomes_positions_detail
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: dq_variable_detail_issuer_cnpj_form
+          expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_variable_detail_isin_form
+          expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
+          config: *dq_warn_stored
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - name: isin_code
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: ticker
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+
+  # Transactions staging models. dbt allows a single yml entry per model,
+  # so their structural grain/envelope tests (severity error) ride along
+  # with the D3 warns.
+  - name: stg_openfinance__bank_fixed_incomes_transactions
+    description: One row per transaction.
+    data_tests:
+      - &txn_grain
+        dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, payload_source, investment_id, transaction_id]
+      - accepted_values:
+          column_name: movement_type
+          values: &movement_types [ENTRADA, SAIDA]
+          config: *dq_warn_stored
+      # EnumBankFixedIncomeTransactionType
+      # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L1042
+      - accepted_values:
+          column_name: transaction_type
+          values: [APLICACAO, RESGATE, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO,
+                   VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
+          config: *dq_warn_stored
+    columns: &txn_columns
+      - name: snapshot_id
+        data_tests: [not_null]
+      - name: investment_id
+        data_tests: [not_null]
+      - name: transaction_id
+        data_tests: [not_null]
+      - name: snapshot_created_at
+        data_tests: [not_null]
+      - name: institution_id
+        data_tests: [not_null]
+      - name: institution_name
+        data_tests: [not_null]
+      - name: party_id
+        data_tests: [not_null]
+      - name: account_id
+        data_tests: [not_null]
+      - name: connection_id
+        data_tests: [not_null]
+      - name: ingested_at
+        data_tests: [not_null]
+
+  - name: stg_openfinance__credit_fixed_incomes_transactions
+    description: One row per transaction.
+    data_tests:
+      - *txn_grain
+      - accepted_values:
+          column_name: movement_type
+          values: *movement_types
+          config: *dq_warn_stored
+      # TransactionType
+      # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/credit-fixed-incomes/1.1.0-beta.1.yml#L1275
+      - accepted_values:
+          column_name: transaction_type
+          values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO, VENCIMENTO,
+                   TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, MORA, MULTA, PREMIO, OUTROS]
+          config: *dq_warn_stored
+    columns: *txn_columns
+
+  - name: stg_openfinance__funds_transactions
+    description: One row per transaction.
+    data_tests:
+      - *txn_grain
+      - accepted_values:
+          column_name: movement_type
+          values: *movement_types
+          config: *dq_warn_stored
+      # EnumFundsTransactionsTransactionType
+      # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/funds/1.1.0-beta.1.yml#L1199
+      - accepted_values:
+          column_name: transaction_type
+          values: [APLICACAO, RESGATE, AMORTIZACAO, COME_COTAS, TRANSFERENCIA_COTAS, OUTROS]
+          config: *dq_warn_stored
+    columns: *txn_columns
+
+  - name: stg_openfinance__treasure_titles_transactions
+    description: One row per transaction.
+    data_tests:
+      - *txn_grain
+      - accepted_values:
+          column_name: movement_type
+          values: *movement_types
+          config: *dq_warn_stored
+      # TreasureTitlesTransactionType
+      # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/treasure-titles/1.1.0-beta.1.yml#L1015
+      - accepted_values:
+          column_name: transaction_type
+          values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO,
+                   VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
+          config: *dq_warn_stored
+    columns: *txn_columns
+
+  - name: stg_openfinance__variable_incomes_transactions
+    description: One row per transaction.
+    data_tests:
+      - *txn_grain
+      - accepted_values:
+          column_name: movement_type
+          values: *movement_types
+          config: *dq_warn_stored
+      # EnumVariableIncomesTransactionsTransactionType
+      # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/variable-incomes/1.3.0-beta.1.yml#L953
+      - accepted_values:
+          column_name: transaction_type
+          values: [COMPRA, VENDA, TRANSFERENCIA_CUSTODIA, TRANSFERENCIA_TITULARIDADE,
+                   DIVIDENDOS, JCP, ALUGUEIS, OUTROS]
+          config: *dq_warn_stored
+    columns: *txn_columns
