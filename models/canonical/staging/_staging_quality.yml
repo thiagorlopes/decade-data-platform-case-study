@@ -1,27 +1,31 @@
 version: 2
 
 # Within-record defect detection (case study section 2.2, first tier).
-# Staging is the detection layer: failures here point at the provider,
-# not at our transforms. Every D-class test is severity warn with
-# store_failures, so the build keeps running and failing rows land in
-# the audit schema as the provider defect ledger. Nothing is repaired
-# or dropped here: rows flow through as delivered.
+# Staging is the detection layer for two owners:
+#
+#   E   envelope columns our ingestion attaches (snapshot_id, investment_id,
+#       snapshot_created_at, institution_id, institution_name, party_id,
+#       account_id, connection_id, ingested_at) plus the grain. Ours.
+#       Default severity (error): a null or duplicated grain means our
+#       pipeline is broken and the build must halt.
+#
+#   D   payload columns flattened from the provider JSON. Provider's.
+#       Severity warn with store_failures: the build keeps running and
+#       failing rows land in the audit schema as the provider defect
+#       ledger. Nothing is repaired or dropped here.
 #
 # Defect classes:
 #   D1  required field arriving empty            -> not_null
 #   D2  right concept, wrong form                -> expression_is_true (regex)
 #   D3  legal value outside the enumeration      -> accepted_values
 #   D4  field contradicts another in the payload -> expression_is_true (comparison)
-#
-# D3 comments link the enum definition in the OFB OpenAPI specs on
-# GitHub, pinned to a commit so the line anchors cannot drift. Four of
-# the published spec versions exist on GitHub only as -beta.1 files;
-# their content matches the published spec apart from the version string
-# (line refs verified against our local copies in notebooks/.ofb_specs/).
 
 models:
   - name: stg_openfinance__bank_fixed_incomes_positions_detail
     data_tests:
+      - &lot_grain
+        dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, investment_id]
       # D2: CNPJ must be exactly 14 digits, providers send decimal tails
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_cnpj_form
@@ -40,6 +44,19 @@ models:
           expression: "issue_date <= due_date"
           config: *dq_warn_stored
     columns:
+      # E: envelope. Default severity (error).
+      - &env_snapshot_id       {name: snapshot_id,         data_tests: [not_null]}
+      - &env_investment_id     {name: investment_id,       data_tests: [not_null]}
+      - &env_snapshot_created  {name: snapshot_created_at, data_tests: [not_null]}
+      - &env_institution_id    {name: institution_id,      data_tests: [not_null]}
+      - &env_institution_name  {name: institution_name,    data_tests: [not_null]}
+      - &env_party_id          {name: party_id,            data_tests: [not_null]}
+      - &env_account_id        {name: account_id,          data_tests: [not_null]}
+      - &env_connection_id     {name: connection_id,       data_tests: [not_null]}
+      - &env_ingested_at
+        name: ingested_at
+        description: Arrival time of the record; the incremental watermark.
+        data_tests: [not_null]
       # D1: fields the OFB spec marks required
       - name: issuer_cnpj
         data_tests:
@@ -102,6 +119,7 @@ models:
 
   - name: stg_openfinance__credit_fixed_incomes_positions_detail
     data_tests:
+      - *lot_grain
       - dbt_utils.expression_is_true:
           name: dq_credit_detail_debtor_cnpj_form
           expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
@@ -111,6 +129,15 @@ models:
           expression: "purchase_date >= issue_date"
           config: *dq_warn_stored
     columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
       - name: investment_type
         data_tests:
           - not_null: {config: *dq_warn_stored}
@@ -177,11 +204,21 @@ models:
 
   - name: stg_openfinance__funds_positions_detail
     data_tests:
+      - *lot_grain
       - dbt_utils.expression_is_true:
           name: dq_funds_detail_cnpj_form
           expression: "regexp_matches(fund_cnpj, '^[0-9]{14}$')"
           config: *dq_warn_stored
     columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
       - name: fund_name
         data_tests:
           - not_null: {config: *dq_warn_stored}
@@ -198,6 +235,7 @@ models:
 
   - name: stg_openfinance__treasure_titles_positions_detail
     data_tests:
+      - *lot_grain
       - dbt_utils.expression_is_true:
           name: dq_treasure_detail_purchase_before_due
           expression: "purchase_date <= due_date"
@@ -208,6 +246,15 @@ models:
           expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
           config: *dq_warn_stored
     columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
       - name: isin_code
         data_tests:
           - not_null: {config: *dq_warn_stored}
@@ -252,11 +299,21 @@ models:
 
   - name: stg_openfinance__variable_incomes_positions_detail
     data_tests:
+      - *lot_grain
       - dbt_utils.expression_is_true:
           name: dq_variable_detail_isin_form
           expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
           config: *dq_warn_stored
     columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
       - name: isin_code
         data_tests:
           - not_null: {config: *dq_warn_stored}
