@@ -1,7 +1,7 @@
 version: 2
 
 models:
-  - name: canon_variable_incomes
+  - name: canon_variable_incomes_positions
     description: One row per lot. Natural key of the physical holding is (isin_code, ticker).
     data_tests: &lot_grain
       - unique:
@@ -14,22 +14,22 @@ models:
       - name: account_id
         data_tests: [not_null]
 
-  - name: canon_funds
+  - name: canon_funds_positions
     description: One row per lot. Natural key of the physical holding is (cnpj_number).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: canon_bank_fixed_incomes
+  - name: canon_bank_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, issuer_cnpj, issue_date, due_date).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: canon_credit_fixed_incomes
+  - name: canon_credit_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, debtor_cnpj, due_date).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: canon_treasure_titles
+  - name: canon_treasure_titles_positions
     description: One row per lot. Natural key is (isin_code).
     data_tests: *lot_grain
     columns: *lot_columns
