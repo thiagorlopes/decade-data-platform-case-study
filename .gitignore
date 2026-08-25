@@ -231,3 +231,5 @@ logs/
 # Local duckdb warehouse
 warehouse.duckdb
 warehouse.duckdb.wal
+
+.impeccable/
