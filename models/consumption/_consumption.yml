@@ -1,0 +1,74 @@
+version: 2
+
+# Consumption layer: thin presentation over the intermediate classifier.
+# One row per holding per sync. Admitted lots only; rejects and quarantine
+# stay in the intermediate tables for audit. Grain is unique on
+# (snapshot_id, account_id, holding_key) and every view carries dq_flags,
+# so a clean holding is simply dq_flags = [].
+#
+# Severity follows the repo ownership rule: provider-side conditions warn
+# (with store_failures for the ledger), violations of our own contract error.
+# The quarantine monitor warns because quarantined rows are provider
+# conflicts we refused to guess on, not a bug in our code.
+
+models:
+  - name: holdings_variable_incomes
+    description: >
+      Variable income holdings per sync, keyed by ticker. Multiple lots of
+      the same ticker are summed into one row; investment_ids preserves the
+      contributing lot ids.
+    data_tests: &holding_grain
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, account_id, holding_key]
+
+  - name: holdings_funds
+    description: >
+      Fund holdings per sync, keyed by fund CNPJ (repaired upstream, so
+      decimal-tailed CNPJs no longer split a fund into two holdings).
+    data_tests: *holding_grain
+
+  - name: holdings_bank_fixed_incomes
+    description: >
+      Bank fixed income holdings per sync, keyed by
+      (isin_code, issuer_cnpj, issue_date, due_date). Issuer CNPJ is
+      repaired before keying, so the 1370 decimal-tailed rows merge with
+      their clean siblings instead of forming phantom holdings.
+    data_tests: *holding_grain
+
+  - name: holdings_credit_fixed_incomes
+    description: >
+      Credit fixed income holdings per sync, keyed by
+      (isin_code, debtor_cnpj, due_date). Rows missing identity fields keep
+      their investment_id as holding_key and carry the missing_identity flag.
+    data_tests: *holding_grain
+
+  - name: holdings_treasure_titles
+    description: >
+      Treasury title holdings per sync, keyed by product_name.
+    data_tests: *holding_grain
+
+  - name: portfolio
+    description: >
+      All five families in one uniform schema, one row per holding per
+      sync. instrument is the family's human-readable identifier: ticker,
+      fund name, product name, or ISIN for fixed incomes. dq_flags is part
+      of the contract: [] means clean, anything else names the repair or
+      resolution applied.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, account_id, investment_type, holding_key]
+
+  - name: holdings_quarantine
+    description: >
+      Conflict groups the classifier refused to resolve (same key, same
+      quantity, multiple distinct gross amounts, not exactly one live row).
+      Expected empty. Rows landing here mean the provider produced a
+      conflict shape we have not seen; the warn test below surfaces them
+      without blocking the build.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: dq_quarantine_empty
+          expression: "1 = 0"
+          config:
+            severity: warn
+            store_failures: true

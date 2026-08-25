@@ -5,6 +5,18 @@ version: 2
 # Envelope columns are coalesced across the two sides; ingested_at is the
 # max of the two, and drives the incremental watermark.
 #
+# The layer also repairs within-record defects (cnpj decimal tails, the
+# IPC-A enum spelling, the 0001-01-01 sentinel date; notebook 02), derives
+# each family's natural key from the repaired columns, and classifies
+# duplicate groups within each sync (notebook 03) into `admission` and
+# `dq_flags`. Rows are classified, never deleted: consumers filter
+# admission = 'admit'.
+#
+# Tests here run at the default severity (error). After repair there is no
+# excuse left: a failure means our repair or classification logic broke, not
+# that a provider misbehaved. The warn-severity copies of the same checks in
+# staging keep counting the provider's raw defects.
+#
 # Staging model contracts (grain, envelope integrity, payload defect ledger)
 # live in models/canonical/staging/_staging_quality.yml. Column doc blocks
 # are shared and defined once in _docs.md.
@@ -13,11 +25,16 @@ models:
   - name: int_variable_incomes_positions
     description: >
       Equity positions, one row per (snapshot_id, investment_id). Detail and
-      balance staging rows joined for the same lot. Holding identity across
-      snapshots is derived downstream from (isin_code, ticker).
-    data_tests: &lot_grain
-      - dbt_utils.unique_combination_of_columns:
+      balance staging rows joined for the same lot, repaired and classified.
+      Holding identity is the ticker (notebook 03 §1.2: ISIN is blank in ~900
+      rows and no account quotes two real ISINs under one ticker).
+    data_tests:
+      - &lot_grain
+        dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, investment_id]
+      - dbt_utils.expression_is_true:
+          name: int_variable_issuer_cnpj_clean
+          expression: "issuer_cnpj IS NULL OR regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
     columns:
       - &c_snapshot_id
         name: snapshot_id
@@ -69,13 +86,45 @@ models:
         description: '{{ doc("ofb_closing_price") }}'
       - name: gross_amount_currency
         description: '{{ doc("ofb_currency") }}'
+      - &c_natural_key
+        name: natural_key
+        description: >-
+          Holding identity within an account, derived from the REPAIRED
+          identity columns (key per family in the model SQL). NULL means the
+          row cannot be identified: it is admitted at lot grain with
+          dq_flags [missing_identity] and never merged with anything.
+      - &c_admission
+        name: admission
+        description: >-
+          What downstream may do with the lot. admit = aggregate it.
+          reject_duplicate = redundant copy of a hard duplicate, kept for
+          audit. reject_fossil = frozen zero-valued side of a same-sync
+          conflict pair. quarantine = conflict where both sides are live,
+          needs a human decision; surfaces in holdings_quarantine.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [admit, reject_duplicate, reject_fossil, quarantine]
+      - &c_dq_flags
+        name: dq_flags
+        description: >-
+          Row-level warnings the lot was admitted with (missing_identity,
+          zero_conflict_resolved, missing:indexer, missing:purchase_date).
+          Empty list = clean. Holding-grain flags (merged_lots, zero_flap,
+          id_handoff) are added in the consumption layer.
+        data_tests: [not_null]
 
   - name: int_funds_positions
     description: >
       Fund positions, one row per (snapshot_id, investment_id). Detail and
-      balance staging rows joined for the same lot. Holding identity across
-      snapshots is derived downstream from (fund_cnpj).
-    data_tests: *lot_grain
+      balance staging rows joined for the same lot, repaired and classified.
+      Holding identity is the fund_cnpj: one open-ended fund maps to exactly
+      one CNPJ.
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: int_funds_cnpj_clean
+          expression: "fund_cnpj IS NULL OR regexp_matches(fund_cnpj, '^[0-9]{14}$')"
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -110,14 +159,25 @@ models:
         description: '{{ doc("ofb_quota_gross_price") }}'
       - name: gross_amount_currency
         description: '{{ doc("ofb_currency") }}'
+      - *c_natural_key
+      - *c_admission
+      - *c_dq_flags
 
   - name: int_bank_fixed_incomes_positions
     description: >
       Bank fixed income positions (CDB, RDB, LCI, LCA), one row per
       (snapshot_id, investment_id). Detail and balance staging rows joined
-      for the same lot. Holding identity across snapshots is derived
-      downstream from (isin_code, issuer_cnpj, issue_date, due_date).
-    data_tests: *lot_grain
+      for the same lot, repaired and classified. Holding identity is
+      (isin_code, issuer_cnpj, issue_date, due_date): banks re-use ISINs
+      across CDB issuances.
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: int_bank_issuer_cnpj_clean
+          expression: "issuer_cnpj IS NULL OR regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+      - dbt_utils.expression_is_true:
+          name: int_bank_no_sentinel_purchase_date
+          expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -135,7 +195,10 @@ models:
       - name: investment_type
         description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
       - name: indexer
-        description: '{{ doc("ofb_indexer") }}'
+        description: '{{ doc("ofb_indexer") }} Repaired here: the market spelling IPC-A is mapped to the enum value IPCA.'
+        data_tests:
+          - accepted_values:
+              values: &ofb_indexers_repaired [CDI, DI, TR, IPCA, IGP_M, IGP_DI, INPC, BCP, TLC, SELIC, PRE_FIXADO, OUTROS]
       - name: pre_fixed_rate
         description: '{{ doc("ofb_pre_fixed_rate") }}'
       - name: post_fixed_indexer_percentage
@@ -172,14 +235,28 @@ models:
         description: '{{ doc("ofb_purchase_unit_price") }}'
       - name: gross_amount_currency
         description: '{{ doc("ofb_currency") }}'
+      - *c_natural_key
+      - *c_admission
+      - *c_dq_flags
 
   - name: int_credit_fixed_incomes_positions
     description: >
       Securitized credit positions (CRA, CRI, DEBENTURES), one row per
       (snapshot_id, investment_id). Detail and balance staging rows joined
-      for the same lot. Holding identity across snapshots is derived
-      downstream from (isin_code, debtor_cnpj, due_date).
-    data_tests: *lot_grain
+      for the same lot, repaired and classified. Holding identity is
+      (isin_code, debtor_cnpj, due_date): 13 accounts hold two real ISINs
+      under one (debtor, due) pair, so ISIN must stay in the key.
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: int_credit_issuer_cnpj_clean
+          expression: "issuer_cnpj IS NULL OR regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+      - dbt_utils.expression_is_true:
+          name: int_credit_debtor_cnpj_clean
+          expression: "debtor_cnpj IS NULL OR regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
+      - dbt_utils.expression_is_true:
+          name: int_credit_no_sentinel_purchase_date
+          expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -203,7 +280,10 @@ models:
       - name: tax_exempt
         description: '{{ doc("ofb_tax_exempt") }}'
       - name: indexer
-        description: '{{ doc("ofb_indexer") }}'
+        description: '{{ doc("ofb_indexer") }} Repaired here: the market spelling IPC-A is mapped to the enum value IPCA.'
+        data_tests:
+          - accepted_values:
+              values: *ofb_indexers_repaired
       - name: pre_fixed_rate
         description: '{{ doc("ofb_pre_fixed_rate") }}'
       - name: post_fixed_indexer_percentage
@@ -238,13 +318,22 @@ models:
         description: '{{ doc("ofb_purchase_unit_price") }}'
       - name: gross_amount_currency
         description: '{{ doc("ofb_currency") }}'
+      - *c_natural_key
+      - *c_admission
+      - *c_dq_flags
 
   - name: int_treasure_titles_positions
     description: >
       Tesouro Direto positions, one row per (snapshot_id, investment_id).
-      Detail and balance staging rows joined for the same lot. Holding
-      identity across snapshots is derived downstream from (isin_code).
-    data_tests: *lot_grain
+      Detail and balance staging rows joined for the same lot, repaired and
+      classified. Holding identity is the product_name (notebook 03 §1.2:
+      ISIN would be cleaner but is blank in ~400 rows, and no account maps
+      one name to two real ISINs).
+    data_tests:
+      - *lot_grain
+      - dbt_utils.expression_is_true:
+          name: int_treasure_no_sentinel_purchase_date
+          expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -260,7 +349,10 @@ models:
       - name: product_name
         description: '{{ doc("ofb_product_name") }}'
       - name: indexer
-        description: '{{ doc("ofb_indexer") }}'
+        description: '{{ doc("ofb_indexer") }} Repaired here: the market spelling IPC-A is mapped to the enum value IPCA.'
+        data_tests:
+          - accepted_values:
+              values: *ofb_indexers_repaired
       - name: pre_fixed_rate
         description: '{{ doc("ofb_pre_fixed_rate") }}'
       - name: post_fixed_indexer_percentage
@@ -289,3 +381,6 @@ models:
         description: '{{ doc("ofb_position_quantity") }}'
       - name: gross_amount_currency
         description: '{{ doc("ofb_currency") }}'
+      - *c_natural_key
+      - *c_admission
+      - *c_dq_flags
