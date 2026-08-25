@@ -32,15 +32,26 @@ models:
           config: &dq_warn_stored
             severity: warn
             store_failures: true
-      # a title cannot be purchased before it was issued
+      # 0001-01-01 is .NET DateTime.MinValue: a missing purchase date in
+      # a real-looking date costume. Named explicitly so it doesn't leak
+      # into the cross-field rules below as a false positive.
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_purchase_date_not_sentinel
+          expression: "purchase_date <> DATE '0001-01-01'"
+          config: *dq_warn_stored
+      # cross-field date ordering. sentinel rows excluded so they don't
+      # double-warn: they belong to the dedicated sentinel check above.
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_purchase_after_issue
-          expression: "purchase_date >= issue_date"
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date >= issue_date"
           config: *dq_warn_stored
-      # a title cannot be issued after it matures
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_issue_before_due
           expression: "issue_date <= due_date"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_purchase_before_due
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date <= due_date"
           config: *dq_warn_stored
     columns:
       # envelope. Default severity (error).
@@ -52,10 +63,7 @@ models:
       - &env_party_id          {name: party_id,            data_tests: [not_null]}
       - &env_account_id        {name: account_id,          data_tests: [not_null]}
       - &env_connection_id     {name: connection_id,       data_tests: [not_null]}
-      - &env_ingested_at
-        name: ingested_at
-        description: Arrival time of the record; the incremental watermark.
-        data_tests: [not_null]
+      - &env_ingested_at       {name: ingested_at,         data_tests: [not_null]}
       # fields the OFB spec marks required
       - name: issuer_cnpj
         data_tests:
@@ -124,8 +132,20 @@ models:
           expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
           config: *dq_warn_stored
       - dbt_utils.expression_is_true:
+          name: dq_credit_detail_purchase_date_not_sentinel
+          expression: "purchase_date <> DATE '0001-01-01'"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
           name: dq_credit_detail_purchase_after_issue
-          expression: "purchase_date >= issue_date"
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date >= issue_date"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_issue_before_due
+          expression: "issue_date <= due_date"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_purchase_before_due
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date <= due_date"
           config: *dq_warn_stored
     columns:
       - *env_snapshot_id
@@ -236,8 +256,12 @@ models:
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
+          name: dq_treasure_detail_purchase_date_not_sentinel
+          expression: "purchase_date <> DATE '0001-01-01'"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
           name: dq_treasure_detail_purchase_before_due
-          expression: "purchase_date <= due_date"
+          expression: "purchase_date = DATE '0001-01-01' OR purchase_date <= due_date"
           config: *dq_warn_stored
       # ISIN must be 2 letters, 9 alphanumerics, 1 check digit
       - dbt_utils.expression_is_true:
@@ -300,6 +324,10 @@ models:
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
+          name: dq_variable_detail_issuer_cnpj_form
+          expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
           name: dq_variable_detail_isin_form
           expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
           config: *dq_warn_stored
@@ -360,7 +388,6 @@ models:
       - name: connection_id
         data_tests: [not_null]
       - name: ingested_at
-        description: Arrival time of the record; the incremental watermark.
         data_tests: [not_null]
 
   - name: stg_openfinance__credit_fixed_incomes_transactions
