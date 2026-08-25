@@ -7,5 +7,7 @@ models:
   decade:
     canonical:
       +materialized: table
+      staging:
+        +materialized: view
     consumption:
       +materialized: view
