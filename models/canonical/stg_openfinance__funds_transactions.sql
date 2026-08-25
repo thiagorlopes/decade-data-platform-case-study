@@ -1,3 +1,4 @@
+{{ config(materialized='view') }}
 -- 1:1 flatten of raw FUNDS transaction payloads into typed columns, in spec order.
 SELECT
     snapshot_id,

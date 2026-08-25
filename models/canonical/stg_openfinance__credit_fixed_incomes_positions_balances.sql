@@ -1,3 +1,4 @@
+{{ config(materialized='view') }}
 -- 1:1 flatten of raw CREDIT_FIXED_INCOMES balances payloads into typed columns, in spec order.
 SELECT
     snapshot_id,
