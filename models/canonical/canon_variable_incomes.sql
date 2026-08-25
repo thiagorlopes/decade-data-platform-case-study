@@ -15,8 +15,8 @@ SELECT
     {{ payload_field('bal', 'referenceDate',               'DATE') }}          AS reference_date,
     {{ payload_field('bal', 'priceFactor',                 'DECIMAL(12,6)') }} AS price_factor,
     {{ payload_field('bal', 'grossAmount.amount',          'DECIMAL(18,4)') }} AS gross_amount,
-    {{ payload_field('bal', 'grossAmount.currency',        'VARCHAR') }}       AS currency,
     {{ payload_field('bal', 'blockedBalance.amount',       'DECIMAL(18,4)') }} AS blocked_amount,
     {{ payload_field('bal', 'quantity',                    'DECIMAL(24,8)') }} AS quantity,
-    {{ payload_field('bal', 'closingPrice.amount',         'DECIMAL(18,4)') }} AS closing_price
+    {{ payload_field('bal', 'closingPrice.amount',         'DECIMAL(18,4)') }} AS closing_price,
+    {{ payload_field('bal', 'grossAmount.currency',        'VARCHAR') }}       AS currency
 {{ lot_join('VARIABLE_INCOMES') }}
