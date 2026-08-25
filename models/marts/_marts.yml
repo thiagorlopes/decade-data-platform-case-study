@@ -1,11 +1,11 @@
 version: 2
 
 models:
-  - name: canon_variable_incomes_positions
+  - name: fct_variable_incomes_positions
     description: One row per lot. Natural key of the physical holding is (isin_code, ticker).
     data_tests: &lot_grain
-      - unique:
-          column_name: "snapshot_id || '/' || investment_id"
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, investment_id]
     columns: &lot_columns
       - name: snapshot_id
         data_tests: [not_null]
@@ -13,32 +13,38 @@ models:
         data_tests: [not_null]
       - name: account_id
         data_tests: [not_null]
+      - name: has_detail
+        description: False when the lot arrived with a balances payload only (detail columns are NULL).
+        data_tests: [not_null]
+      - name: has_balances
+        description: False when the lot arrived with a detail payload only (balances columns are NULL).
+        data_tests: [not_null]
 
-  - name: canon_funds_positions
+  - name: fct_funds_positions
     description: One row per lot. Natural key of the physical holding is (cnpj_number).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: canon_bank_fixed_incomes_positions
+  - name: fct_bank_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, issuer_cnpj, issue_date, due_date).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: canon_credit_fixed_incomes_positions
+  - name: fct_credit_fixed_incomes_positions
     description: One row per lot. Natural key is (isin_code, debtor_cnpj, due_date).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: canon_treasure_titles_positions
+  - name: fct_treasure_titles_positions
     description: One row per lot. Natural key is (isin_code).
     data_tests: *lot_grain
     columns: *lot_columns
 
-  - name: canon_bank_fixed_incomes_transactions
+  - name: fct_bank_fixed_incomes_transactions
     description: One row per transaction.
     data_tests: &txn_grain
-      - unique:
-          column_name: "snapshot_id || '/' || payload_source || '/' || investment_id || '/' || transaction_id"
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, payload_source, investment_id, transaction_id]
     columns: &txn_columns
       - name: snapshot_id
         data_tests: [not_null]
@@ -47,22 +53,22 @@ models:
       - name: transaction_id
         data_tests: [not_null]
 
-  - name: canon_credit_fixed_incomes_transactions
+  - name: fct_credit_fixed_incomes_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns
 
-  - name: canon_funds_transactions
+  - name: fct_funds_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns
 
-  - name: canon_treasure_titles_transactions
+  - name: fct_treasure_titles_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns
 
-  - name: canon_variable_incomes_transactions
+  - name: fct_variable_incomes_transactions
     description: One row per transaction.
     data_tests: *txn_grain
     columns: *txn_columns

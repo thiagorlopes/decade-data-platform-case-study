@@ -5,7 +5,9 @@ config-version: 2
 
 models:
   decade:
-    canonical:
+    staging:
+      +materialized: view
+    marts:
       +materialized: table
     consumption:
       +materialized: view

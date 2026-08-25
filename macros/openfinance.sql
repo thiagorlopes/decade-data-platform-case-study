@@ -1,24 +1,26 @@
-{# Shared pieces of the canonical position and transaction models. #}
+{# Typed extraction of one JSON field, used by the staging models.
 
-{% macro payload_field(side, path, type) -%}
-TRY_CAST(json_extract_string({{ side }}.payload_json, '$.data.{{ path }}') AS {{ type }})
+   Casting policy: json_extract_string already returns VARCHAR, so VARCHAR
+   targets get no cast; fields the OFB spec marks `required` use CAST so
+   malformed data fails the build; optional fields use TRY_CAST and surface
+   as NULL. #}
+{% macro json_field(column, prefix, path, type, required) -%}
+{%- set expr = "json_extract_string(" ~ column ~ ", '" ~ prefix ~ path ~ "')" -%}
+{%- if type == 'VARCHAR' -%}
+{{ expr }}
+{%- elif required -%}
+CAST({{ expr }} AS {{ type }})
+{%- else -%}
+TRY_CAST({{ expr }} AS {{ type }})
+{%- endif -%}
 {%- endmacro %}
 
-{# FULL JOIN because some lots arrive with balances only (no detail payload). #}
-{% macro from_positions(family) -%}
-FROM (SELECT * FROM {{ source('raw_openfinance', 'positions') }}
-      WHERE investment_type = '{{ family }}' AND payload_kind = 'detail') AS det
-FULL JOIN (SELECT * FROM {{ source('raw_openfinance', 'positions') }}
-      WHERE investment_type = '{{ family }}' AND payload_kind = 'balances') AS bal
-USING (snapshot_id, investment_id)
+{# positions payload_json carries the API response envelope, hence $.data. #}
+{% macro payload_field(path, type, required=false) -%}
+{{ json_field('payload_json', '$.data.', path, type, required) }}
 {%- endmacro %}
 
-{# transaction_json is flat (no $.data wrapper) and needs no join. #}
-{% macro txn_field(path, type) -%}
-TRY_CAST(json_extract_string(transaction_json, '$.{{ path }}') AS {{ type }})
-{%- endmacro %}
-
-{% macro from_transactions(family) -%}
-FROM {{ source('raw_openfinance', 'transactions') }}
-WHERE investment_type = '{{ family }}'
+{# transaction_json is flat (no $.data wrapper). #}
+{% macro txn_field(path, type, required=false) -%}
+{{ json_field('transaction_json', '$.', path, type, required) }}
 {%- endmacro %}
