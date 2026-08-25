@@ -6,6 +6,9 @@ config-version: 2
 # materialization rationale: README.md § Materializations
 models:
   decade:
+    +persist_docs:
+      relation: true
+      columns: true
     canonical:
       +materialized: incremental
       +unique_key: [snapshot_id, investment_id]
