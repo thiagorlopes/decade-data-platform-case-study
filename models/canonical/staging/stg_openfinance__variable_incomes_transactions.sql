@@ -12,6 +12,7 @@ SELECT
     account_id,
     connection_id,
     investment_id,
+    CAST(ingested_at AS TIMESTAMP) AS ingested_at,
     {{ txn_field('type',                          'VARCHAR', required=true) }}        AS movement_type,
     {{ txn_field('transactionType',               'VARCHAR', required=true) }}        AS transaction_type,
     {{ txn_field('transactionTypeAdditionalInfo', 'VARCHAR') }}                       AS transaction_type_additional_info,

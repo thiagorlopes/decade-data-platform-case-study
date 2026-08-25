@@ -1,0 +1,196 @@
+version: 2
+
+# Within-record defect detection (case study section 2.2, tier 1).
+# Staging is the detection layer: failures here point at the provider,
+# not at our transforms. Everything is severity warn with store_failures,
+# so the build keeps running and failing rows land in the audit schema
+# as the provider defect ledger. Resolution happens in intermediate.
+#
+# Defect classes:
+#   D1  required field arriving empty            -> not_null
+#   D2  right concept, wrong form                -> expression_is_true (regex)
+#   D3  legal value outside the enumeration      -> accepted_values
+#   D4  field contradicts another in the payload -> expression_is_true (comparison)
+
+models:
+  - name: stg_openfinance__bank_fixed_incomes_positions_detail
+    data_tests:
+      # D2: CNPJ must be exactly 14 digits, providers send decimal tails
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_cnpj_form
+          expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          config: &dq_warn_stored
+            severity: warn
+            store_failures: true
+      # D4: a title cannot be purchased before it was issued
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_purchase_after_issue
+          expression: "purchase_date >= issue_date"
+          config: *dq_warn_stored
+      # D4: a title cannot be issued after it matures
+      - dbt_utils.expression_is_true:
+          name: dq_bank_detail_issue_before_due
+          expression: "issue_date <= due_date"
+          config: *dq_warn_stored
+    columns:
+      # D1: fields the OFB spec marks required
+      - name: issuer_cnpj
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: investment_type
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          # D3: EnumInvestmentType
+          - accepted_values:
+              values: [CDB, RDB, LCI, LCA]
+              config: *dq_warn_stored
+      - name: indexer
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          # D3: EnumBankFixedIncomeIndexer
+          - accepted_values:
+              values: &ofb_indexers [CDI, DI, TR, IPCA, IGP_M, IGP_DI, INPC, BCP, TLC, SELIC, PRE_FIXADO, OUTROS]
+              config: *dq_warn_stored
+      - name: issue_unit_price
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_unit_price_currency
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: due_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: purchase_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: grace_period_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+
+  - name: stg_openfinance__credit_fixed_incomes_positions_detail
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_debtor_cnpj_form
+          expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_detail_purchase_after_issue
+          expression: "purchase_date >= issue_date"
+          config: *dq_warn_stored
+    columns:
+      - name: investment_type
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: tax_exempt
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [SIM, NAO]
+              config: *dq_warn_stored
+      - name: indexer
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: *ofb_indexers
+              config: *dq_warn_stored
+      - name: issue_unit_price
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_unit_price_currency
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: issue_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: due_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: voucher_payment_indicator
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [SIM, NAO]
+              config: *dq_warn_stored
+      - name: purchase_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+
+  - name: stg_openfinance__funds_positions_detail
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: dq_funds_detail_cnpj_form
+          expression: "regexp_matches(fund_cnpj, '^[0-9]{14}$')"
+          config: *dq_warn_stored
+    columns:
+      - name: fund_name
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: fund_cnpj
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+
+  - name: stg_openfinance__treasure_titles_positions_detail
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_detail_purchase_before_due
+          expression: "purchase_date <= due_date"
+          config: *dq_warn_stored
+      # D2: ISIN must be 2 letters, 9 alphanumerics, 1 check digit
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_detail_isin_form
+          expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
+          config: *dq_warn_stored
+    columns:
+      - name: isin_code
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: product_name
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: indexer
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: *ofb_indexers
+              config: *dq_warn_stored
+      - name: rate_periodicity
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [MENSAL, ANUAL, DIARIO, SEMESTRAL]
+              config: *dq_warn_stored
+      - name: calculation
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [DIAS_UTEIS, DIAS_CORRIDOS]
+              config: *dq_warn_stored
+      - name: due_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: purchase_date
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: voucher_payment_indicator
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+          - accepted_values:
+              values: [SIM, NAO]
+              config: *dq_warn_stored
+
+  - name: stg_openfinance__variable_incomes_positions_detail
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: dq_variable_detail_isin_form
+          expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
+          config: *dq_warn_stored
+    columns:
+      - name: isin_code
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
+      - name: ticker
+        data_tests:
+          - not_null: {config: *dq_warn_stored}
