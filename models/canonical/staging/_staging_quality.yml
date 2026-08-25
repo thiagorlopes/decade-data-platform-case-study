@@ -3,22 +3,21 @@ version: 2
 # Within-record defect detection (case study section 2.2, first tier).
 # Staging is the detection layer for two owners:
 #
-#   E   envelope columns our ingestion attaches (snapshot_id, investment_id,
-#       snapshot_created_at, institution_id, institution_name, party_id,
-#       account_id, connection_id, ingested_at) plus the grain. Ours.
-#       Default severity (error): a null or duplicated grain means our
-#       pipeline is broken and the build must halt.
+#   Envelope (ours). Columns our ingestion attaches: snapshot_id,
+#   investment_id, snapshot_created_at, institution_id, institution_name,
+#   party_id, account_id, connection_id, ingested_at, plus the grain.
+#   Default severity (error): a null or duplicated grain means our
+#   pipeline is broken and the build must halt.
 #
-#   D   payload columns flattened from the provider JSON. Provider's.
-#       Severity warn with store_failures: the build keeps running and
-#       failing rows land in the audit schema as the provider defect
-#       ledger. Nothing is repaired or dropped here.
-#
-# Defect classes:
-#   D1  required field arriving empty            -> not_null
-#   D2  right concept, wrong form                -> expression_is_true (regex)
-#   D3  legal value outside the enumeration      -> accepted_values
-#   D4  field contradicts another in the payload -> expression_is_true (comparison)
+#   Payload (provider's). Columns flattened from the provider JSON.
+#   Severity warn with store_failures: the build keeps running and
+#   failing rows land in the audit schema as the provider defect ledger.
+#   Nothing is repaired or dropped here. Four checks the OFB spec would
+#   catch if providers respected it:
+#     required field arriving empty         -> not_null
+#     right concept, wrong form             -> expression_is_true (regex)
+#     legal value outside the enumeration   -> accepted_values
+#     field contradicts another in payload  -> expression_is_true (comparison)
 
 models:
   - name: stg_openfinance__bank_fixed_incomes_positions_detail
@@ -26,25 +25,25 @@ models:
       - &lot_grain
         dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, investment_id]
-      # D2: CNPJ must be exactly 14 digits, providers send decimal tails
+      # CNPJ must be exactly 14 digits, providers send decimal tails
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_cnpj_form
           expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
           config: &dq_warn_stored
             severity: warn
             store_failures: true
-      # D4: a title cannot be purchased before it was issued
+      # a title cannot be purchased before it was issued
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_purchase_after_issue
           expression: "purchase_date >= issue_date"
           config: *dq_warn_stored
-      # D4: a title cannot be issued after it matures
+      # a title cannot be issued after it matures
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_issue_before_due
           expression: "issue_date <= due_date"
           config: *dq_warn_stored
     columns:
-      # E: envelope. Default severity (error).
+      # envelope. Default severity (error).
       - &env_snapshot_id       {name: snapshot_id,         data_tests: [not_null]}
       - &env_investment_id     {name: investment_id,       data_tests: [not_null]}
       - &env_snapshot_created  {name: snapshot_created_at, data_tests: [not_null]}
@@ -57,14 +56,14 @@ models:
         name: ingested_at
         description: Arrival time of the record; the incremental watermark.
         data_tests: [not_null]
-      # D1: fields the OFB spec marks required
+      # fields the OFB spec marks required
       - name: issuer_cnpj
         data_tests:
           - not_null: {config: *dq_warn_stored}
       - name: investment_type
         data_tests:
           - not_null: {config: *dq_warn_stored}
-          # D3: EnumInvestmentType
+          # EnumInvestmentType
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L666
           - accepted_values:
               values: [CDB, RDB, LCI, LCA]
@@ -72,28 +71,28 @@ models:
       - name: indexer
         data_tests:
           - not_null: {config: *dq_warn_stored}
-          # D3: EnumBankFixedIncomeIndexer
+          # EnumBankFixedIncomeIndexer
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L675
           - accepted_values:
               values: &ofb_indexers [CDI, DI, TR, IPCA, IGP_M, IGP_DI, INPC, BCP, TLC, SELIC, PRE_FIXADO, OUTROS]
               config: *dq_warn_stored
       - name: rate_type
         data_tests:
-          # D3: EnumRateType
+          # EnumRateType
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L747
           - accepted_values:
               values: &rate_types [EXPONENCIAL, LINEAR]
               config: *dq_warn_stored
       - name: rate_periodicity
         data_tests:
-          # D3: EnumRatePeriodicity
+          # EnumRatePeriodicity
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L755
           - accepted_values:
               values: &rate_periodicities [MENSAL, ANUAL, DIARIO, SEMESTRAL]
               config: *dq_warn_stored
       - name: calculation
         data_tests:
-          # D3: EnumCalculation
+          # EnumCalculation
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L765
           - accepted_values:
               values: &calculations [DIAS_UTEIS, DIAS_CORRIDOS]
@@ -141,7 +140,7 @@ models:
       - name: investment_type
         data_tests:
           - not_null: {config: *dq_warn_stored}
-          # D3: EnumInvestimentType (sic, spec's own spelling)
+          # EnumInvestimentType (sic, spec's own spelling)
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/credit-fixed-incomes/1.1.0-beta.1.yml#L882
           - accepted_values:
               values: [CRA, CRI, DEBENTURES]
@@ -193,7 +192,7 @@ models:
               config: *dq_warn_stored
       - name: voucher_payment_periodicity
         data_tests:
-          # D3: VoucherPaymentPeriodicity, wider than rate_periodicity
+          # VoucherPaymentPeriodicity, wider than rate_periodicity
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/credit-fixed-incomes/1.1.0-beta.1.yml#L1340
           - accepted_values:
               values: &voucher_periodicities [MENSAL, TRIMESTRAL, SEMESTRAL, ANUAL, IRREGULAR, OUTROS]
@@ -227,7 +226,7 @@ models:
           - not_null: {config: *dq_warn_stored}
       - name: anbima_category
         data_tests:
-          # D3: anbimaCategory
+          # anbimaCategory
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/funds/1.1.0-beta.1.yml#L420
           - accepted_values:
               values: [ACOES, RENDA_FIXA, MULTIMERCADO, CAMBIAL]
@@ -240,7 +239,7 @@ models:
           name: dq_treasure_detail_purchase_before_due
           expression: "purchase_date <= due_date"
           config: *dq_warn_stored
-      # D2: ISIN must be 2 letters, 9 alphanumerics, 1 check digit
+      # ISIN must be 2 letters, 9 alphanumerics, 1 check digit
       - dbt_utils.expression_is_true:
           name: dq_treasure_detail_isin_form
           expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
@@ -334,7 +333,7 @@ models:
           column_name: movement_type
           values: &movement_types [ENTRADA, SAIDA]
           config: *dq_warn_stored
-      # D3: EnumBankFixedIncomeTransactionType
+      # EnumBankFixedIncomeTransactionType
       # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L1042
       - accepted_values:
           column_name: transaction_type
@@ -372,7 +371,7 @@ models:
           column_name: movement_type
           values: *movement_types
           config: *dq_warn_stored
-      # D3: TransactionType
+      # TransactionType
       # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/credit-fixed-incomes/1.1.0-beta.1.yml#L1275
       - accepted_values:
           column_name: transaction_type
@@ -389,7 +388,7 @@ models:
           column_name: movement_type
           values: *movement_types
           config: *dq_warn_stored
-      # D3: EnumFundsTransactionsTransactionType
+      # EnumFundsTransactionsTransactionType
       # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/funds/1.1.0-beta.1.yml#L1199
       - accepted_values:
           column_name: transaction_type
@@ -405,7 +404,7 @@ models:
           column_name: movement_type
           values: *movement_types
           config: *dq_warn_stored
-      # D3: TreasureTitlesTransactionType
+      # TreasureTitlesTransactionType
       # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/treasure-titles/1.1.0-beta.1.yml#L1015
       - accepted_values:
           column_name: transaction_type
@@ -422,7 +421,7 @@ models:
           column_name: movement_type
           values: *movement_types
           config: *dq_warn_stored
-      # D3: EnumVariableIncomesTransactionsTransactionType
+      # EnumVariableIncomesTransactionsTransactionType
       # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/variable-incomes/1.3.0-beta.1.yml#L953
       - accepted_values:
           column_name: transaction_type
