@@ -7,7 +7,8 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[General information](#general-information)**<br>
 **[Prerequisites](#prerequisites)**<br>
 **[Installation](#installation)**<br>
-**[Build](#build)**<br>
+**[Development cycle](#development-cycle)**<br>
+**[Browsing the data model](#browsing-the-data-model)**<br>
 
 ## General Information
 
@@ -32,14 +33,31 @@ pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
 make install     # builds the docker image
 ```
 
-## Build
+## Development cycle
+
+After `make install`, the loop when editing models or tests:
 
 ```bash
-make check       # prove the wiring: lists the declared dbt sources
+make check       # smoke test the wiring: list declared dbt sources
+make parse       # validate project config (fast, no warehouse writes)
 make build       # run all dbt models and tests
+make test        # re-run tests only against the current warehouse
 make shell       # open duckdb CLI on the warehouse (inside container)
+make clean       # wipe warehouse and dbt artifacts if state gets stuck
 make help        # list all targets
 ```
+
+`make build` is idempotent: canonical models are incremental keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process new arrivals. To reprocess everything after a transform change, `make clean && make build` (equivalent to `dbt build --full-refresh` against a fresh warehouse).
+
+## Browsing the data model
+
+Every staging, intermediate and consumption model carries a description and per-column documentation, sourced from the Open Finance Brasil investment API specs and referenced via shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md). To read it in your browser:
+
+```bash
+make docs-serve    # generates the catalog and serves it at http://localhost:8080
+```
+
+The generated site lets you browse the DAG, jump between models, and see the OFB spec fields, enum values and defect handling rules for every column. Docs are built against `warehouse.duckdb`; run `make build` first if it's missing.
 
 ## Target Architecture & Environments
 
@@ -52,6 +70,51 @@ Git is the source of truth ("if it isn't in version control, it doesn't exist"),
 <img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
 
 This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required; the same dbt models run against Databricks when promoted. The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. That way, we would be able to close one tradeoff this shortcut carries: SQL dialect drift between the two engines.
+
+### Data quality: detect, resolve, guarantee
+
+Target architecture for §2.2. Provider defects split into within-record (a required field empty, a value in the wrong form, a legal value outside its enum, a cross-field contradiction) and across-record (the same holding under two ids, holdings that freeze under a new id, a zero-then-nonzero valuation). The target pipeline splits their handling across three layers so each layer has one job:
+
+```
+dbt build (every run)
+
+raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental) ─→ CANONICAL fct ─→ consumers/
+                         DETECT                          RESOLVE                    GUARANTEE
+
+  ┌────────────────────────────┐   ┌─────────────────────────┐   ┌──────────────────────────┐
+  │ envelope (ours) → ERROR    │   │ no payload tests here   │   │ output contract → ERROR  │
+  │   not_null snapshot_id     │   │ logic instead:          │   │   not_null natural key   │
+  │   not_null investment_id   │   │   normalize forms       │   │   not_null reference_dt  │
+  │   not_null ingested_at     │   │     (strip CNPJ tail,   │   │   grain uniqueness       │
+  │   unique grain             │   │      map IPC-A → IPCA)  │   │   enums clean post-map   │
+  │   build DIES: bug is ours  │   │   build dq_flags[]      │   │   build DIES: our        │
+  ├────────────────────────────┤   │     for what cannot be  │   │     resolution failed    │
+  │ payload (theirs) → WARN    │   │     repaired            │   ├──────────────────────────┤
+  │   not_null required        │   │   dedupe across records │   │ dq_flags column → WARN   │
+  │   format regex             │   └─────────────────────────┘   │   count stays visible    │
+  │   accepted_values          │                                 └──────────────────────────┘
+  │   cross-field rules        │
+  │   store_failures: true     │
+  └────────────────────────────┘
+              │
+              ▼
+   main_dbt_test__audit.*  ◀── provider defect ledger (row-level, queryable)
+```
+
+| Owner                        | Layer | Severity              | On failure                                  |
+|------------------------------|-------|-----------------------|---------------------------------------------|
+| Us (envelope: ids, grain)    | stg   | error                 | Build halts. Fix ingestion.                 |
+| Provider (payload content)   | stg   | warn + store_failures | Build continues. Rows land in audit ledger. |
+| Us (resolution logic)        | fct   | error                 | Build halts. `int_` transform is buggy.     |
+| Provider (unrepairable rows) | fct   | warn via `dq_flags`   | Row admitted with a flag. Consumer decides. |
+
+How a consumer finds out which happened (§2.2's closing question):
+
+- **Row-level**: `dq_flags` column on the fct table (e.g. `['missing:purchase_date']`).
+- **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
+- **Contract-level**: a `contracts/` artifact (planned, symlink to `_canonical.yml`) pinning what fct promises is never wrong, enforced as error.
+
+**State today**: DETECT is shipped (`models/canonical/staging/_staging_quality.yml`; audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb)). RESOLVE and GUARANTEE land in follow-up PRs against this shape.
 
 ### Materializations
 

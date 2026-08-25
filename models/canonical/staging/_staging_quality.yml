@@ -18,9 +18,25 @@ version: 2
 #     right concept, wrong form             -> expression_is_true (regex)
 #     legal value outside the enumeration   -> accepted_values
 #     field contradicts another in payload  -> expression_is_true (comparison)
+#
+# Descriptions live once as {% docs %} blocks in ../ _docs.md and are
+# referenced via {{ doc(...) }}. Repeated column entries use YAML anchors
+# so each definition exists exactly once in this file too.
 
 models:
+  # ---------------------------------------------------------------------
+  # Position detail: contractual identity of each instrument
+  # ---------------------------------------------------------------------
   - name: stg_openfinance__bank_fixed_incomes_positions_detail
+    description: >-
+      Contractual identity of bank-issued fixed income positions: CDB and RDB
+      (bank deposit certificates) and LCI/LCA (real-estate/agribusiness
+      letters, income-tax exempt for individuals). One row per
+      (snapshot_id, investment_id) from GET /investments/{investmentId} of
+      the OFB bank-fixed-incomes API v1.1.0. Holding identity across
+      snapshots is derived downstream from
+      (isin_code, issuer_cnpj, issue_date, due_date).
+      {{ doc("stg_contract") }}
     data_tests:
       - &lot_grain
         dbt_utils.unique_combination_of_columns:
@@ -55,20 +71,53 @@ models:
           config: *dq_warn_stored
     columns:
       # envelope. Default severity (error).
-      - &env_snapshot_id       {name: snapshot_id,         data_tests: [not_null]}
-      - &env_investment_id     {name: investment_id,       data_tests: [not_null]}
-      - &env_snapshot_created  {name: snapshot_created_at, data_tests: [not_null]}
-      - &env_institution_id    {name: institution_id,      data_tests: [not_null]}
-      - &env_institution_name  {name: institution_name,    data_tests: [not_null]}
-      - &env_party_id          {name: party_id,            data_tests: [not_null]}
-      - &env_account_id        {name: account_id,          data_tests: [not_null]}
-      - &env_connection_id     {name: connection_id,       data_tests: [not_null]}
-      - &env_ingested_at       {name: ingested_at,         data_tests: [not_null]}
-      # fields the OFB spec marks required
+      - &env_snapshot_id
+        name: snapshot_id
+        description: '{{ doc("stg_snapshot_id") }}'
+        data_tests: [not_null]
+      - &env_investment_id
+        name: investment_id
+        description: '{{ doc("ofb_investment_id") }}'
+        data_tests: [not_null]
+      - &env_snapshot_created
+        name: snapshot_created_at
+        description: '{{ doc("stg_snapshot_created_at") }}'
+        data_tests: [not_null]
+      - &env_institution_id
+        name: institution_id
+        description: '{{ doc("stg_institution_id") }}'
+        data_tests: [not_null]
+      - &env_institution_name
+        name: institution_name
+        description: '{{ doc("stg_institution_name") }}'
+        data_tests: [not_null]
+      - &env_party_id
+        name: party_id
+        description: '{{ doc("stg_party_id") }}'
+        data_tests: [not_null]
+      - &env_account_id
+        name: account_id
+        description: '{{ doc("stg_account_id") }}'
+        data_tests: [not_null]
+      - &env_connection_id
+        name: connection_id
+        description: '{{ doc("stg_connection_id") }}'
+        data_tests: [not_null]
+      - &env_ingested_at
+        name: ingested_at
+        description: '{{ doc("stg_ingested_at") }}'
+        data_tests: [not_null]
+      # payload, in spec order. Fields the OFB spec marks required carry
+      # warn-severity not_null.
       - name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
+      - &col_isin
+        name: isin_code
+        description: '{{ doc("ofb_isin_code") }} {{ doc("stg_isin_format") }}'
       - name: investment_type
+        description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
           # EnumInvestmentType
@@ -76,7 +125,42 @@ models:
           - accepted_values:
               values: [CDB, RDB, LCI, LCA]
               config: *dq_warn_stored
-      - name: indexer
+      - &col_pre_fixed_rate
+        name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - &col_post_fixed_pct
+        name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - &col_rate_type
+        name: rate_type
+        description: '{{ doc("ofb_rate_type") }}'
+        data_tests:
+          # EnumRateType
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L747
+          - accepted_values:
+              values: &rate_types [EXPONENCIAL, LINEAR]
+              config: *dq_warn_stored
+      - &col_rate_periodicity
+        name: rate_periodicity
+        description: '{{ doc("ofb_rate_periodicity") }}'
+        data_tests:
+          # EnumRatePeriodicity
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L755
+          - accepted_values:
+              values: &rate_periodicities [MENSAL, ANUAL, DIARIO, SEMESTRAL]
+              config: *dq_warn_stored
+      - &col_calculation
+        name: calculation
+        description: '{{ doc("ofb_calculation") }}'
+        data_tests:
+          # EnumCalculation
+          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L765
+          - accepted_values:
+              values: &calculations [DIAS_UTEIS, DIAS_CORRIDOS]
+              config: *dq_warn_stored
+      - &col_indexer_req
+        name: indexer
+        description: '{{ doc("ofb_indexer") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
           # EnumBankFixedIncomeIndexer
@@ -84,47 +168,50 @@ models:
           - accepted_values:
               values: &ofb_indexers [CDI, DI, TR, IPCA, IGP_M, IGP_DI, INPC, BCP, TLC, SELIC, PRE_FIXADO, OUTROS]
               config: *dq_warn_stored
-      - name: rate_type
-        data_tests:
-          # EnumRateType
-          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L747
-          - accepted_values:
-              values: &rate_types [EXPONENCIAL, LINEAR]
-              config: *dq_warn_stored
-      - name: rate_periodicity
-        data_tests:
-          # EnumRatePeriodicity
-          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L755
-          - accepted_values:
-              values: &rate_periodicities [MENSAL, ANUAL, DIARIO, SEMESTRAL]
-              config: *dq_warn_stored
-      - name: calculation
-        data_tests:
-          # EnumCalculation
-          # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/bank-fixed-incomes/1.1.0.yml#L765
-          - accepted_values:
-              values: &calculations [DIAS_UTEIS, DIAS_CORRIDOS]
-              config: *dq_warn_stored
-      - name: issue_unit_price
+      - &col_indexer_info
+        name: indexer_additional_info
+        description: '{{ doc("ofb_indexer_additional_info") }}'
+      - &col_issue_unit_price
+        name: issue_unit_price
+        description: '{{ doc("ofb_issue_unit_price") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
-      - name: issue_unit_price_currency
+      - &col_issue_unit_price_curr
+        name: issue_unit_price_currency
+        description: '{{ doc("ofb_currency") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
-      - name: due_date
+      - &col_due_date_req
+        name: due_date
+        description: '{{ doc("ofb_due_date") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
-      - name: issue_date
+      - &col_issue_date_req
+        name: issue_date
+        description: '{{ doc("ofb_issue_date") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
-      - name: purchase_date
+      - &col_clearing_code
+        name: clearing_code
+        description: '{{ doc("ofb_clearing_code") }}'
+      - &col_purchase_date_req
+        name: purchase_date
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
       - name: grace_period_date
+        description: '{{ doc("ofb_grace_period_date") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
 
   - name: stg_openfinance__credit_fixed_incomes_positions_detail
+    description: >-
+      Contractual identity of securitized credit positions: CRA/CRI
+      (agribusiness/real-estate receivables certificates) and DEBENTURES
+      (corporate bonds). One row per (snapshot_id, investment_id) from
+      GET /investments/{investmentId} of the OFB credit-fixed-incomes API
+      v1.1.0. Holding identity across snapshots is derived downstream from
+      (isin_code, debtor_cnpj, due_date). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
@@ -157,7 +244,12 @@ models:
       - *env_account_id
       - *env_connection_id
       - *env_ingested_at
+      - &col_issuer_cnpj_plain
+        name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - *col_isin
       - name: investment_type
+        description: '{{ doc("ofb_product_type__credit_fixed_incomes") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
           # EnumInvestimentType (sic, spec's own spelling)
@@ -165,63 +257,60 @@ models:
           - accepted_values:
               values: [CRA, CRI, DEBENTURES]
               config: *dq_warn_stored
+      - name: debtor_cnpj
+        description: '{{ doc("ofb_debtor_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: debtor_name
+        description: '{{ doc("ofb_debtor_name") }}'
       - name: tax_exempt
+        description: '{{ doc("ofb_tax_exempt") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
               values: [SIM, NAO]
               config: *dq_warn_stored
-      - name: indexer
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-          - accepted_values:
-              values: *ofb_indexers
-              config: *dq_warn_stored
-      - name: rate_type
-        data_tests:
-          - accepted_values:
-              values: *rate_types
-              config: *dq_warn_stored
-      - name: rate_periodicity
-        data_tests:
-          - accepted_values:
-              values: *rate_periodicities
-              config: *dq_warn_stored
-      - name: calculation
-        data_tests:
-          - accepted_values:
-              values: *calculations
-              config: *dq_warn_stored
-      - name: issue_unit_price
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-      - name: issue_unit_price_currency
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-      - name: issue_date
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-      - name: due_date
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-      - name: voucher_payment_indicator
+      - *col_pre_fixed_rate
+      - *col_post_fixed_pct
+      - *col_rate_type
+      - *col_rate_periodicity
+      - *col_calculation
+      - *col_indexer_req
+      - *col_indexer_info
+      - *col_issue_unit_price
+      - *col_issue_unit_price_curr
+      - *col_issue_date_req
+      - *col_due_date_req
+      - &col_voucher_indicator
+        name: voucher_payment_indicator
+        description: '{{ doc("ofb_voucher_payment_indicator") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
               values: [SIM, NAO]
               config: *dq_warn_stored
-      - name: voucher_payment_periodicity
+      - &col_voucher_periodicity
+        name: voucher_payment_periodicity
+        description: '{{ doc("ofb_voucher_payment_periodicity") }}'
         data_tests:
           # VoucherPaymentPeriodicity, wider than rate_periodicity
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/credit-fixed-incomes/1.1.0-beta.1.yml#L1340
           - accepted_values:
               values: &voucher_periodicities [MENSAL, TRIMESTRAL, SEMESTRAL, ANUAL, IRREGULAR, OUTROS]
               config: *dq_warn_stored
-      - name: purchase_date
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
+      - &col_voucher_periodicity_info
+        name: voucher_payment_periodicity_additional_info
+        description: '{{ doc("ofb_voucher_payment_periodicity_additional_info") }}'
+      - *col_clearing_code
+      - *col_purchase_date_req
+      - name: grace_period_date
+        description: '{{ doc("ofb_grace_period_date") }}'
 
   - name: stg_openfinance__funds_positions_detail
+    description: >-
+      Identity of investment fund positions: fund name, CNPJ and ANBIMA
+      classification. One row per (snapshot_id, investment_id) from
+      GET /investments/{investmentId} of the OFB funds API v1.1.0. Holding
+      identity across snapshots is derived downstream from (fund_cnpj).
+      {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
@@ -239,20 +328,35 @@ models:
       - *env_connection_id
       - *env_ingested_at
       - name: fund_name
+        description: '{{ doc("ofb_fund_name") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
       - name: fund_cnpj
+        description: '{{ doc("ofb_fund_cnpj") }} {{ doc("stg_cnpj_format") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
+      - *col_isin
       - name: anbima_category
+        description: '{{ doc("ofb_anbima_category") }}'
         data_tests:
           # anbimaCategory
           # https://github.com/OpenBanking-Brasil/openapi/blob/21fed0429e5ccc0fb0854ceaec48473461093942/swagger-apis/funds/1.1.0-beta.1.yml#L420
           - accepted_values:
               values: [ACOES, RENDA_FIXA, MULTIMERCADO, CAMBIAL]
               config: *dq_warn_stored
+      - name: anbima_class
+        description: '{{ doc("ofb_anbima_class") }}'
+      - name: anbima_subclass
+        description: '{{ doc("ofb_anbima_subclass") }}'
 
   - name: stg_openfinance__treasure_titles_positions_detail
+    description: >-
+      Contractual identity of Tesouro Direto positions, Brazilian federal
+      government bonds (e.g. Tesouro Selic, Tesouro IPCA+, Tesouro
+      Prefixado). One row per (snapshot_id, investment_id) from
+      GET /investments/{investmentId} of the OFB treasure-titles API v1.1.0.
+      Holding identity across snapshots is derived downstream from
+      (isin_code). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
@@ -279,48 +383,44 @@ models:
       - *env_connection_id
       - *env_ingested_at
       - name: isin_code
+        description: '{{ doc("ofb_isin_code") }} {{ doc("stg_isin_format") }} The downstream holding-identity key for treasury bonds.'
         data_tests:
           - not_null: {config: *dq_warn_stored}
       - name: product_name
+        description: '{{ doc("ofb_product_name") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
-      - name: indexer
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-          - accepted_values:
-              values: *ofb_indexers
-              config: *dq_warn_stored
+      - *col_indexer_req
+      - *col_indexer_info
+      - *col_pre_fixed_rate
+      - *col_post_fixed_pct
       - name: rate_periodicity
+        description: '{{ doc("ofb_rate_periodicity") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
               values: *rate_periodicities
               config: *dq_warn_stored
       - name: calculation
+        description: '{{ doc("ofb_calculation") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
           - accepted_values:
               values: *calculations
               config: *dq_warn_stored
-      - name: due_date
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-      - name: purchase_date
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-      - name: voucher_payment_indicator
-        data_tests:
-          - not_null: {config: *dq_warn_stored}
-          - accepted_values:
-              values: [SIM, NAO]
-              config: *dq_warn_stored
-      - name: voucher_payment_periodicity
-        data_tests:
-          - accepted_values:
-              values: *voucher_periodicities
-              config: *dq_warn_stored
+      - *col_due_date_req
+      - *col_purchase_date_req
+      - *col_voucher_indicator
+      - *col_voucher_periodicity
+      - *col_voucher_periodicity_info
 
   - name: stg_openfinance__variable_incomes_positions_detail
+    description: >-
+      Identity of exchange-traded equity positions: ISIN and trading ticker.
+      One row per (snapshot_id, investment_id) from
+      GET /investments/{investmentId} of the OFB variable-incomes API v1.3.0.
+      Holding identity across snapshots is derived downstream from
+      (isin_code, ticker). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
@@ -341,18 +441,260 @@ models:
       - *env_account_id
       - *env_connection_id
       - *env_ingested_at
+      - *col_issuer_cnpj_plain
       - name: isin_code
+        description: '{{ doc("ofb_isin_code") }} {{ doc("stg_isin_format") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
       - name: ticker
+        description: '{{ doc("ofb_ticker") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
 
+  # ---------------------------------------------------------------------
+  # Position balances: point-in-time valuation of each instrument.
+  # Same envelope/grain contract as detail; payload columns are the
+  # provider's own valuation, so no warn tests are defined here yet.
+  # ---------------------------------------------------------------------
+  - name: stg_openfinance__bank_fixed_incomes_positions_balances
+    description: >-
+      Point-in-time valuation of bank fixed income positions (CDB, RDB, LCI,
+      LCA): quantity, marked prices, gross/net values, tax provisions and
+      blocks, from GET /investments/{investmentId}/balances of the OFB
+      bank-fixed-incomes API v1.1.0. One row per (snapshot_id,
+      investment_id); use the latest snapshot for current value.
+      {{ doc("stg_contract") }}
+    data_tests:
+      - *lot_grain
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - &col_reference_datetime
+        name: reference_datetime
+        description: '{{ doc("ofb_reference_datetime") }}'
+      - &col_bal_quantity
+        name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - &col_updated_unit_price
+        name: updated_unit_price
+        description: '{{ doc("ofb_updated_unit_price") }}'
+      - &col_updated_unit_price_curr
+        name: updated_unit_price_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_gross_amount
+        name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - &col_gross_amount_curr
+        name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_net_amount
+        name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - &col_net_amount_curr
+        name: net_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_bal_income_tax
+        name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - &col_bal_income_tax_curr
+        name: income_tax_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_bal_iof
+        name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - &col_bal_iof_curr
+        name: financial_transaction_tax_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_blocked_amount
+        name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - &col_blocked_amount_curr
+        name: blocked_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_purchase_unit_price
+        name: purchase_unit_price
+        description: '{{ doc("ofb_purchase_unit_price") }}'
+      - &col_purchase_unit_price_curr
+        name: purchase_unit_price_currency
+        description: '{{ doc("ofb_currency") }}'
+      - *col_pre_fixed_rate
+      - *col_post_fixed_pct
+
+  - name: stg_openfinance__credit_fixed_incomes_positions_balances
+    description: >-
+      Point-in-time valuation of securitized credit positions (CRA, CRI,
+      DEBENTURES), from GET /investments/{investmentId}/balances of the OFB
+      credit-fixed-incomes API v1.1.0. Extends the common balance shape with
+      debtor-default tracking: fine_amount (multa) and late_payment_amount
+      (mora). One row per (snapshot_id, investment_id); use the latest
+      snapshot for current value. {{ doc("stg_contract") }}
+    data_tests:
+      - *lot_grain
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - *col_reference_datetime
+      - *col_updated_unit_price
+      - *col_updated_unit_price_curr
+      - *col_bal_quantity
+      - *col_gross_amount
+      - *col_gross_amount_curr
+      - *col_net_amount
+      - *col_net_amount_curr
+      - *col_bal_income_tax
+      - *col_bal_income_tax_curr
+      - *col_bal_iof
+      - *col_bal_iof_curr
+      - *col_blocked_amount
+      - *col_blocked_amount_curr
+      - *col_purchase_unit_price
+      - *col_purchase_unit_price_curr
+      - *col_pre_fixed_rate
+      - *col_post_fixed_pct
+      - name: fine_amount
+        description: '{{ doc("ofb_fine_amount") }}'
+      - name: fine_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - name: late_payment_amount
+        description: '{{ doc("ofb_late_payment_amount") }}'
+      - name: late_payment_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+
+  - name: stg_openfinance__funds_positions_balances
+    description: >-
+      Point-in-time valuation of fund positions, quota-based: quota quantity
+      and gross quota price alongside gross/net values, tax provisions and
+      blocks, from GET /investments/{investmentId}/balances of the OFB funds
+      API v1.1.0. One row per (snapshot_id, investment_id); use the latest
+      snapshot for current value. {{ doc("stg_contract") }}
+    data_tests:
+      - *lot_grain
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - &col_reference_date
+        name: reference_date
+        description: '{{ doc("ofb_reference_date") }}'
+      - *col_gross_amount
+      - *col_gross_amount_curr
+      - *col_net_amount
+      - *col_net_amount_curr
+      - *col_bal_income_tax
+      - *col_bal_income_tax_curr
+      - *col_bal_iof
+      - *col_bal_iof_curr
+      - *col_blocked_amount
+      - *col_blocked_amount_curr
+      - name: quota_quantity
+        description: '{{ doc("ofb_quota_quantity") }}'
+      - name: quota_gross_price
+        description: '{{ doc("ofb_quota_gross_price") }}'
+      - name: quota_gross_price_currency
+        description: '{{ doc("ofb_currency") }}'
+
+  - name: stg_openfinance__treasure_titles_positions_balances
+    description: >-
+      Point-in-time valuation of Tesouro Direto positions, from
+      GET /investments/{investmentId}/balances of the OFB treasure-titles API
+      v1.1.0. One row per (snapshot_id, investment_id); use the latest
+      snapshot for current value. {{ doc("stg_contract") }}
+    data_tests:
+      - *lot_grain
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - *col_reference_datetime
+      - *col_updated_unit_price
+      - *col_updated_unit_price_curr
+      - *col_gross_amount
+      - *col_gross_amount_curr
+      - *col_net_amount
+      - *col_net_amount_curr
+      - *col_bal_income_tax
+      - *col_bal_income_tax_curr
+      - *col_bal_iof
+      - *col_bal_iof_curr
+      - *col_blocked_amount
+      - *col_blocked_amount_curr
+      - *col_purchase_unit_price
+      - *col_purchase_unit_price_curr
+      - *col_bal_quantity
+
+  - name: stg_openfinance__variable_incomes_positions_balances
+    description: >-
+      Point-in-time valuation of equity positions: quantity, closing price and
+      quotation factor, from GET /investments/{investmentId}/balances of the
+      OFB variable-incomes API v1.3.0. Financial value follows
+      gross_amount = quantity x closing_price / price_factor. One row per
+      (snapshot_id, investment_id); use the latest snapshot for current
+      value. {{ doc("stg_contract") }}
+    data_tests:
+      - *lot_grain
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - *col_reference_date
+      - name: price_factor
+        description: '{{ doc("ofb_price_factor") }}'
+      - *col_gross_amount
+      - *col_gross_amount_curr
+      - *col_blocked_amount
+      - *col_blocked_amount_curr
+      - *col_bal_quantity
+      - name: closing_price
+        description: '{{ doc("ofb_closing_price") }}'
+      - name: closing_price_currency
+        description: '{{ doc("ofb_currency") }}'
+
+  # ---------------------------------------------------------------------
   # Transactions staging models. dbt allows a single yml entry per model,
   # so their structural grain/envelope tests (severity error) ride along
   # with the D3 warns.
+  # ---------------------------------------------------------------------
   - name: stg_openfinance__bank_fixed_incomes_transactions
-    description: One row per transaction.
+    description: >-
+      Movements on bank fixed income positions (CDB, RDB, LCI, LCA), from
+      GET /investments/{investmentId}/transactions and /transactions-current
+      of the OFB bank-fixed-incomes API v1.1.0. One row per movement per
+      source endpoint: grain (snapshot_id, payload_source, investment_id,
+      transaction_id); the same movement may arrive under both
+      payload_source values, deduplication happens downstream.
+      {{ doc("stg_contract") }}
     data_tests:
       - &txn_grain
         dbt_utils.unique_combination_of_columns:
@@ -368,30 +710,83 @@ models:
           values: [APLICACAO, RESGATE, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO,
                    VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
           config: *dq_warn_stored
-    columns: &txn_columns
-      - name: snapshot_id
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - &col_payload_source
+        name: payload_source
+        description: '{{ doc("stg_payload_source") }}'
+      - &col_txn_id
+        name: transaction_id
+        description: '{{ doc("ofb_transaction_id") }}'
         data_tests: [not_null]
-      - name: investment_id
-        data_tests: [not_null]
-      - name: transaction_id
-        data_tests: [not_null]
-      - name: snapshot_created_at
-        data_tests: [not_null]
-      - name: institution_id
-        data_tests: [not_null]
-      - name: institution_name
-        data_tests: [not_null]
-      - name: party_id
-        data_tests: [not_null]
-      - name: account_id
-        data_tests: [not_null]
-      - name: connection_id
-        data_tests: [not_null]
-      - name: ingested_at
-        data_tests: [not_null]
+      - &col_movement_type
+        name: movement_type
+        description: '{{ doc("ofb_movement_type") }}'
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__bank_fixed_incomes") }}'
+      - &col_txn_type_info
+        name: transaction_type_additional_info
+        description: '{{ doc("ofb_transaction_type_additional_info") }}'
+      - &col_txn_date
+        name: transaction_date
+        description: '{{ doc("ofb_transaction_date") }}'
+      - &col_txn_unit_price
+        name: transaction_unit_price
+        description: '{{ doc("ofb_transaction_unit_price") }}'
+      - &col_txn_unit_price_curr
+        name: transaction_unit_price_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_txn_quantity
+        name: transaction_quantity
+        description: '{{ doc("ofb_transaction_quantity") }}'
+      - &col_txn_gross
+        name: transaction_gross_amount
+        description: '{{ doc("ofb_transaction_gross_amount") }}'
+      - &col_txn_gross_curr
+        name: transaction_gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_txn_income_tax
+        name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_amount") }}'
+      - &col_txn_income_tax_curr
+        name: income_tax_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_txn_iof
+        name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_amount") }}'
+      - &col_txn_iof_curr
+        name: financial_transaction_tax_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_txn_net
+        name: transaction_net_amount
+        description: '{{ doc("ofb_transaction_net_amount") }}'
+      - &col_txn_net_curr
+        name: transaction_net_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &col_txn_remuneration_rate
+        name: remuneration_rate
+        description: '{{ doc("ofb_remuneration_rate") }}'
+      - &col_txn_indexer_pct
+        name: indexer_percentage
+        description: '{{ doc("ofb_indexer_percentage") }}'
 
   - name: stg_openfinance__credit_fixed_incomes_transactions
-    description: One row per transaction.
+    description: >-
+      Movements on securitized credit positions (CRA, CRI, DEBENTURES), from
+      GET /investments/{investmentId}/transactions and /transactions-current
+      of the OFB credit-fixed-incomes API v1.1.0. Carries a wider event set
+      than the other classes, including arrears events (MORA, MULTA) and
+      PREMIO. One row per movement per source endpoint: grain (snapshot_id,
+      payload_source, investment_id, transaction_id); deduplication happens
+      downstream. {{ doc("stg_contract") }}
     data_tests:
       - *txn_grain
       - accepted_values:
@@ -405,10 +800,47 @@ models:
           values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO, VENCIMENTO,
                    TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, MORA, MULTA, PREMIO, OUTROS]
           config: *dq_warn_stored
-    columns: *txn_columns
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - *col_payload_source
+      - *col_txn_id
+      - *col_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__credit_fixed_incomes") }}'
+      - *col_txn_type_info
+      - *col_txn_date
+      - *col_txn_unit_price
+      - *col_txn_unit_price_curr
+      - *col_txn_quantity
+      - *col_txn_gross
+      - *col_txn_gross_curr
+      - *col_txn_income_tax
+      - *col_txn_income_tax_curr
+      - *col_txn_iof
+      - *col_txn_iof_curr
+      - *col_txn_net
+      - *col_txn_net_curr
+      - *col_txn_remuneration_rate
+      - *col_txn_indexer_pct
 
   - name: stg_openfinance__funds_transactions
-    description: One row per transaction.
+    description: >-
+      Movements on fund positions, quota-based, from
+      GET /investments/{investmentId}/transactions and /transactions-current
+      of the OFB funds API v1.1.0. Dates are conversion (cotizacao) dates,
+      not request dates, and COME_COTAS is the semi-annual anticipated
+      income-tax collection delivered as a quota-quantity reduction. One row
+      per movement per source endpoint: grain (snapshot_id, payload_source,
+      investment_id, transaction_id); deduplication happens downstream.
+      {{ doc("stg_contract") }}
     data_tests:
       - *txn_grain
       - accepted_values:
@@ -421,10 +853,57 @@ models:
           column_name: transaction_type
           values: [APLICACAO, RESGATE, AMORTIZACAO, COME_COTAS, TRANSFERENCIA_COTAS, OUTROS]
           config: *dq_warn_stored
-    columns: *txn_columns
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - *col_payload_source
+      - *col_txn_id
+      - *col_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__funds") }}'
+      - *col_txn_type_info
+      - name: transaction_conversion_date
+        description: '{{ doc("ofb_transaction_conversion_date") }}'
+      - name: transaction_quota_price
+        description: '{{ doc("ofb_transaction_quota_price") }}'
+      - name: transaction_quota_price_currency
+        description: '{{ doc("ofb_currency") }}'
+      - name: transaction_quota_quantity
+        description: '{{ doc("ofb_transaction_quota_quantity") }}'
+      - &col_txn_amount
+        name: transaction_amount
+        description: '{{ doc("ofb_transaction_amount") }}'
+      - &col_txn_amount_curr
+        name: transaction_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - *col_txn_gross
+      - *col_txn_gross_curr
+      - *col_txn_income_tax
+      - *col_txn_income_tax_curr
+      - *col_txn_iof
+      - *col_txn_iof_curr
+      - name: transaction_exit_fee
+        description: '{{ doc("ofb_transaction_exit_fee") }}'
+      - name: transaction_exit_fee_currency
+        description: '{{ doc("ofb_currency") }}'
+      - *col_txn_net
+      - *col_txn_net_curr
 
   - name: stg_openfinance__treasure_titles_transactions
-    description: One row per transaction.
+    description: >-
+      Movements on Tesouro Direto positions, from
+      GET /investments/{investmentId}/transactions and /transactions-current
+      of the OFB treasure-titles API v1.1.0. One row per movement per source
+      endpoint: grain (snapshot_id, payload_source, investment_id,
+      transaction_id); deduplication happens downstream.
+      {{ doc("stg_contract") }}
     data_tests:
       - *txn_grain
       - accepted_values:
@@ -438,10 +917,46 @@ models:
           values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO,
                    VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
           config: *dq_warn_stored
-    columns: *txn_columns
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - *col_payload_source
+      - *col_txn_id
+      - *col_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__treasure_titles") }}'
+      - *col_txn_type_info
+      - *col_txn_date
+      - *col_txn_unit_price
+      - *col_txn_unit_price_curr
+      - *col_txn_quantity
+      - *col_txn_gross
+      - *col_txn_gross_curr
+      - *col_txn_income_tax
+      - *col_txn_income_tax_curr
+      - *col_txn_iof
+      - *col_txn_iof_curr
+      - *col_txn_net
+      - *col_txn_net_curr
+      - *col_txn_remuneration_rate
 
   - name: stg_openfinance__variable_incomes_transactions
-    description: One row per transaction.
+    description: >-
+      Movements on equity positions, from
+      GET /investments/{investmentId}/transactions and /transactions-current
+      of the OFB variable-incomes API v1.3.0. Includes corporate-action
+      income events: DIVIDENDOS, JCP (juros sobre capital proprio) and
+      ALUGUEIS (stock-lending income). One row per movement per source
+      endpoint: grain (snapshot_id, payload_source, investment_id,
+      transaction_id); deduplication happens downstream.
+      {{ doc("stg_contract") }}
     data_tests:
       - *txn_grain
       - accepted_values:
@@ -455,4 +970,29 @@ models:
           values: [COMPRA, VENDA, TRANSFERENCIA_CUSTODIA, TRANSFERENCIA_TITULARIDADE,
                    DIVIDENDOS, JCP, ALUGUEIS, OUTROS]
           config: *dq_warn_stored
-    columns: *txn_columns
+    columns:
+      - *env_snapshot_id
+      - *env_investment_id
+      - *env_snapshot_created
+      - *env_institution_id
+      - *env_institution_name
+      - *env_party_id
+      - *env_account_id
+      - *env_connection_id
+      - *env_ingested_at
+      - *col_payload_source
+      - *col_txn_id
+      - *col_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__variable_incomes") }}'
+      - *col_txn_type_info
+      - *col_txn_date
+      - name: price_factor
+        description: '{{ doc("ofb_price_factor") }}'
+      - *col_txn_unit_price
+      - *col_txn_unit_price_curr
+      - *col_txn_quantity
+      - *col_txn_amount
+      - *col_txn_amount_curr
+      - name: broker_note_id
+        description: '{{ doc("ofb_broker_note_id") }}'

@@ -1,34 +1,291 @@
 version: 2
 
-# Envelope integrity (E) and grain uniqueness are tested at staging, where
-# a failure points directly at the ingestion pipeline. See
-# models/canonical/staging/_staging_quality.yml. This file only carries
-# intermediate model descriptions.
+# Intermediate layer: one row per (snapshot_id, investment_id), formed by a
+# FULL JOIN between the staging detail and balances of the same asset class.
+# Envelope columns are coalesced across the two sides; ingested_at is the
+# max of the two, and drives the incremental watermark.
+#
+# Staging model contracts (grain, envelope integrity, payload defect ledger)
+# live in models/canonical/staging/_staging_quality.yml. Column doc blocks
+# are shared and defined once in _docs.md.
 
 models:
   - name: int_variable_incomes_positions
     description: >
-      One row per position record as delivered. Grain: (snapshot_id, investment_id).
-      Holding identity across snapshots is derived downstream from (isin_code, ticker).
+      Equity positions, one row per (snapshot_id, investment_id). Detail and
+      balance staging rows joined for the same lot. Holding identity across
+      snapshots is derived downstream from (isin_code, ticker).
+    data_tests: &lot_grain
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, investment_id]
+    columns:
+      - &c_snapshot_id
+        name: snapshot_id
+        description: '{{ doc("stg_snapshot_id") }}'
+        data_tests: [not_null]
+      - &c_investment_id
+        name: investment_id
+        description: '{{ doc("ofb_investment_id") }}'
+        data_tests: [not_null]
+      - &c_snapshot_created_at
+        name: snapshot_created_at
+        description: '{{ doc("stg_snapshot_created_at") }}'
+      - &c_institution_id
+        name: institution_id
+        description: '{{ doc("stg_institution_id") }}'
+      - &c_institution_name
+        name: institution_name
+        description: '{{ doc("stg_institution_name") }}'
+      - &c_party_id
+        name: party_id
+        description: '{{ doc("stg_party_id") }}'
+      - &c_account_id
+        name: account_id
+        description: '{{ doc("stg_account_id") }}'
+      - &c_connection_id
+        name: connection_id
+        description: '{{ doc("stg_connection_id") }}'
+      - &c_ingested_at
+        name: ingested_at
+        description: '{{ doc("stg_ingested_at") }} Here it is the max of the detail and balances arrivals for the lot, and drives the incremental watermark.'
+        data_tests: [not_null]
+      - name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: ticker
+        description: '{{ doc("ofb_ticker") }}'
+      - name: reference_date
+        description: '{{ doc("ofb_reference_date") }}'
+      - name: price_factor
+        description: '{{ doc("ofb_price_factor") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: closing_price
+        description: '{{ doc("ofb_closing_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
 
   - name: int_funds_positions
     description: >
-      One row per position record as delivered. Grain: (snapshot_id, investment_id).
-      Holding identity across snapshots is derived downstream from (fund_cnpj).
+      Fund positions, one row per (snapshot_id, investment_id). Detail and
+      balance staging rows joined for the same lot. Holding identity across
+      snapshots is derived downstream from (fund_cnpj).
+    data_tests: *lot_grain
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_ingested_at
+      - name: fund_name
+        description: '{{ doc("ofb_fund_name") }}'
+      - name: fund_cnpj
+        description: '{{ doc("ofb_fund_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: anbima_category
+        description: '{{ doc("ofb_anbima_category") }}'
+      - name: reference_date
+        description: '{{ doc("ofb_reference_date") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: quota_quantity
+        description: '{{ doc("ofb_quota_quantity") }}'
+      - name: quota_gross_price
+        description: '{{ doc("ofb_quota_gross_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
 
   - name: int_bank_fixed_incomes_positions
     description: >
-      One row per position record as delivered. Grain: (snapshot_id, investment_id).
-      Holding identity across snapshots is derived downstream from
-      (isin_code, issuer_cnpj, issue_date, due_date).
+      Bank fixed income positions (CDB, RDB, LCI, LCA), one row per
+      (snapshot_id, investment_id). Detail and balance staging rows joined
+      for the same lot. Holding identity across snapshots is derived
+      downstream from (isin_code, issuer_cnpj, issue_date, due_date).
+    data_tests: *lot_grain
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_ingested_at
+      - name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: investment_type
+        description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+      - name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - name: issue_unit_price
+        description: '{{ doc("ofb_issue_unit_price") }}'
+      - name: due_date
+        description: '{{ doc("ofb_due_date") }}'
+      - name: issue_date
+        description: '{{ doc("ofb_issue_date") }}'
+      - name: clearing_code
+        description: '{{ doc("ofb_clearing_code") }}'
+      - name: purchase_date
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+      - name: grace_period_date
+        description: '{{ doc("ofb_grace_period_date") }}'
+      - name: reference_datetime
+        description: '{{ doc("ofb_reference_datetime") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: updated_unit_price
+        description: '{{ doc("ofb_updated_unit_price") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: purchase_unit_price
+        description: '{{ doc("ofb_purchase_unit_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
 
   - name: int_credit_fixed_incomes_positions
     description: >
-      One row per position record as delivered. Grain: (snapshot_id, investment_id).
-      Holding identity across snapshots is derived downstream from
-      (isin_code, debtor_cnpj, due_date).
+      Securitized credit positions (CRA, CRI, DEBENTURES), one row per
+      (snapshot_id, investment_id). Detail and balance staging rows joined
+      for the same lot. Holding identity across snapshots is derived
+      downstream from (isin_code, debtor_cnpj, due_date).
+    data_tests: *lot_grain
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_ingested_at
+      - name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: investment_type
+        description: '{{ doc("ofb_product_type__credit_fixed_incomes") }}'
+      - name: debtor_cnpj
+        description: '{{ doc("ofb_debtor_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: debtor_name
+        description: '{{ doc("ofb_debtor_name") }}'
+      - name: tax_exempt
+        description: '{{ doc("ofb_tax_exempt") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+      - name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - name: issue_unit_price
+        description: '{{ doc("ofb_issue_unit_price") }}'
+      - name: issue_date
+        description: '{{ doc("ofb_issue_date") }}'
+      - name: due_date
+        description: '{{ doc("ofb_due_date") }}'
+      - name: clearing_code
+        description: '{{ doc("ofb_clearing_code") }}'
+      - name: purchase_date
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+      - name: reference_datetime
+        description: '{{ doc("ofb_reference_datetime") }}'
+      - name: updated_unit_price
+        description: '{{ doc("ofb_updated_unit_price") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: purchase_unit_price
+        description: '{{ doc("ofb_purchase_unit_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
 
   - name: int_treasure_titles_positions
     description: >
-      One row per position record as delivered. Grain: (snapshot_id, investment_id).
-      Holding identity across snapshots is derived downstream from (isin_code).
+      Tesouro Direto positions, one row per (snapshot_id, investment_id).
+      Detail and balance staging rows joined for the same lot. Holding
+      identity across snapshots is derived downstream from (isin_code).
+    data_tests: *lot_grain
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_ingested_at
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: product_name
+        description: '{{ doc("ofb_product_name") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+      - name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - name: due_date
+        description: '{{ doc("ofb_due_date") }}'
+      - name: purchase_date
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+      - name: reference_datetime
+        description: '{{ doc("ofb_reference_datetime") }}'
+      - name: updated_unit_price
+        description: '{{ doc("ofb_updated_unit_price") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: purchase_unit_price
+        description: '{{ doc("ofb_purchase_unit_price") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
