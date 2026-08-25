@@ -33,3 +33,36 @@ models:
     description: One row per lot. Natural key is (isin_code).
     data_tests: *lot_grain
     columns: *lot_columns
+
+  - name: canon_bank_fixed_incomes_transactions
+    description: One row per transaction.
+    data_tests: &txn_grain
+      - unique:
+          column_name: "snapshot_id || '/' || payload_source || '/' || investment_id || '/' || transaction_id"
+    columns: &txn_columns
+      - name: snapshot_id
+        data_tests: [not_null]
+      - name: investment_id
+        data_tests: [not_null]
+      - name: transaction_id
+        data_tests: [not_null]
+
+  - name: canon_credit_fixed_incomes_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
+
+  - name: canon_funds_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
+
+  - name: canon_treasure_titles_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
+
+  - name: canon_variable_incomes_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
