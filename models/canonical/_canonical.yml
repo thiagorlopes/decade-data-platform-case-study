@@ -1,0 +1,77 @@
+version: 2
+
+models:
+  - name: int_variable_incomes_positions
+    description: One row per lot. Natural key of the physical holding is (isin_code, ticker).
+    data_tests: &lot_grain
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, investment_id]
+    columns: &lot_columns
+      - name: snapshot_id
+        data_tests: [not_null]
+      - name: investment_id
+        data_tests: [not_null]
+      - name: account_id
+        data_tests: [not_null]
+      - name: has_detail
+        description: False when the lot arrived with a balances payload only (detail columns are NULL).
+        data_tests: [not_null]
+      - name: has_balances
+        description: False when the lot arrived with a detail payload only (balances columns are NULL).
+        data_tests: [not_null]
+      - name: ingested_at
+        description: Arrival time of the record; the incremental watermark.
+        data_tests: [not_null]
+
+  - name: int_funds_positions
+    description: One row per lot. Natural key of the physical holding is (fund_cnpj).
+    data_tests: *lot_grain
+    columns: *lot_columns
+
+  - name: int_bank_fixed_incomes_positions
+    description: One row per lot. Natural key is (isin_code, issuer_cnpj, issue_date, due_date).
+    data_tests: *lot_grain
+    columns: *lot_columns
+
+  - name: int_credit_fixed_incomes_positions
+    description: One row per lot. Natural key is (isin_code, debtor_cnpj, due_date).
+    data_tests: *lot_grain
+    columns: *lot_columns
+
+  - name: int_treasure_titles_positions
+    description: One row per lot. Natural key is (isin_code).
+    data_tests: *lot_grain
+    columns: *lot_columns
+
+  - name: stg_openfinance__bank_fixed_incomes_transactions
+    description: One row per transaction.
+    data_tests: &txn_grain
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, payload_source, investment_id, transaction_id]
+    columns: &txn_columns
+      - name: snapshot_id
+        data_tests: [not_null]
+      - name: investment_id
+        data_tests: [not_null]
+      - name: transaction_id
+        data_tests: [not_null]
+
+  - name: stg_openfinance__credit_fixed_incomes_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
+
+  - name: stg_openfinance__funds_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
+
+  - name: stg_openfinance__treasure_titles_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
+
+  - name: stg_openfinance__variable_incomes_transactions
+    description: One row per transaction.
+    data_tests: *txn_grain
+    columns: *txn_columns
