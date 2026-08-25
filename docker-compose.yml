@@ -4,6 +4,9 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
+    # only bound when started with `--service-ports` (make docs-serve)
+    ports:
+      - "8080:8080"
   jupyter:
     build: .
     working_dir: /workspace

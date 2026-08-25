@@ -12,12 +12,18 @@ SELECT
     account_id,
     connection_id,
     CAST(ingested_at AS TIMESTAMP) AS ingested_at,
-    {{ payload_field('isinCode',                                'VARCHAR') }}             AS isin_code,
-    {{ payload_field('productName',                             'VARCHAR') }}             AS product_name,
-    {{ payload_field('remuneration.indexer',                    'VARCHAR') }}             AS indexer,
-    {{ payload_field('remuneration.preFixedRate',               'DECIMAL(12,6)') }}       AS pre_fixed_rate,
-    {{ payload_field('remuneration.postFixedIndexerPercentage', 'DECIMAL(12,6)') }}       AS post_fixed_indexer_percentage,
-    {{ payload_field('dueDate',                                 'DATE', required=true) }} AS due_date,
-    {{ payload_field('purchaseDate',                            'DATE', required=true) }} AS purchase_date
+    {{ payload_field('isinCode',                                'VARCHAR', required=true) }} AS isin_code,
+    {{ payload_field('productName',                             'VARCHAR', required=true) }} AS product_name,
+    {{ payload_field('remuneration.indexer',                    'VARCHAR', required=true) }} AS indexer,
+    {{ payload_field('remuneration.indexerAdditionalInfo',      'VARCHAR') }}                AS indexer_additional_info,
+    {{ payload_field('remuneration.preFixedRate',               'DECIMAL(12,6)') }}          AS pre_fixed_rate,
+    {{ payload_field('remuneration.postFixedIndexerPercentage', 'DECIMAL(12,6)') }}          AS post_fixed_indexer_percentage,
+    {{ payload_field('remuneration.ratePeriodicity',            'VARCHAR', required=true) }} AS rate_periodicity,
+    {{ payload_field('remuneration.calculation',                'VARCHAR', required=true) }} AS calculation,
+    {{ payload_field('dueDate',                                 'DATE', required=true) }}    AS due_date,
+    {{ payload_field('purchaseDate',                            'DATE', required=true) }}    AS purchase_date,
+    {{ payload_field('voucherPaymentIndicator',                 'VARCHAR', required=true) }} AS voucher_payment_indicator,
+    {{ payload_field('voucherPaymentPeriodicity',               'VARCHAR') }}                AS voucher_payment_periodicity,
+    {{ payload_field('voucherPaymentPeriodicityAdditionalInfo', 'VARCHAR') }}                AS voucher_payment_periodicity_additional_info
 FROM {{ source('raw_openfinance', 'positions') }}
 WHERE investment_type = 'TREASURE_TITLES' AND payload_kind = 'detail'

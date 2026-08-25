@@ -1,365 +1,81 @@
 version: 2
 
+# Intermediate layer: one row per (snapshot_id, investment_id), formed by a
+# FULL JOIN between the staging detail and balances of the same asset class.
+# Envelope columns are coalesced across the two sides; ingested_at is the
+# max of the two, and drives the incremental watermark.
+#
+# Staging model contracts (grain, envelope integrity, payload defect ledger)
+# live in models/canonical/staging/_staging_quality.yml. Column doc blocks
+# are shared and defined once in _docs.md.
+
 models:
   - name: int_variable_incomes_positions
-    description: One row per lot. Natural key of the physical holding is (isin_code, ticker).
+    description: >
+      Equity positions, one row per (snapshot_id, investment_id). Detail and
+      balance staging rows joined for the same lot. Holding identity across
+      snapshots is derived downstream from (isin_code, ticker).
     data_tests: &lot_grain
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, investment_id]
     columns:
       - &c_snapshot_id
         name: snapshot_id
-        description: Identifier of the aggregator snapshot (one full data pull) the row belongs to.
+        description: '{{ doc("stg_snapshot_id") }}'
         data_tests: [not_null]
       - &c_investment_id
         name: investment_id
         description: '{{ doc("ofb_investment_id") }}'
         data_tests: [not_null]
-      - &c_account_id
-        name: account_id
-        description: Identifier of the customer's investment account at the institution.
-        data_tests: [not_null]
-      - &c_has_detail
-        name: has_detail
-        description: False when the lot arrived with a balances payload only (detail columns are NULL).
-        data_tests: [not_null]
-      - &c_has_balances
-        name: has_balances
-        description: False when the lot arrived with a detail payload only (balances columns are NULL).
-        data_tests: [not_null]
-      - &c_ingested_at
-        name: ingested_at
-        description: Arrival time of the record; the incremental watermark.
-        data_tests: [not_null]
-
-  - name: int_funds_positions
-    description: One row per lot. Natural key of the physical holding is (fund_cnpj).
-    data_tests: *lot_grain
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_account_id
-      - *c_has_detail
-      - *c_has_balances
-      - *c_ingested_at
-      - name: anbima_category
-        description: '{{ doc("ofb_anbima_category") }}'
-
-  - name: int_bank_fixed_incomes_positions
-    description: One row per lot. Natural key is (isin_code, issuer_cnpj, issue_date, due_date).
-    data_tests: *lot_grain
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_account_id
-      - *c_has_detail
-      - *c_has_balances
-      - *c_ingested_at
-      - name: product_type
-        description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
-      - name: indexer
-        description: '{{ doc("ofb_indexer") }}'
-
-  - name: int_credit_fixed_incomes_positions
-    description: One row per lot. Natural key is (isin_code, debtor_cnpj, due_date).
-    data_tests: *lot_grain
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_account_id
-      - *c_has_detail
-      - *c_has_balances
-      - *c_ingested_at
-      - name: product_type
-        description: '{{ doc("ofb_product_type__credit_fixed_incomes") }}'
-      - name: tax_exempt
-        description: '{{ doc("ofb_tax_exempt") }}'
-      - name: indexer
-        description: '{{ doc("ofb_indexer") }}'
-
-  - name: int_treasure_titles_positions
-    description: One row per lot. Natural key is (isin_code).
-    data_tests: *lot_grain
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_account_id
-      - *c_has_detail
-      - *c_has_balances
-      - *c_ingested_at
-      - name: indexer
-        description: '{{ doc("ofb_indexer") }}'
-
-  - name: stg_openfinance__bank_fixed_incomes_transactions
-    description: One row per transaction. 1:1 flatten of raw BANK_FIXED_INCOMES transaction payloads.
-    data_tests: &txn_grain
-      - dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [snapshot_id, payload_source, investment_id, transaction_id]
-    columns:
-      - *c_snapshot_id
-      - &c_payload_source
-        name: payload_source
-        description: "Endpoint the row came from: 'transactions' or 'transactions-current'."
       - &c_snapshot_created_at
         name: snapshot_created_at
-        description: When the snapshot was assembled upstream.
+        description: '{{ doc("stg_snapshot_created_at") }}'
       - &c_institution_id
         name: institution_id
-        description: Identifier of the transmitting institution.
+        description: '{{ doc("stg_institution_id") }}'
       - &c_institution_name
         name: institution_name
-        description: Display name of the transmitting institution.
+        description: '{{ doc("stg_institution_name") }}'
       - &c_party_id
         name: party_id
-        description: Identifier of the customer (party) the consent belongs to.
-      - *c_account_id
+        description: '{{ doc("stg_party_id") }}'
+      - &c_account_id
+        name: account_id
+        description: '{{ doc("stg_account_id") }}'
       - &c_connection_id
         name: connection_id
-        description: Identifier of the consent connection that produced the snapshot.
-      - *c_investment_id
-      - &c_transaction_id
-        name: transaction_id
-        description: '{{ doc("ofb_transaction_id") }}'
+        description: '{{ doc("stg_connection_id") }}'
+      - &c_ingested_at
+        name: ingested_at
+        description: '{{ doc("stg_ingested_at") }} Here it is the max of the detail and balances arrivals for the lot, and drives the incremental watermark.'
         data_tests: [not_null]
-      - &c_movement_type
-        name: movement_type
-        description: '{{ doc("ofb_movement_type") }}'
-      - name: transaction_type
-        description: '{{ doc("ofb_transaction_type__bank_fixed_incomes") }}'
-      - &c_transaction_type_additional_info
-        name: transaction_type_additional_info
-        description: '{{ doc("ofb_transaction_type_additional_info") }}'
-      - &c_transaction_date
-        name: transaction_date
-        description: '{{ doc("ofb_transaction_date") }}'
-      - &c_transaction_unit_price
-        name: transaction_unit_price
-        description: '{{ doc("ofb_transaction_unit_price") }}'
-      - &c_transaction_quantity
-        name: transaction_quantity
-        description: '{{ doc("ofb_transaction_quantity") }}'
-      - &c_transaction_gross_amount
-        name: transaction_gross_amount
-        description: '{{ doc("ofb_transaction_gross_amount") }}'
-      - &c_income_tax_amount
-        name: income_tax_amount
-        description: '{{ doc("ofb_income_tax_amount") }}'
-      - &c_financial_transaction_tax_amount
-        name: financial_transaction_tax_amount
-        description: '{{ doc("ofb_financial_transaction_tax_amount") }}'
-      - &c_transaction_net_amount
-        name: transaction_net_amount
-        description: '{{ doc("ofb_transaction_net_amount") }}'
-      - &c_remuneration_rate
-        name: remuneration_rate
-        description: '{{ doc("ofb_remuneration_rate") }}'
-      - name: indexer_percentage
-        description: '{{ doc("ofb_indexer_percentage") }}'
-      - &c_currency
-        name: currency
-        description: '{{ doc("ofb_currency") }}'
-
-  - name: stg_openfinance__credit_fixed_incomes_transactions
-    description: One row per transaction. 1:1 flatten of raw CREDIT_FIXED_INCOMES transaction payloads.
-    data_tests: *txn_grain
-    columns:
-      - *c_snapshot_id
-      - *c_payload_source
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_investment_id
-      - *c_transaction_id
-      - *c_movement_type
-      - name: transaction_type
-        description: '{{ doc("ofb_transaction_type__credit_fixed_incomes") }}'
-      - *c_transaction_type_additional_info
-      - *c_transaction_date
-      - *c_transaction_unit_price
-      - *c_transaction_quantity
-      - *c_transaction_gross_amount
-      - *c_income_tax_amount
-      - *c_financial_transaction_tax_amount
-      - *c_transaction_net_amount
-      - *c_remuneration_rate
-      - name: indexer_percentage
-        description: '{{ doc("ofb_indexer_percentage") }}'
-      - *c_currency
-
-  - name: stg_openfinance__funds_transactions
-    description: One row per transaction. 1:1 flatten of raw FUNDS transaction payloads.
-    data_tests: *txn_grain
-    columns:
-      - *c_snapshot_id
-      - *c_payload_source
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_investment_id
-      - *c_transaction_id
-      - *c_movement_type
-      - name: transaction_type
-        description: '{{ doc("ofb_transaction_type__funds") }}'
-      - *c_transaction_type_additional_info
-      - name: transaction_conversion_date
-        description: Date the fund movement was converted into quotas (spec field `transactionConversionDate`).
-      - name: transaction_quota_price
-        description: Quota price used at conversion (spec field `transactionQuotaPrice.amount`).
-      - name: transaction_quota_quantity
-        description: Number of quotas converted at the movement date (spec field `transactionQuotaQuantity`).
-      - name: transaction_amount
-        description: Total value of the movement (spec field `transactionValue.amount`).
-      - *c_transaction_gross_amount
-      - *c_income_tax_amount
-      - *c_financial_transaction_tax_amount
-      - name: transaction_exit_fee
-        description: Exit fee charged on the movement (spec field `transactionExitFee.amount`).
-      - *c_transaction_net_amount
-      - *c_currency
-
-  - name: stg_openfinance__treasure_titles_transactions
-    description: One row per transaction. 1:1 flatten of raw TREASURE_TITLES transaction payloads.
-    data_tests: *txn_grain
-    columns:
-      - *c_snapshot_id
-      - *c_payload_source
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_investment_id
-      - *c_transaction_id
-      - *c_movement_type
-      - name: transaction_type
-        description: '{{ doc("ofb_transaction_type__treasure_titles") }}'
-      - *c_transaction_type_additional_info
-      - *c_transaction_date
-      - *c_transaction_unit_price
-      - *c_transaction_quantity
-      - *c_transaction_gross_amount
-      - *c_income_tax_amount
-      - *c_financial_transaction_tax_amount
-      - *c_transaction_net_amount
-      - *c_remuneration_rate
-      - *c_currency
-
-  - name: stg_openfinance__variable_incomes_transactions
-    description: One row per transaction. 1:1 flatten of raw VARIABLE_INCOMES transaction payloads.
-    data_tests: *txn_grain
-    columns:
-      - *c_snapshot_id
-      - *c_payload_source
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_investment_id
-      - *c_transaction_id
-      - *c_movement_type
-      - name: transaction_type
-        description: '{{ doc("ofb_transaction_type__variable_incomes") }}'
-      - *c_transaction_type_additional_info
-      - *c_transaction_date
+      - name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: ticker
+        description: '{{ doc("ofb_ticker") }}'
+      - name: reference_date
+        description: '{{ doc("ofb_reference_date") }}'
       - name: price_factor
         description: '{{ doc("ofb_price_factor") }}'
-      - *c_transaction_unit_price
-      - *c_transaction_quantity
-      - name: transaction_amount
-        description: Total value of the movement (spec field `transactionValue.amount`).
-      - name: broker_note_id
-        description: Unique identifier of the brokerage note; parameter for `GET /broker-notes/{brokerNoteId}` (spec field `brokerNoteId`).
-      - *c_currency
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: closing_price
+        description: '{{ doc("ofb_closing_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
 
-  - name: stg_openfinance__bank_fixed_incomes_positions_detail
-    description: 1:1 flatten of raw BANK_FIXED_INCOMES detail payloads into typed columns, in spec order.
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_ingested_at
-      - &c_issuer_cnpj
-        name: issuer_cnpj
-        description: '{{ doc("ofb_issuer_cnpj") }}'
-      - &c_isin_code
-        name: isin_code
-        description: '{{ doc("ofb_isin_code") }}'
-      - name: product_type
-        description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
-      - &c_indexer
-        name: indexer
-        description: '{{ doc("ofb_indexer") }}'
-      - &c_pre_fixed_rate
-        name: pre_fixed_rate
-        description: '{{ doc("ofb_pre_fixed_rate") }}'
-      - &c_post_fixed_indexer_percentage
-        name: post_fixed_indexer_percentage
-        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
-      - &c_issue_unit_price
-        name: issue_unit_price
-        description: '{{ doc("ofb_issue_unit_price") }}'
-      - &c_due_date
-        name: due_date
-        description: '{{ doc("ofb_due_date") }}'
-      - &c_issue_date
-        name: issue_date
-        description: '{{ doc("ofb_issue_date") }}'
-      - &c_clearing_code
-        name: clearing_code
-        description: '{{ doc("ofb_clearing_code") }}'
-      - &c_purchase_date
-        name: purchase_date
-        description: '{{ doc("ofb_purchase_date") }}'
-      - name: grace_period_date
-        description: Date until which the customer cannot redeem the investment early (spec field `gracePeriodDate`).
-
-  - name: stg_openfinance__credit_fixed_incomes_positions_detail
-    description: 1:1 flatten of raw CREDIT_FIXED_INCOMES detail payloads into typed columns, in spec order.
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_ingested_at
-      - *c_issuer_cnpj
-      - *c_isin_code
-      - name: product_type
-        description: '{{ doc("ofb_product_type__credit_fixed_incomes") }}'
-      - name: debtor_cnpj
-        description: CNPJ of the debtor; per the spec, mandatory for CRI/CRA when the transmitter has it (spec field `debtorCnpjNumber`).
-      - name: debtor_name
-        description: Name of the debtor; per the spec, mandatory for CRI/CRA when the transmitter has it (spec field `debtorName`).
-      - name: tax_exempt
-        description: '{{ doc("ofb_tax_exempt") }}'
-      - *c_indexer
-      - *c_pre_fixed_rate
-      - *c_post_fixed_indexer_percentage
-      - *c_issue_unit_price
-      - *c_issue_date
-      - *c_due_date
-      - *c_clearing_code
-      - *c_purchase_date
-
-  - name: stg_openfinance__funds_positions_detail
-    description: 1:1 flatten of raw FUNDS detail payloads into typed columns, in spec order.
+  - name: int_funds_positions
+    description: >
+      Fund positions, one row per (snapshot_id, investment_id). Detail and
+      balance staging rows joined for the same lot. Holding identity across
+      snapshots is derived downstream from (fund_cnpj).
+    data_tests: *lot_grain
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -371,142 +87,37 @@ models:
       - *c_connection_id
       - *c_ingested_at
       - name: fund_name
-        description: Official name of the investment fund as shown to customers (spec field `name`).
+        description: '{{ doc("ofb_fund_name") }}'
       - name: fund_cnpj
-        description: CNPJ of the investment fund (spec field `cnpjNumber`).
+        description: '{{ doc("ofb_fund_cnpj") }} {{ doc("stg_cnpj_format") }}'
       - name: anbima_category
         description: '{{ doc("ofb_anbima_category") }}'
-
-  - name: stg_openfinance__treasure_titles_positions_detail
-    description: 1:1 flatten of raw TREASURE_TITLES detail payloads into typed columns, in spec order.
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_ingested_at
-      - *c_isin_code
-      - name: product_name
-        description: Name of the title as listed on tesourodireto.com.br (spec field `productName`).
-      - *c_indexer
-      - *c_pre_fixed_rate
-      - *c_post_fixed_indexer_percentage
-      - *c_due_date
-      - *c_purchase_date
-
-  - name: stg_openfinance__variable_incomes_positions_detail
-    description: 1:1 flatten of raw VARIABLE_INCOMES detail payloads into typed columns, in spec order.
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_ingested_at
-      - *c_issuer_cnpj
-      - *c_isin_code
-      - name: ticker
-        description: Exchange trading code of the asset (spec field `ticker`).
-
-  - name: stg_openfinance__bank_fixed_incomes_positions_balances
-    description: 1:1 flatten of raw BANK_FIXED_INCOMES balances payloads into typed columns, in spec order.
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_ingested_at
-      - &c_reference_datetime
-        name: reference_datetime
+      - name: reference_date
         description: '{{ doc("ofb_reference_date") }}'
-      - &c_position_quantity
-        name: quantity
-        description: '{{ doc("ofb_position_quantity") }}'
-      - &c_updated_unit_price
-        name: updated_unit_price
-        description: '{{ doc("ofb_updated_unit_price") }}'
-      - &c_gross_amount
-        name: gross_amount
+      - name: gross_amount
         description: '{{ doc("ofb_gross_amount") }}'
-      - &c_net_amount
-        name: net_amount
+      - name: net_amount
         description: '{{ doc("ofb_net_amount") }}'
-      - &c_income_tax_provision
-        name: income_tax_amount
+      - name: income_tax_amount
         description: '{{ doc("ofb_income_tax_provision") }}'
-      - &c_financial_transaction_tax_provision
-        name: financial_transaction_tax_amount
+      - name: financial_transaction_tax_amount
         description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
-      - &c_blocked_amount
-        name: blocked_amount
+      - name: blocked_amount
         description: '{{ doc("ofb_blocked_amount") }}'
-      - &c_purchase_unit_price
-        name: purchase_unit_price
-        description: '{{ doc("ofb_purchase_unit_price") }}'
-      - *c_currency
-
-  - name: stg_openfinance__credit_fixed_incomes_positions_balances
-    description: 1:1 flatten of raw CREDIT_FIXED_INCOMES balances payloads into typed columns, in spec order.
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_ingested_at
-      - *c_reference_datetime
-      - *c_updated_unit_price
-      - *c_position_quantity
-      - *c_gross_amount
-      - *c_net_amount
-      - *c_income_tax_provision
-      - *c_financial_transaction_tax_provision
-      - *c_blocked_amount
-      - *c_purchase_unit_price
-      - *c_currency
-
-  - name: stg_openfinance__funds_positions_balances
-    description: 1:1 flatten of raw FUNDS balances payloads into typed columns, in spec order.
-    columns:
-      - *c_snapshot_id
-      - *c_investment_id
-      - *c_snapshot_created_at
-      - *c_institution_id
-      - *c_institution_name
-      - *c_party_id
-      - *c_account_id
-      - *c_connection_id
-      - *c_ingested_at
-      - &c_reference_date
-        name: reference_date
-        description: '{{ doc("ofb_reference_date") }}'
-      - *c_gross_amount
-      - *c_net_amount
-      - *c_income_tax_provision
-      - *c_financial_transaction_tax_provision
-      - *c_blocked_amount
       - name: quota_quantity
-        description: Number of quotas held at the position date (spec field `quotaQuantity`).
+        description: '{{ doc("ofb_quota_quantity") }}'
       - name: quota_gross_price
-        description: Gross quota price at the position date (spec field `quotaGrossPriceValue.amount`).
-      - *c_currency
+        description: '{{ doc("ofb_quota_gross_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
 
-  - name: stg_openfinance__treasure_titles_positions_balances
-    description: 1:1 flatten of raw TREASURE_TITLES balances payloads into typed columns, in spec order.
+  - name: int_bank_fixed_incomes_positions
+    description: >
+      Bank fixed income positions (CDB, RDB, LCI, LCA), one row per
+      (snapshot_id, investment_id). Detail and balance staging rows joined
+      for the same lot. Holding identity across snapshots is derived
+      downstream from (isin_code, issuer_cnpj, issue_date, due_date).
+    data_tests: *lot_grain
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -517,19 +128,58 @@ models:
       - *c_account_id
       - *c_connection_id
       - *c_ingested_at
-      - *c_reference_datetime
-      - *c_updated_unit_price
-      - *c_gross_amount
-      - *c_net_amount
-      - *c_income_tax_provision
-      - *c_financial_transaction_tax_provision
-      - *c_blocked_amount
-      - *c_purchase_unit_price
-      - *c_position_quantity
-      - *c_currency
+      - name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: investment_type
+        description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+      - name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - name: issue_unit_price
+        description: '{{ doc("ofb_issue_unit_price") }}'
+      - name: due_date
+        description: '{{ doc("ofb_due_date") }}'
+      - name: issue_date
+        description: '{{ doc("ofb_issue_date") }}'
+      - name: clearing_code
+        description: '{{ doc("ofb_clearing_code") }}'
+      - name: purchase_date
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+      - name: grace_period_date
+        description: '{{ doc("ofb_grace_period_date") }}'
+      - name: reference_datetime
+        description: '{{ doc("ofb_reference_datetime") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: updated_unit_price
+        description: '{{ doc("ofb_updated_unit_price") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: purchase_unit_price
+        description: '{{ doc("ofb_purchase_unit_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
 
-  - name: stg_openfinance__variable_incomes_positions_balances
-    description: 1:1 flatten of raw VARIABLE_INCOMES balances payloads into typed columns, in spec order.
+  - name: int_credit_fixed_incomes_positions
+    description: >
+      Securitized credit positions (CRA, CRI, DEBENTURES), one row per
+      (snapshot_id, investment_id). Detail and balance staging rows joined
+      for the same lot. Holding identity across snapshots is derived
+      downstream from (isin_code, debtor_cnpj, due_date).
+    data_tests: *lot_grain
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -540,12 +190,102 @@ models:
       - *c_account_id
       - *c_connection_id
       - *c_ingested_at
-      - *c_reference_date
-      - name: price_factor
-        description: '{{ doc("ofb_price_factor") }}'
-      - *c_gross_amount
-      - *c_blocked_amount
-      - *c_position_quantity
-      - name: closing_price
-        description: Closing price of the asset at the reference date (spec field `closingPrice.amount`).
-      - *c_currency
+      - name: issuer_cnpj
+        description: '{{ doc("ofb_issuer_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: investment_type
+        description: '{{ doc("ofb_product_type__credit_fixed_incomes") }}'
+      - name: debtor_cnpj
+        description: '{{ doc("ofb_debtor_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: debtor_name
+        description: '{{ doc("ofb_debtor_name") }}'
+      - name: tax_exempt
+        description: '{{ doc("ofb_tax_exempt") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+      - name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - name: issue_unit_price
+        description: '{{ doc("ofb_issue_unit_price") }}'
+      - name: issue_date
+        description: '{{ doc("ofb_issue_date") }}'
+      - name: due_date
+        description: '{{ doc("ofb_due_date") }}'
+      - name: clearing_code
+        description: '{{ doc("ofb_clearing_code") }}'
+      - name: purchase_date
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+      - name: reference_datetime
+        description: '{{ doc("ofb_reference_datetime") }}'
+      - name: updated_unit_price
+        description: '{{ doc("ofb_updated_unit_price") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: purchase_unit_price
+        description: '{{ doc("ofb_purchase_unit_price") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+
+  - name: int_treasure_titles_positions
+    description: >
+      Tesouro Direto positions, one row per (snapshot_id, investment_id).
+      Detail and balance staging rows joined for the same lot. Holding
+      identity across snapshots is derived downstream from (isin_code).
+    data_tests: *lot_grain
+    columns:
+      - *c_snapshot_id
+      - *c_investment_id
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_ingested_at
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+      - name: product_name
+        description: '{{ doc("ofb_product_name") }}'
+      - name: indexer
+        description: '{{ doc("ofb_indexer") }}'
+      - name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - name: due_date
+        description: '{{ doc("ofb_due_date") }}'
+      - name: purchase_date
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+      - name: reference_datetime
+        description: '{{ doc("ofb_reference_datetime") }}'
+      - name: updated_unit_price
+        description: '{{ doc("ofb_updated_unit_price") }}'
+      - name: gross_amount
+        description: '{{ doc("ofb_gross_amount") }}'
+      - name: net_amount
+        description: '{{ doc("ofb_net_amount") }}'
+      - name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_provision") }}'
+      - name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
+      - name: blocked_amount
+        description: '{{ doc("ofb_blocked_amount") }}'
+      - name: purchase_unit_price
+        description: '{{ doc("ofb_purchase_unit_price") }}'
+      - name: quantity
+        description: '{{ doc("ofb_position_quantity") }}'
+      - name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'

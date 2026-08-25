@@ -1,6 +1,225 @@
 # Column doc blocks shared across staging, intermediate and consumption.
 # Descriptions and enum values come from the Open Finance Brasil investment API specs
 # (see the header of each staging model for the exact spec file and line anchors).
+# Blocks prefixed `ofb_` describe provider payload fields; blocks prefixed
+# `stg_` describe our envelope columns and staging conventions.
+
+{% docs stg_contract %}
+Staging is a 1:1 flatten of the verbatim provider payload into typed columns
+(TRY_CAST, so parse failures become NULL). Nothing is repaired, deduplicated
+or dropped here: defective rows are recorded in the audit schema
+(store_failures) and resolved in the intermediate layer.
+{% enddocs %}
+
+{% docs stg_snapshot_id %}
+Identifier of the ingestion snapshot that delivered this row. Each snapshot is
+a full re-delivery of the party's investments, so the same investment
+reappears once per snapshot; use the latest snapshot for current state.
+{% enddocs %}
+
+{% docs stg_snapshot_created_at %}
+Timestamp at which the snapshot was assembled upstream.
+{% enddocs %}
+
+{% docs stg_institution_id %}
+Identifier of the transmitting institution (brand).
+{% enddocs %}
+
+{% docs stg_institution_name %}
+Display name of the transmitting institution.
+{% enddocs %}
+
+{% docs stg_party_id %}
+Identifier of the customer (party) the consent belongs to.
+{% enddocs %}
+
+{% docs stg_account_id %}
+Identifier of the customer's investment account at the institution.
+{% enddocs %}
+
+{% docs stg_connection_id %}
+Identifier of the Open Finance consent connection that produced the snapshot.
+{% enddocs %}
+
+{% docs stg_ingested_at %}
+Timestamp at which our pipeline ingested the raw record. Also the incremental
+watermark downstream.
+{% enddocs %}
+
+{% docs stg_payload_source %}
+Which endpoint delivered the transaction row: `transactions` (historical
+window) or `transactions-current` (recent movements). The same movement can
+legitimately arrive from both endpoints, so this column is part of the
+staging grain and duplicates across sources are expected here; deduplication
+happens downstream.
+{% enddocs %}
+
+{% docs stg_cnpj_format %}
+CNPJ format policy: the OFB spec mandates exactly 14 digits with no
+punctuation, but providers are known to append decimal tails (e.g.
+`12345678000199.0`). Staging keeps the value verbatim and flags bad forms
+via the `*_cnpj_form` warn test; the intermediate layer normalizes it.
+Do not join on this column raw.
+{% enddocs %}
+
+{% docs stg_purchase_date_sentinel %}
+Providers send the sentinel `0001-01-01` (.NET `DateTime.MinValue`) when the
+real purchase date is unknown: it looks like a valid date but means
+"missing". Flagged by the `*_purchase_date_not_sentinel` warn test; treat it
+as NULL, never as a real date. Real values must fall between `issue_date`
+and `due_date` (warn tests).
+{% enddocs %}
+
+{% docs stg_isin_format %}
+ISIN follows ISO 6166: 2-letter country prefix, 9 alphanumerics, 1 check
+digit. Enforced by the `*_isin_form` warn test where applicable.
+{% enddocs %}
+
+{% docs ofb_indexer_additional_info %}
+Free-text qualifier the provider sends when `indexer = 'OUTROS'`
+(spec field `remuneration.indexerAdditionalInfo`).
+{% enddocs %}
+
+{% docs ofb_rate_type %}
+Compounding regime of the rate (spec field `remuneration.rateType`).
+Enum: `EXPONENCIAL`, `LINEAR`.
+{% enddocs %}
+
+{% docs ofb_rate_periodicity %}
+Period the rate refers to (spec field `remuneration.ratePeriodicity`).
+Enum: `DIARIO`, `MENSAL`, `SEMESTRAL`, `ANUAL`.
+{% enddocs %}
+
+{% docs ofb_calculation %}
+Day-count basis of the rate (spec field `remuneration.calculation`).
+Enum: `DIAS_UTEIS` (business days, Brazilian 252 convention),
+`DIAS_CORRIDOS` (calendar days).
+{% enddocs %}
+
+{% docs ofb_grace_period_date %}
+End of the redemption grace period (carencia): the position cannot be
+redeemed before this date (spec field `gracePeriodDate`).
+{% enddocs %}
+
+{% docs ofb_voucher_payment_indicator %}
+`SIM` when the instrument pays periodic interest coupons (cupom), `NAO` when
+interest is only paid at maturity or redemption (spec field
+`voucherPaymentIndicator`). Enum: `SIM`, `NAO`.
+{% enddocs %}
+
+{% docs ofb_voucher_payment_periodicity %}
+Coupon frequency when `voucher_payment_indicator = 'SIM'` (spec field
+`voucherPaymentPeriodicity`). Deliberately wider than `rate_periodicity`.
+Enum: `MENSAL`, `TRIMESTRAL`, `SEMESTRAL`, `ANUAL`, `IRREGULAR`, `OUTROS`.
+{% enddocs %}
+
+{% docs ofb_voucher_payment_periodicity_additional_info %}
+Free-text qualifier when the coupon periodicity is `OUTROS` or `IRREGULAR`.
+{% enddocs %}
+
+{% docs ofb_debtor_cnpj %}
+CNPJ of the debtor behind the securitized receivables; for `DEBENTURES`, the
+issuing company itself (spec field `debtorCnpjNumber`). Part of the
+downstream holding-identity key for credit fixed income.
+{% enddocs %}
+
+{% docs ofb_debtor_name %}
+Legal name of the debtor behind the securitized receivables (spec field
+`debtorName`).
+{% enddocs %}
+
+{% docs ofb_fund_name %}
+Commercial/legal name of the investment fund (spec field `name`).
+{% enddocs %}
+
+{% docs ofb_fund_cnpj %}
+CNPJ of the investment fund (spec field `cnpjNumber`); Brazilian funds are
+CNPJ-registered legal entities and this is the downstream holding-identity
+key.
+{% enddocs %}
+
+{% docs ofb_anbima_class %}
+Second level of the ANBIMA fund classification (spec field `anbimaClass`).
+{% enddocs %}
+
+{% docs ofb_anbima_subclass %}
+Third level of the ANBIMA fund classification (spec field `anbimaSubclass`).
+{% enddocs %}
+
+{% docs ofb_ticker %}
+Exchange trading code of the asset (spec field `ticker`, e.g. `PETR4`).
+Together with `isin_code` it forms the downstream holding-identity key for
+equities.
+{% enddocs %}
+
+{% docs ofb_product_name %}
+Commercial name of the Tesouro Direto title as listed on
+tesourodireto.com.br (spec field `productName`, e.g. "Tesouro Selic 2029").
+{% enddocs %}
+
+{% docs ofb_reference_datetime %}
+Moment the balance figures refer to: the position is marked as of this
+timestamp, as stated by the provider (spec field `referenceDateTime`).
+{% enddocs %}
+
+{% docs ofb_updated_unit_price_currency %}
+ISO-4217 currency code of `updated_unit_price` (spec field
+`updatedUnitPrice.currency`).
+{% enddocs %}
+
+{% docs ofb_quota_quantity %}
+Number of fund quotas held at the reference date (spec field
+`quotaQuantity`).
+{% enddocs %}
+
+{% docs ofb_quota_gross_price %}
+Gross unit price of one quota at the reference date (spec field
+`quotaGrossPriceValue.amount`).
+{% enddocs %}
+
+{% docs ofb_closing_price %}
+Closing price of the equity instrument on the reference date (spec field
+`closingPrice.amount`).
+{% enddocs %}
+
+{% docs ofb_fine_amount %}
+Contractual fine (multa) accrued against the debtor on payments in arrears
+(spec field `fine.amount`).
+{% enddocs %}
+
+{% docs ofb_late_payment_amount %}
+Arrears interest (mora) accrued against the debtor (spec field
+`latePayment.amount`).
+{% enddocs %}
+
+{% docs ofb_transaction_conversion_date %}
+Date the fund movement converts into quotas (cotizacao), when the quota
+price is set; can lag the date the customer requested the operation
+(spec field `transactionConversionDate`).
+{% enddocs %}
+
+{% docs ofb_transaction_quota_price %}
+Quota price applied to this movement (spec field
+`transactionQuotaPrice.amount`).
+{% enddocs %}
+
+{% docs ofb_transaction_quota_quantity %}
+Number of quotas moved (spec field `transactionQuotaQuantity`).
+{% enddocs %}
+
+{% docs ofb_transaction_amount %}
+Total financial amount of the movement (spec field `transactionValue.amount`).
+{% enddocs %}
+
+{% docs ofb_transaction_exit_fee %}
+Exit fee (taxa de saida) charged on early redemption (spec field
+`transactionExitFee.amount`).
+{% enddocs %}
+
+{% docs ofb_broker_note_id %}
+Number of the brokerage note (nota de corretagem) documenting the trade;
+parameter for `GET /broker-notes/{brokerNoteId}` (spec field `brokerNoteId`).
+{% enddocs %}
 
 {% docs ofb_movement_type %}
 Direction of the movement from the investment's point of view (spec field `type`).

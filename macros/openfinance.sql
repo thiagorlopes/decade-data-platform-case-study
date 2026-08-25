@@ -1,15 +1,14 @@
 {# Typed extraction of one JSON field, used by the staging models.
 
    Casting policy: json_extract_string already returns VARCHAR, so VARCHAR
-   targets get no cast; fields the OFB spec marks `required` use CAST so
-   malformed data fails the build; optional fields use TRY_CAST and surface
-   as NULL. #}
+   targets get no cast; everything else uses TRY_CAST so malformed provider
+   values surface as NULL and are caught by the warn-severity not_null tests
+   in _staging_quality.yml instead of crashing the view. `required` only
+   documents what the OFB spec mandates. #}
 {% macro json_field(column, prefix, path, type, required) -%}
 {%- set expr = "json_extract_string(" ~ column ~ ", '" ~ prefix ~ path ~ "')" -%}
 {%- if type == 'VARCHAR' -%}
 {{ expr }}
-{%- elif required -%}
-CAST({{ expr }} AS {{ type }})
 {%- else -%}
 TRY_CAST({{ expr }} AS {{ type }})
 {%- endif -%}
