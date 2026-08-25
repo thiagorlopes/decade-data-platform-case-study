@@ -13,8 +13,8 @@ SELECT
     coalesce(det.party_id,         bal.party_id)         AS party_id,
     coalesce(det.account_id,       bal.account_id)       AS account_id,
     coalesce(det.connection_id,    bal.connection_id)    AS connection_id,
-    -- max of the two arrival times; coalesce pairing keeps greatest() away from NULLs
-    greatest(coalesce(det.ingested_at, bal.ingested_at), coalesce(bal.ingested_at, det.ingested_at)) AS ingested_at,
+    -- greatest() ignores NULLs in DuckDB, so one-sided lots keep their arrival time
+    greatest(det.ingested_at, bal.ingested_at) AS ingested_at,
     det.isin_code,
     det.product_name,
     det.indexer,
@@ -31,14 +31,11 @@ SELECT
     bal.blocked_amount,
     bal.purchase_unit_price,
     bal.quantity,
-    bal.currency
+    bal.gross_amount_currency
 FROM {{ ref('stg_openfinance__treasure_titles_positions_detail') }} AS det
 FULL JOIN {{ ref('stg_openfinance__treasure_titles_positions_balances') }} AS bal
     USING (snapshot_id, investment_id)
 {% if is_incremental() %}
--- watermark on arrival time: late records carry a fresh ingested_at and still land;
--- a re-delivered record passes the filter and overwrites via unique_key;
--- reprocessing after a transform fix = dbt build --full-refresh
-WHERE greatest(coalesce(det.ingested_at, bal.ingested_at), coalesce(bal.ingested_at, det.ingested_at))
-    > (SELECT max(ingested_at) FROM {{ this }})
+-- watermark rationale: README § Materializations
+WHERE greatest(det.ingested_at, bal.ingested_at) > (SELECT max(ingested_at) FROM {{ this }})
 {% endif %}
