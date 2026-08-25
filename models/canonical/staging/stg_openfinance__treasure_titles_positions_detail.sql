@@ -1,4 +1,4 @@
--- 1:1 flatten of raw TREASURE_TITLES detail payloads into typed columns.
+-- 1:1 flatten of raw TREASURE_TITLES detail payloads into typed columns, in spec order.
 -- API: GET /investments/{investmentId} — treasure-titles v1.1.0
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/treasure-titles/1.1.0.yml#L81
 -- Payload schema #/components/schemas/TreasureTitlesIdentifyProduct: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/treasure-titles/1.1.0.yml#L720
@@ -14,9 +14,6 @@ SELECT
     CAST(ingested_at AS TIMESTAMP) AS ingested_at,
     {{ payload_field('isinCode',                                'VARCHAR', required=true) }} AS isin_code,
     {{ payload_field('productName',                             'VARCHAR', required=true) }} AS product_name,
-    {{ payload_field('voucherPaymentIndicator',                 'VARCHAR', required=true) }} AS voucher_payment_indicator,
-    {{ payload_field('voucherPaymentPeriodicity',               'VARCHAR') }}                AS voucher_payment_periodicity,
-    {{ payload_field('voucherPaymentPeriodicityAdditionalInfo', 'VARCHAR') }}                AS voucher_payment_periodicity_additional_info,
     {{ payload_field('remuneration.indexer',                    'VARCHAR', required=true) }} AS indexer,
     {{ payload_field('remuneration.indexerAdditionalInfo',      'VARCHAR') }}                AS indexer_additional_info,
     {{ payload_field('remuneration.preFixedRate',               'DECIMAL(12,6)') }}          AS pre_fixed_rate,
@@ -24,6 +21,9 @@ SELECT
     {{ payload_field('remuneration.ratePeriodicity',            'VARCHAR', required=true) }} AS rate_periodicity,
     {{ payload_field('remuneration.calculation',                'VARCHAR', required=true) }} AS calculation,
     {{ payload_field('dueDate',                                 'DATE', required=true) }}    AS due_date,
-    {{ payload_field('purchaseDate',                            'DATE', required=true) }}    AS purchase_date
+    {{ payload_field('purchaseDate',                            'DATE', required=true) }}    AS purchase_date,
+    {{ payload_field('voucherPaymentIndicator',                 'VARCHAR', required=true) }} AS voucher_payment_indicator,
+    {{ payload_field('voucherPaymentPeriodicity',               'VARCHAR') }}                AS voucher_payment_periodicity,
+    {{ payload_field('voucherPaymentPeriodicityAdditionalInfo', 'VARCHAR') }}                AS voucher_payment_periodicity_additional_info
 FROM {{ source('raw_openfinance', 'positions') }}
 WHERE investment_type = 'TREASURE_TITLES' AND payload_kind = 'detail'

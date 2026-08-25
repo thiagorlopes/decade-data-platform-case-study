@@ -1,4 +1,4 @@
--- 1:1 flatten of raw BANK_FIXED_INCOMES transaction payloads into typed columns.
+-- 1:1 flatten of raw BANK_FIXED_INCOMES transaction payloads into typed columns, in spec order.
 -- API: GET /investments/{investmentId}/transactions (and /transactions-current) — bank-fixed-incomes v1.1.0
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/bank-fixed-incomes/1.1.0.yml#L184
 -- Payload schema #/components/schemas/BankFixedIncomesProductMovement: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/bank-fixed-incomes/1.1.0.yml#L877
@@ -12,7 +12,6 @@ SELECT
     account_id,
     connection_id,
     investment_id,
-    {{ txn_field('transactionId',                    'VARCHAR', required=true) }}        AS transaction_id,
     {{ txn_field('type',                             'VARCHAR', required=true) }}        AS movement_type,
     {{ txn_field('transactionType',                  'VARCHAR', required=true) }}        AS transaction_type,
     {{ txn_field('transactionTypeAdditionalInfo',    'VARCHAR') }}                       AS transaction_type_additional_info,
@@ -29,6 +28,7 @@ SELECT
     {{ txn_field('transactionNetValue.amount',       'DECIMAL(25,10)', required=true) }} AS transaction_net_amount,
     {{ txn_field('transactionNetValue.currency',     'VARCHAR', required=true) }}        AS transaction_net_amount_currency,
     {{ txn_field('remunerationTransactionRate',      'DECIMAL(12,6)') }}                 AS remuneration_rate,
-    {{ txn_field('indexerPercentage',                'DECIMAL(12,6)') }}                 AS indexer_percentage
+    {{ txn_field('indexerPercentage',                'DECIMAL(12,6)') }}                 AS indexer_percentage,
+    {{ txn_field('transactionId',                    'VARCHAR', required=true) }}        AS transaction_id
 FROM {{ source('raw_openfinance', 'transactions') }}
 WHERE investment_type = 'BANK_FIXED_INCOMES'

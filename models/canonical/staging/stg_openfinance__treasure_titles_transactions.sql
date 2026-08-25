@@ -1,4 +1,4 @@
--- 1:1 flatten of raw TREASURE_TITLES transaction payloads into typed columns.
+-- 1:1 flatten of raw TREASURE_TITLES transaction payloads into typed columns, in spec order.
 -- API: GET /investments/{investmentId}/transactions (and /transactions-current) — treasure-titles v1.1.0
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/treasure-titles/1.1.0.yml#L191
 -- Payload schema #/components/schemas/TreasureTitlesProductTransaction: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/treasure-titles/1.1.0.yml#L476
@@ -12,7 +12,6 @@ SELECT
     account_id,
     connection_id,
     investment_id,
-    {{ txn_field('transactionId',                    'VARCHAR', required=true) }}        AS transaction_id,
     {{ txn_field('type',                             'VARCHAR', required=true) }}        AS movement_type,
     {{ txn_field('transactionType',                  'VARCHAR', required=true) }}        AS transaction_type,
     {{ txn_field('transactionTypeAdditionalInfo',    'VARCHAR') }}                       AS transaction_type_additional_info,
@@ -28,6 +27,7 @@ SELECT
     {{ txn_field('financialTransactionTax.currency', 'VARCHAR', required=true) }}        AS financial_transaction_tax_amount_currency,
     {{ txn_field('transactionNetValue.amount',       'DECIMAL(25,10)', required=true) }} AS transaction_net_amount,
     {{ txn_field('transactionNetValue.currency',     'VARCHAR', required=true) }}        AS transaction_net_amount_currency,
-    {{ txn_field('remunerationTransactionRate',      'DECIMAL(12,6)') }}                 AS remuneration_rate
+    {{ txn_field('remunerationTransactionRate',      'DECIMAL(12,6)') }}                 AS remuneration_rate,
+    {{ txn_field('transactionId',                    'VARCHAR', required=true) }}        AS transaction_id
 FROM {{ source('raw_openfinance', 'transactions') }}
 WHERE investment_type = 'TREASURE_TITLES'

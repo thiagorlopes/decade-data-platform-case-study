@@ -1,4 +1,4 @@
--- 1:1 flatten of raw FUNDS transaction payloads into typed columns.
+-- 1:1 flatten of raw FUNDS transaction payloads into typed columns, in spec order.
 -- API: GET /investments/{investmentId}/transactions (and /transactions-current) — funds v1.1.0
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/funds/1.1.0.yml#L201
 -- Payload schema #/components/schemas/ResponseFundsTransactionsData: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/funds/1.1.0.yml#L560
