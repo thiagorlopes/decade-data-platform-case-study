@@ -165,10 +165,10 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 
 | Costume | Class it belongs to | Where handled | Raw count |
 |---|---|---|---|
-| `0001-01-01` sentinel dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | 1 951 |
+| `0001-01-01` placeholder dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | 1 951 |
 | Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | see warn tests |
 | `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | 2 |
-| `1970-01-01` sentinel dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` + `missing:transaction_date` flag on `fct_movements` | 3 001 |
+| `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` + `missing:transaction_date` flag on `fct_movements` | 3 001 |
 | CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | 1 370 |
 
 **Unlisted classes probed, all zero hits** — nine classes the brief doesn't name and the sample doesn't contain. Zero hits is evidence the seeding stuck to the announced classes, not proof of absence in production. In production these would become warn tests in `_staging_quality.yml`; the sample doesn't warrant permanent tripwires for data that demonstrably isn't there.
