@@ -3,6 +3,9 @@ version: 1.0.0
 profile: decade
 config-version: 2
 
+# contracts/ is a model path so the output contract is executable from there
+model-paths: ["models", "contracts"]
+
 # materialization rationale: README.md § Materializations
 models:
   decade:
