@@ -10,6 +10,7 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Development cycle](#development-cycle)**<br>
 **[Browsing the data model](#browsing-the-data-model)**<br>
 **[Contracts](#contracts)**<br>
+**[Consumers](#consumers)**<br>
 
 ## General Information
 
@@ -47,6 +48,7 @@ After `make install`, use these targets to iterate:
 | `make test` | Run tests against the current warehouse. No rebuild. |
 | `make docs` | Regenerate the docs catalog and serve at http://localhost:8080. |
 | `make refresh` | `build` + `docs` in one shot. Use after changing SQL to see updated docs. |
+| `make wealth` | Export the wealth consumer output for the sample customers. |
 | `make shell` | Open the DuckDB CLI on `warehouse.duckdb` inside the container. |
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
 | `make help` | List all targets. |
@@ -80,6 +82,23 @@ On every `dbt build`, dbt compares the compiled output of `fct_holdings` and `fc
 - a **new column appears** without being declared
 
 What this means for consumers: the output of `make build` always matches the contract file. Teams can develop against the declared columns and types without talking to the platform team. A platform-side refactor cannot break a consumer silently. It either preserves the contract, or it must update the contract file in the same PR. That file change is the review signal.
+
+## Consumers
+
+The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL queries over the consumption layer, never raw or staging.
+
+- [`holdings.sql`](consumers/wealth/holdings.sql): what one customer holds, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
+- [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each tagged with the current holding it belongs to by matching its `investment_id` against the holding's contributing ids.
+
+`make wealth` runs both for three sample customers and writes CSVs to `consumers/wealth/output/<party_id>/`. The samples are chosen to show the quality machinery working, not to hide it:
+
+| Customer | Why it is here |
+|---|---|
+| `9c39c85f...` | Clean: five product families, every flag list empty. |
+| `9e22a589...` | Flagged: `merged_lots` and `missing_key` visible in the current portfolio, resolved duplicates behind them. |
+| `11cc5703...` | A `zero_flap` glitch in its history (on the affected sync in `fct_holdings`; the current snapshot shows `merged_lots` and `zero_gross_lot`), plus movements flagged `missing:transaction_date`. |
+
+Rerun with your own customers: `make wealth WEALTH_PARTIES="<uuid> <uuid>"`. A new consumer lands the same way: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`models/consumption/_consumption.yml`](models/consumption/_consumption.yml).
 
 ## Target Architecture & Environments
 
