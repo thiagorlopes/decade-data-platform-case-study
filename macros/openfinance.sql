@@ -74,6 +74,7 @@ duplicate_groups AS (
         snapshot_id,
         account_id,
         natural_key,
+        count(*)                                 AS n_group_rows,
         count(DISTINCT {{ qty_col }})            AS n_distinct_quantities,
         count(DISTINCT gross_amount)             AS n_distinct_gross_amounts,
         count(*) FILTER (WHERE gross_amount > 0) AS n_positive_gross_amounts
@@ -89,6 +90,7 @@ with_group_stats AS (
     SELECT
         with_natural_key.*,
         dup.natural_key IS NOT NULL AS is_in_duplicate_group,
+        dup.n_group_rows,
         dup.n_distinct_quantities,
         dup.n_distinct_gross_amounts,
         dup.n_positive_gross_amounts
@@ -109,7 +111,12 @@ classified AS (
              WHEN n_distinct_gross_amounts <= 1 THEN 'hard_dup'         -- redundant copies of one
              ELSE 'conflict'                                            -- same quantity, gross disagrees
         END AS dup_class,
-        dup_class = 'conflict' AND n_positive_gross_amounts = 1 AS is_resolvable_conflict,
+        -- The exact shape notebook 03 §3 asserts before resolving: a pair,
+        -- one positive side, shared positive quantity. Anything else quarantines.
+        dup_class = 'conflict'
+            AND n_group_rows = 2
+            AND n_positive_gross_amounts = 1
+            AND coalesce({{ qty_col }}, 0) > 0 AS is_resolvable_conflict,
         -- Rank 1 is the copy a hard_dup keeps: prefer a priced one, then
         -- lowest investment_id for determinism.
         row_number() OVER (
@@ -121,8 +128,9 @@ classified AS (
 
 -- Step 4: the admission verdict, plus the defect flags.
 SELECT
-    * EXCLUDE (is_in_duplicate_group, n_distinct_quantities, n_distinct_gross_amounts,
-               n_positive_gross_amounts, dup_class, is_resolvable_conflict, dedup_rank),
+    * EXCLUDE (is_in_duplicate_group, n_group_rows, n_distinct_quantities,
+               n_distinct_gross_amounts, n_positive_gross_amounts, dup_class,
+               is_resolvable_conflict, dedup_rank),
     CASE
         WHEN dup_class = 'hard_dup' AND dedup_rank > 1 THEN 'reject_duplicate'
         WHEN is_resolvable_conflict
