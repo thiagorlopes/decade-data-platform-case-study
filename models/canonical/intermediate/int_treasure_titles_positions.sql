@@ -37,8 +37,6 @@ WITH joined AS (
     {% endif %}
 ),
 
--- Repairs happen here, not in staging, so the staging warn tests keep
--- counting the raw provider defects.
 repaired AS (
     SELECT * REPLACE (
         {{ blank_to_null('isin_code') }}       AS isin_code,

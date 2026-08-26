@@ -44,9 +44,6 @@ WITH joined AS (
     {% endif %}
 ),
 
--- Repairs happen here, not in staging, so the staging warn tests keep
--- counting the raw provider defects. debtor_cnpj must be repaired BEFORE
--- key derivation: a decimal-tailed copy would split one holding in two.
 repaired AS (
     SELECT * REPLACE (
         {{ clean_cnpj('issuer_cnpj') }}        AS issuer_cnpj,
