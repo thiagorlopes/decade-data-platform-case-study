@@ -40,8 +40,10 @@ Lot-grain, added in int_*_positions:
   a zero-valued sibling in the same sync (see `reject_fossil` in
   admission). Presence of this flag means the holding's number is stable
   even though the raw feed disagreed.
-- `missing:indexer`, `missing:purchase_date`: non-repairable NULL in a
-  column the OFB spec marks required. Bank, credit and treasury only.
+- `missing:<column>` (e.g. `missing:indexer`, `missing:gross_amount`):
+  non-repairable NULL in a column the OFB spec marks required, when the
+  column is not already covered by `missing_key`. The per-family list is
+  the `extra_flags` argument of each int_*_positions model.
 
 Holding-grain, added in holdings_*_family (cross-sync signals that only
 make sense once lots are aggregated by natural key):

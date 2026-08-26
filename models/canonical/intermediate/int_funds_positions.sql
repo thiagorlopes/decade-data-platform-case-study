@@ -47,4 +47,7 @@ keyed AS (
     FROM repaired
 ),
 
-{{ resolve_duplicate_investments(qty_col='quota_quantity') }}
+{{ resolve_duplicate_investments(qty_col='quota_quantity', extra_flags=[
+    ('gross_amount IS NULL',   'missing:gross_amount'),
+    ('quota_quantity IS NULL', 'missing:quota_quantity'),
+]) }}

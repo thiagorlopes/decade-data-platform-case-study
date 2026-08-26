@@ -47,4 +47,6 @@ keyed AS (
     FROM repaired
 ),
 
-{{ resolve_duplicate_investments() }}
+{{ resolve_duplicate_investments(extra_flags=[
+    ('isin_code IS NULL', 'missing:isin_code'),
+]) }}

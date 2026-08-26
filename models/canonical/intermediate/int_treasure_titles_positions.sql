@@ -56,6 +56,7 @@ keyed AS (
 ),
 
 {{ resolve_duplicate_investments(extra_flags=[
+    ('isin_code IS NULL',     'missing:isin_code'),
     ('indexer IS NULL',       'missing:indexer'),
     ('purchase_date IS NULL', 'missing:purchase_date'),
 ]) }}
