@@ -27,20 +27,7 @@ holding AS (
     GROUP BY snapshot_id, account_id, holding_key
 ),
 
-timeline AS (
-    SELECT
-        *,
-        lag(gross_amount)   OVER win AS prev_gross,
-        lead(gross_amount)  OVER win AS next_gross,
-        lag(quantity)       OVER win AS prev_qty,
-        lead(quantity)      OVER win AS next_qty,
-        lag(investment_ids) OVER win AS prev_ids
-    FROM holding
-    WINDOW win AS (
-        PARTITION BY account_id, holding_key
-        ORDER BY snapshot_created_at, snapshot_id
-    )
-)
+{{ holding_timeline() }}
 
 SELECT
     snapshot_created_at,
@@ -55,14 +42,5 @@ SELECT
     currency,
     n_lots,
     investment_ids,
-    list_distinct(lot_flags || list_filter([
-        CASE WHEN n_lots > 1 THEN 'merged_lots' END,
-        CASE WHEN n_lots > 1 AND has_zero_lot THEN 'zero_gross_lot' END,
-        CASE WHEN gross_amount = 0 AND prev_gross > 0 AND next_gross > 0
-                  AND quantity = prev_qty AND quantity = next_qty
-             THEN 'zero_flap' END,
-        CASE WHEN len(list_filter(investment_ids, id -> NOT list_contains(prev_ids, id))) > 0
-              AND len(list_filter(prev_ids, id -> NOT list_contains(investment_ids, id))) > 0
-             THEN 'id_handoff' END
-    ], f -> f IS NOT NULL)) AS dq_flags
+    {{ holding_dq_flags() }} AS dq_flags
 FROM timeline
