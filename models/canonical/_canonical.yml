@@ -422,3 +422,51 @@ models:
       Treasury title movements, one row per transaction_id: the latest
       delivered copy of each transaction, flagged for absent spec-required fields.
     columns: *txn_contract_columns
+
+# Holdings sub-layer: one row per (snapshot_id, account_id, holding_key),
+# admitted lots summed on the natural key. Views over the incremental
+# int_*_positions tables because the cross-sync flags (zero_flap, id_handoff)
+# need lag/lead over the full timeline. Missing-identity lots keep their
+# investment_id as holding_key and travel alone.
+
+  - name: int_variable_incomes_holdings
+    description: >
+      Equity holdings per sync, keyed by ticker. Lots of the same ticker are
+      summed into one row; investment_ids preserves the contributing lot ids.
+    data_tests: &holding_grain
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, account_id, holding_key]
+    columns: &holding_dq_columns
+      - name: data_quality_flags
+        description: '{{ doc("data_quality_flags") }}'
+        data_tests: [not_null]
+
+  - name: int_funds_holdings
+    description: >
+      Fund holdings per sync, keyed by fund CNPJ (repaired upstream, so
+      decimal-tailed CNPJs no longer split a fund into two holdings).
+    data_tests: *holding_grain
+    columns: *holding_dq_columns
+
+  - name: int_bank_fixed_incomes_holdings
+    description: >
+      Bank fixed income holdings per sync, keyed by
+      (isin_code, issuer_cnpj, issue_date, due_date). Issuer CNPJ is
+      repaired before keying, so decimal-tailed rows merge with their clean
+      siblings instead of forming phantom holdings.
+    data_tests: *holding_grain
+    columns: *holding_dq_columns
+
+  - name: int_credit_fixed_incomes_holdings
+    description: >
+      Credit fixed income holdings per sync, keyed by
+      (isin_code, debtor_cnpj, due_date). Rows missing identity fields keep
+      their investment_id as holding_key and carry the missing_key flag.
+    data_tests: *holding_grain
+    columns: *holding_dq_columns
+
+  - name: int_treasure_titles_holdings
+    description: >
+      Treasury title holdings per sync, keyed by product_name.
+    data_tests: *holding_grain
+    columns: *holding_dq_columns

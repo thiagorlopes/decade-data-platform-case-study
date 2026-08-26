@@ -1,9 +1,10 @@
--- One row per holding per sync: admitted investments aggregated on the natural key.
--- Missing-identity investments use their own investment_id as key and travel alone.
--- Cross-sync flags (zero_flap, id_handoff) need the holding-grain timeline,
--- so they are computed here rather than in the intermediate layer.
+{{ config(materialized='view') }}
+-- One row per holding per sync: admitted lots aggregated on the natural key.
+-- Missing-identity lots use their own investment_id as key and travel alone.
+-- View, not incremental: the cross-sync flags (zero_flap, id_handoff) need
+-- lag/lead over the full timeline of the incremental int_*_positions table.
 WITH admitted AS (
-    SELECT * FROM {{ ref('int_credit_fixed_incomes_positions') }}
+    SELECT * FROM {{ ref('int_funds_positions') }}
     WHERE admission = 'admit'
 ),
 
@@ -14,10 +15,9 @@ holding AS (
         coalesce(natural_key, investment_id)            AS holding_key,
         any_value(snapshot_created_at)                  AS snapshot_created_at,
         any_value(institution_name)                     AS institution_name,
-        any_value(investment_type)                      AS investment_type,
-        any_value(isin_code)                            AS isin_code,
-        any_value(debtor_name)                          AS debtor_name,
-        sum(quantity)                                   AS quantity,
+        any_value(fund_name)                            AS fund_name,
+        any_value(fund_cnpj)                            AS fund_cnpj,
+        sum(quota_quantity)                             AS quantity,
         sum(gross_amount)                               AS gross_amount,
         any_value(gross_amount_currency)                AS currency,
         count(*)                                        AS n_lots,
@@ -36,9 +36,8 @@ SELECT
     account_id,
     institution_name,
     holding_key,
-    investment_type,
-    isin_code,
-    debtor_name,
+    fund_name,
+    fund_cnpj,
     quantity,
     gross_amount,
     currency,

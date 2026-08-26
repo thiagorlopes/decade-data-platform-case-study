@@ -21,9 +21,9 @@ tables for audit.
   zero-valued row. The zero side gets this label; the live side is
   admitted and flagged `zero_conflict_resolved`.
 - `quarantine`: same-sync conflict with no single live row to pick.
-  Neither side is safe to aggregate automatically. Surfaces in the
-  consumption view `holdings_quarantine` (expected empty; warn test fires
-  if it grows). See README §Quarantine runbook.
+  Neither side is safe to aggregate automatically. Rows stay in
+  `int_*_positions` for audit; the holdings views drop them so consumers
+  under-count rather than fabricate a number. See README §Quarantine runbook.
 {% enddocs %}
 
 {% docs data_quality_flags %}
@@ -45,7 +45,7 @@ Lot-grain, added in int_*_positions:
   column is not already covered by `missing_key`. The per-family list is
   the `extra_flags` argument of each int_*_positions model.
 
-Holding-grain, added in holdings_*_family (cross-sync signals that only
+Holding-grain, added in int_*_holdings (cross-sync signals that only
 make sense once lots are aggregated by natural key):
 
 - `merged_lots`: two or more admitted lots aggregated under one holding.

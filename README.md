@@ -51,7 +51,7 @@ make help        # list all targets
 
 ## Browsing the data model
 
-Every staging, intermediate and consumption model carries a description and per-column documentation, sourced from the Open Finance Brasil investment API specs and referenced via shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md). To read it in your browser:
+Every staging and intermediate model carries a description and per-column documentation, sourced from the Open Finance Brasil investment API specs and referenced via shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md). To read it in your browser:
 
 ```bash
 make docs-serve    # generates the catalog and serves it at http://localhost:8080
@@ -111,11 +111,11 @@ raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental
 How a consumer finds out which happened (§2.2's closing question):
 
 - **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero_flap']`). Empty list means clean.
-- **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to holdings; `reject_duplicate`, `reject_fossil` and `quarantine` stay in the int table for audit.
+- **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_fossil` and `quarantine` stay in the positions table for audit.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
-- **Contract-level**: `models/canonical/_canonical.yml` and `models/consumption/_consumption.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
+- **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
 
-**State today**: DETECT, RESOLVE, and GUARANTEE are all shipped. DETECT lives in `models/canonical/staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `models/canonical/intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. GUARANTEE is shipped in `models/consumption/`: the holdings views carry unique-grain tests and cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`); `holdings_quarantine` provides the warn-severity monitor for unresolvable conflicts.
+**State today**: DETECT, RESOLVE, and the cross-sync signals of GUARANTEE are all shipped inside `models/canonical/`. DETECT lives in `staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial. Analyst-facing consumption views (portfolio, movements) are a follow-up PR.
 
 #### Admission at a glance
 
@@ -124,20 +124,20 @@ How a consumer finds out which happened (§2.2's closing question):
 | `admit` | Lot is clean or a resolved conflict winner. | Aggregated into holdings. |
 | `reject_duplicate` | Redundant copy of a hard duplicate (all measures agree under one natural key). | Ignored; kept in `int_*` for audit. |
 | `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero_conflict_resolved`). | Ignored; kept in `int_*` for audit. |
-| `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; surfaces in `holdings_quarantine`. |
+| `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
 The full `data_quality_flags` vocabulary (lot-grain and holding-grain) is in the [`data_quality_flags` doc block](models/canonical/_docs.md); browse it in the generated site with `make docs-serve`.
 
 #### Quarantine runbook
 
-Rows landing in `holdings_quarantine` mean the classifier refused to guess. Every alert is actionable:
+Quarantined lots live in `int_*_positions` with `admission = 'quarantine'`: the classifier refused to guess. Every occurrence is actionable:
 
-1. **Triage.** `holdings_quarantine` already carries the minimum triage columns (natural key, both investment_ids, quantity, conflicting gross amounts, family). Cross-check the transactions feed for the same account and holding (did a redemption explain the drop?), then look at the next sync (did one copy fossilize while the other moved?).
+1. **Triage.** Query the family's `int_*_positions` filtered on `admission = 'quarantine'` for the natural key, both investment_ids, quantity and the conflicting gross amounts. Cross-check the transactions feed for the same account and holding (did a redemption explain the drop?), then look at the next sync (did one copy fossilize while the other moved?).
 2. **Resolve.** One of three paths:
-   - **Transient** — the next sync disambiguates on its own. No code change; the holding re-admits itself. Close the alert.
-   - **Systematic** — a pattern emerges (e.g. the row with the newer `reference_datetime` is always the live one). Encode it as a new classification branch in `resolve_duplicate_investments`, then replay history with `make clean && make build` (the incremental-idempotency deliverable pays for exactly this).
-   - **Provider defect** — neither feed explains it. Escalate to the institution with the `main_dbt_test__audit.dq_quarantine_empty` rows as evidence; the raw defect counts in the staging warn tests are the corroborating context.
-3. **Meanwhile, the consumer is protected by construction.** Quarantined lots never reach `holdings_*`, so the wealth page under-counts one holding rather than fabricating a number. This is a deliberate product stance: when valuations conflict irreconcilably, a conservative omission beats a made-up value, and the omission is discoverable in the intermediate table.
+   - **Transient**: the next sync disambiguates on its own. No code change; the holding re-admits itself.
+   - **Systematic**: a pattern emerges (e.g. the row with the newer `reference_datetime` is always the live one). Encode it as a new classification branch in `resolve_duplicate_investments`, then replay history with `make clean && make build` (the incremental-idempotency deliverable pays for exactly this).
+   - **Provider defect**: neither feed explains it. Escalate to the institution with the staging warn tests as corroborating evidence.
+3. **Meanwhile, the consumer is protected by construction.** Quarantined lots never reach `int_*_holdings`, so the wealth page under-counts one holding rather than fabricating a number. This is a deliberate product stance: when valuations conflict irreconcilably, a conservative omission beats a made-up value, and the omission is discoverable in the positions table.
 
 ### Materializations
 
@@ -146,8 +146,8 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | Layer | Materialization | Why |
 |-------|----------------|-----|
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
-| canonical | incremental | Only records past the watermark (`ingested_at`, the arrival time) are processed each run; `unique_key (snapshot_id, investment_id)` makes re-deliveries an upsert and repeated runs idempotent. Late records still land because the watermark is on arrival, not event time. Replay after a transform fix: `dbt build --full-refresh`. |
-| consumption | view | Fine at sample scale. At production concurrency (hundreds of analysts) hot models get promoted to table per the progression above. |
+| intermediate (positions) | incremental | Only records past the watermark (`ingested_at`, the arrival time) are processed each run; `unique_key (snapshot_id, investment_id)` makes re-deliveries an upsert and repeated runs idempotent. Late records still land because the watermark is on arrival, not event time. Replay after a transform fix: `dbt build --full-refresh`. |
+| intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; promote to table per the progression above if the timeline outgrows a view. |
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 

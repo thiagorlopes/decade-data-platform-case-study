@@ -14,5 +14,3 @@ models:
       +unique_key: [snapshot_id, investment_id]
       staging:
         +materialized: view
-    consumption:
-      +materialized: view

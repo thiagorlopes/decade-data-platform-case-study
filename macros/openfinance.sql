@@ -148,10 +148,10 @@ SELECT
 FROM classified
 {%- endmacro %}
 
-{# --- holdings cross-sync flags (shared by every holdings_*_family model).
+{# --- holdings cross-sync flags (shared by every int_*_holdings model).
    `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
    over the holding-grain window). `holding_data_quality_flags()` emits the final
-   data_quality_flags expression: per-investment flags unioned with the cross-sync
+   data_quality_flags expression: per-lot flags unioned with the cross-sync
    signals (merged_lots, zero_gross_lot, zero_flap, id_handoff). --- #}
 {% macro holding_timeline() -%}
 timeline AS (
