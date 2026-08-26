@@ -375,3 +375,50 @@ models:
       - *c_natural_key
       - *c_admission
       - *c_data_quality_flags
+
+# Transactions sub-layer: one row per transaction_id, the movement history
+# behind the positions. Each sync re-delivers the account's full history, so
+# staging holds ~10 byte-identical copies of every movement; the intermediate
+# keeps one, preferring the latest delivery (max ingested_at), so a
+# re-delivery with a changed value supersedes the older copy through the same
+# rule and replaying a window is a no-op. There is no admission verdict here:
+# no conflicting copies exist to arbitrate, so the only defect signals are
+# the missing: field flags. Tests error because grain and flag integrity are
+# our own guarantees, not the provider's.
+
+  - name: int_funds_transactions
+    description: >
+      Fund movements, one row per transaction_id: the latest delivered copy
+      of each transaction, flagged for absent spec-required fields.
+    columns: &txn_contract_columns
+      - name: transaction_id
+        description: '{{ doc("ofb_transaction_id") }}'
+        data_tests: [unique, not_null]
+      - name: movement_type
+        description: '{{ doc("ofb_movement_type") }}'
+      - *c_ingested_at
+      - *c_data_quality_flags
+
+  - name: int_variable_incomes_transactions
+    description: >
+      Equity movements, one row per transaction_id: the latest delivered copy
+      of each transaction, flagged for absent spec-required fields.
+    columns: *txn_contract_columns
+
+  - name: int_bank_fixed_incomes_transactions
+    description: >
+      Bank fixed income movements, one row per transaction_id: the latest
+      delivered copy of each transaction, flagged for absent spec-required fields.
+    columns: *txn_contract_columns
+
+  - name: int_credit_fixed_incomes_transactions
+    description: >
+      Credit fixed income movements, one row per transaction_id: the latest
+      delivered copy of each transaction, flagged for absent spec-required fields.
+    columns: *txn_contract_columns
+
+  - name: int_treasure_titles_transactions
+    description: >
+      Treasury title movements, one row per transaction_id: the latest
+      delivered copy of each transaction, flagged for absent spec-required fields.
+    columns: *txn_contract_columns

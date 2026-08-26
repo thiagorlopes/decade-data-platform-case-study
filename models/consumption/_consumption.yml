@@ -81,3 +81,16 @@ models:
           config:
             severity: warn
             store_failures: true
+
+  - name: movements
+    description: >
+      All five families in one uniform schema, one row per transaction: the
+      movements behind the portfolio holdings. gross_amount and net_amount
+      are equal where the spec provides a single transactionValue.
+    columns:
+      - name: transaction_id
+        description: '{{ doc("ofb_transaction_id") }}'
+        data_tests: [unique, not_null]
+      - name: data_quality_flags
+        description: '{{ doc("data_quality_flags") }}'
+        data_tests: [not_null]
