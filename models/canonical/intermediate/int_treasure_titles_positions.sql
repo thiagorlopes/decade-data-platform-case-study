@@ -59,7 +59,7 @@ keyed AS (
     FROM repaired
 ),
 
-{{ classify_and_admit(extra_flags=[
+{{ resolve_duplicate_investments(extra_flags=[
     ('indexer IS NULL',       'missing:indexer'),
     ('purchase_date IS NULL', 'missing:purchase_date'),
 ]) }}

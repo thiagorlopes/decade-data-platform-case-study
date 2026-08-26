@@ -49,4 +49,4 @@ keyed AS (
     FROM repaired
 ),
 
-{{ classify_and_admit() }}
+{{ resolve_duplicate_investments() }}

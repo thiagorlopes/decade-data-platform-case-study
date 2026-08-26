@@ -3,8 +3,8 @@ version: 2
 # Consumption layer: thin presentation over the intermediate classifier.
 # One row per holding per sync. Admitted lots only; rejects and quarantine
 # stay in the intermediate tables for audit. Grain is unique on
-# (snapshot_id, account_id, holding_key) and every view carries dq_flags,
-# so a clean holding is simply dq_flags = [].
+# (snapshot_id, account_id, holding_key) and every view carries data_quality_flags,
+# so a clean holding is simply data_quality_flags = [].
 #
 # Severity follows the repo ownership rule: provider-side conditions warn
 # (with store_failures for the ledger), violations of our own contract error.
@@ -21,8 +21,8 @@ models:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, account_id, holding_key]
     columns: &holding_dq_columns
-      - name: dq_flags
-        description: '{{ doc("dq_flags") }}'
+      - name: data_quality_flags
+        description: '{{ doc("data_quality_flags") }}'
         data_tests: [not_null]
 
   - name: holdings_funds

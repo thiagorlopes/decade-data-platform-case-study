@@ -62,14 +62,14 @@
        named by `qty_col` (default `quantity`; funds pass `quota_quantity`).
      - Gets back the final SELECT of the model, with every input column plus
        `admission` (admit / reject_duplicate / reject_fossil / quarantine) and
-       `dq_flags` (array of defect labels).
+       `data_quality_flags` (array of defect labels).
 
    `extra_flags` lets a family append its own (condition, label) pairs to
-   dq_flags — used for missing-field signals like ('indexer IS NULL',
+   data_quality_flags — used for missing-field signals like ('indexer IS NULL',
    'missing:indexer'). --- #}
-{% macro classify_and_admit(qty_col='quantity', extra_flags=[]) -%}
+{% macro resolve_duplicate_investments(qty_col='quantity', extra_flags=[]) -%}
 -- A duplicate group is two or more investment_ids under one natural key in
--- one sync. Most investments belong to no group and stay 'sole' below.
+-- one sync. Most investments belong to no group and stay 'no_duplicate' below.
 duplicate_groups AS (
     SELECT
         snapshot_id,
@@ -89,7 +89,7 @@ duplicate_groups AS (
 classified AS (
     SELECT
         keyed.*,
-        CASE WHEN dup.natural_key IS NULL            THEN 'sole'
+        CASE WHEN dup.natural_key IS NULL            THEN 'no_duplicate'
              WHEN dup.n_distinct_quantities > 1      THEN 'partition'
              WHEN dup.n_distinct_gross_amounts <= 1  THEN 'hard_dup'
              ELSE 'conflict' END AS dup_class,
@@ -122,14 +122,14 @@ SELECT
         CASE WHEN is_resolvable_conflict AND gross_amount > 0
              THEN 'zero_conflict_resolved' END{% for cond, label in extra_flags %},
         CASE WHEN {{ cond }} THEN '{{ label }}' END{% endfor %}
-    ], f -> f IS NOT NULL) AS dq_flags
+    ], f -> f IS NOT NULL) AS data_quality_flags
 FROM classified
 {%- endmacro %}
 
 {# --- holdings cross-sync flags (shared by every holdings_*_family model).
    `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
-   over the holding-grain window). `holding_dq_flags()` emits the final
-   dq_flags expression: per-investment flags unioned with the cross-sync
+   over the holding-grain window). `holding_data_quality_flags()` emits the final
+   data_quality_flags expression: per-investment flags unioned with the cross-sync
    signals (merged_lots, zero_gross_lot, zero_flap, id_handoff). --- #}
 {% macro holding_timeline() -%}
 timeline AS (
@@ -150,7 +150,7 @@ timeline AS (
 )
 {%- endmacro %}
 
-{% macro holding_dq_flags() -%}
+{% macro holding_data_quality_flags() -%}
 list_distinct(lot_flags || list_filter([
     CASE WHEN n_lots > 1 THEN 'merged_lots' END,
     CASE WHEN n_lots > 1 AND has_zero_lot THEN 'zero_gross_lot' END,

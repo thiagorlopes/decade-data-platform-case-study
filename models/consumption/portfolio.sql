@@ -13,7 +13,7 @@ SELECT
     h.gross_amount,
     h.currency,
     h.n_lots,
-    h.dq_flags
+    h.data_quality_flags
 FROM {{ ref('holdings_variable_incomes') }} h
 
 UNION ALL
@@ -30,7 +30,7 @@ SELECT
     h.gross_amount,
     h.currency,
     h.n_lots,
-    h.dq_flags
+    h.data_quality_flags
 FROM {{ ref('holdings_funds') }} h
 
 UNION ALL
@@ -47,7 +47,7 @@ SELECT
     h.gross_amount,
     h.currency,
     h.n_lots,
-    h.dq_flags
+    h.data_quality_flags
 FROM {{ ref('holdings_bank_fixed_incomes') }} h
 
 UNION ALL
@@ -64,7 +64,7 @@ SELECT
     h.gross_amount,
     h.currency,
     h.n_lots,
-    h.dq_flags
+    h.data_quality_flags
 FROM {{ ref('holdings_credit_fixed_incomes') }} h
 
 UNION ALL
@@ -81,5 +81,5 @@ SELECT
     h.gross_amount,
     h.currency,
     h.n_lots,
-    h.dq_flags
+    h.data_quality_flags
 FROM {{ ref('holdings_treasure_titles') }} h

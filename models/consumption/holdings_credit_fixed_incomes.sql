@@ -23,7 +23,7 @@ holding AS (
         count(*)                                        AS n_lots,
         array_agg(investment_id ORDER BY investment_id) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,
-        flatten(array_agg(dq_flags))                    AS lot_flags
+        flatten(array_agg(data_quality_flags))                    AS lot_flags
     FROM admitted
     GROUP BY snapshot_id, account_id, holding_key
 ),
@@ -44,5 +44,5 @@ SELECT
     currency,
     n_lots,
     investment_ids,
-    {{ holding_dq_flags() }} AS dq_flags
+    {{ holding_data_quality_flags() }} AS data_quality_flags
 FROM timeline

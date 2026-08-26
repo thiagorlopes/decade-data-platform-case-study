@@ -51,4 +51,4 @@ keyed AS (
     FROM repaired
 ),
 
-{{ classify_and_admit(qty_col='quota_quantity') }}
+{{ resolve_duplicate_investments(qty_col='quota_quantity') }}

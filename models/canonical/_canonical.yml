@@ -9,7 +9,7 @@ version: 2
 # IPC-A enum spelling, the 0001-01-01 fake-when-missing date; notebook 02), derives
 # each family's natural key from the repaired columns, and classifies
 # duplicate groups within each sync (notebook 03) into `admission` and
-# `dq_flags`. Rows are classified, never deleted: consumers filter
+# `data_quality_flags`. Rows are classified, never deleted: consumers filter
 # admission = 'admit'.
 #
 # Tests here run at the default severity (error). After repair there is no
@@ -92,7 +92,7 @@ models:
           Holding identity within an account, derived from the REPAIRED
           identity columns (key per family in the model SQL). NULL means the
           row cannot be identified: it is admitted at lot grain with
-          dq_flags [missing_identity] and never merged with anything.
+          data_quality_flags [missing_identity] and never merged with anything.
       - &c_admission
         name: admission
         description: '{{ doc("dq_admission") }}'
@@ -100,9 +100,9 @@ models:
           - not_null
           - accepted_values:
               values: [admit, reject_duplicate, reject_fossil, quarantine]
-      - &c_dq_flags
-        name: dq_flags
-        description: '{{ doc("dq_flags") }}'
+      - &c_data_quality_flags
+        name: data_quality_flags
+        description: '{{ doc("data_quality_flags") }}'
         data_tests: [not_null]
 
   - name: int_funds_positions
@@ -152,7 +152,7 @@ models:
         description: '{{ doc("ofb_currency") }}'
       - *c_natural_key
       - *c_admission
-      - *c_dq_flags
+      - *c_data_quality_flags
 
   - name: int_bank_fixed_incomes_positions
     description: >
@@ -228,7 +228,7 @@ models:
         description: '{{ doc("ofb_currency") }}'
       - *c_natural_key
       - *c_admission
-      - *c_dq_flags
+      - *c_data_quality_flags
 
   - name: int_credit_fixed_incomes_positions
     description: >
@@ -311,7 +311,7 @@ models:
         description: '{{ doc("ofb_currency") }}'
       - *c_natural_key
       - *c_admission
-      - *c_dq_flags
+      - *c_data_quality_flags
 
   - name: int_treasure_titles_positions
     description: >
@@ -374,4 +374,4 @@ models:
         description: '{{ doc("ofb_currency") }}'
       - *c_natural_key
       - *c_admission
-      - *c_dq_flags
+      - *c_data_quality_flags

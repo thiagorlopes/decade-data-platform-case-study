@@ -26,7 +26,7 @@ tables for audit.
   if it grows). See README §Quarantine runbook.
 {% enddocs %}
 
-{% docs dq_flags %}
+{% docs data_quality_flags %}
 Row-level warnings the lot or holding was admitted with. Empty list means
 clean. Each flag names a specific defect or resolution applied, so a
 consumer can filter on the presence or absence of a class of issue without
