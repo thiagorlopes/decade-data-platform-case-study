@@ -177,7 +177,7 @@ models:
           name: int_bank_issuer_cnpj_clean
           expression: "issuer_cnpj IS NULL OR regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
       - dbt_utils.expression_is_true:
-          name: int_bank_no_sentinel_purchase_date
+          name: int_bank_no_placeholder_purchase_date
           expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"
     columns:
       - *c_snapshot_id
@@ -233,7 +233,7 @@ models:
         description: '{{ doc("ofb_clearing_code") }}'
       - &c_purchase_date
         name: purchase_date
-        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_placeholder") }}'
       - name: grace_period_date
         description: '{{ doc("ofb_grace_period_date") }}'
       - &c_reference_datetime
@@ -284,7 +284,7 @@ models:
           name: int_credit_debtor_cnpj_clean
           expression: "debtor_cnpj IS NULL OR regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
       - dbt_utils.expression_is_true:
-          name: int_credit_no_sentinel_purchase_date
+          name: int_credit_no_placeholder_purchase_date
           expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"
     columns:
       - *c_snapshot_id
@@ -359,7 +359,7 @@ models:
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
-          name: int_treasure_no_sentinel_purchase_date
+          name: int_treasure_no_placeholder_purchase_date
           expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"
     columns:
       - *c_snapshot_id

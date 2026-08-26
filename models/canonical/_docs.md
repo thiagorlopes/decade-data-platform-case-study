@@ -61,7 +61,7 @@ make sense once lots are aggregated by natural key):
 Movement-grain, added in fct_movements:
 
 - `missing:transaction_date`: the provider sent no usable movement date
-  (NULL, or a sentinel: `0001-01-01` .NET MinValue, `1970-01-01` Unix
+  (NULL, or a placeholder: `0001-01-01` .NET MinValue, `1970-01-01` Unix
   epoch zero). The date is NULL; the movement still counts toward totals
   but cannot be placed on a timeline.
 {% enddocs %}
@@ -124,12 +124,12 @@ via the `*_cnpj_form` warn test; the intermediate layer normalizes it.
 Do not join on this column raw.
 {% enddocs %}
 
-{% docs stg_purchase_date_sentinel %}
+{% docs stg_purchase_date_placeholder %}
 Some providers send `0001-01-01` when they do not know the real purchase
 date — a fake date that means "missing". It looks like a valid date, so
 downstream code that treats it as one silently corrupts date ranges and
 sort orders. Staging leaves it as-is and flags it via the
-`*_purchase_date_not_sentinel` warn test; the intermediate layer nulls it
+`*_purchase_date_not_placeholder` warn test; the intermediate layer nulls it
 out (`clean_missing_date`). Treat as NULL, never as a real date. Real
 values must fall between `issue_date` and `due_date` (warn tests).
 {% enddocs %}
