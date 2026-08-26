@@ -133,7 +133,13 @@ How a consumer finds out which happened (§2.2's closing question):
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
 
-**State today**: DETECT, RESOLVE, and the cross-sync signals of GUARANTEE are all shipped inside `models/canonical/`. DETECT lives in `staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial. GUARANTEE ships in `models/consumption/`: `fct_holdings` and `fct_movements` union the five families into one conformed shape each, with dbt contracts enforced (build fails on column or type drift) and grain tests at error severity. Consumers under `consumers/` read those two models and nothing below them.
+**State today**: three stages, one folder each.
+
+**DETECT** lives in `models/canonical/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
+
+**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial.
+
+**GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
 #### Admission at a glance
 
