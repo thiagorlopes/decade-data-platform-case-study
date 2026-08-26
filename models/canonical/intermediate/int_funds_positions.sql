@@ -42,7 +42,7 @@ repaired AS (
 ),
 
 -- One open-ended fund maps to exactly one CNPJ (notebook 03 §1.2).
-keyed AS (
+with_natural_key AS (
     SELECT *, fund_cnpj AS natural_key
     FROM repaired
 ),

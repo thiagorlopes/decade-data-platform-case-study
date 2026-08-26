@@ -57,7 +57,7 @@
    to resolve one.
 
    Caller contract:
-     - Provides a CTE named `keyed` with columns `snapshot_id`, `account_id`,
+     - Provides a CTE named `with_natural_key` with columns `snapshot_id`, `account_id`,
        `natural_key`, `investment_id`, `gross_amount`, and the quantity column
        named by `qty_col` (default `quantity`; funds pass `quota_quantity`).
      - Gets back the final SELECT of the model, with every input column plus
@@ -78,7 +78,7 @@ duplicate_groups AS (
         count(DISTINCT {{ qty_col }})            AS n_distinct_quantities,
         count(DISTINCT gross_amount)             AS n_distinct_gross_amounts,
         count(*) FILTER (WHERE gross_amount > 0) AS n_positive_gross_amounts
-    FROM keyed
+    FROM with_natural_key
     WHERE natural_key IS NOT NULL
     GROUP BY ALL
     HAVING count(DISTINCT investment_id) > 1
@@ -88,16 +88,16 @@ duplicate_groups AS (
 -- Investments in no group (unique key, or no key at all) get NULL stats.
 with_group_stats AS (
     SELECT
-        keyed.*,
+        with_natural_key.*,
         dup.natural_key IS NOT NULL AS is_in_duplicate_group,
         dup.n_distinct_quantities,
         dup.n_distinct_gross_amounts,
         dup.n_positive_gross_amounts
-    FROM keyed
+    FROM with_natural_key
     LEFT JOIN duplicate_groups AS dup
-        ON  keyed.snapshot_id = dup.snapshot_id
-        AND keyed.account_id  = dup.account_id
-        AND keyed.natural_key = dup.natural_key
+        ON  with_natural_key.snapshot_id = dup.snapshot_id
+        AND with_natural_key.account_id  = dup.account_id
+        AND with_natural_key.natural_key = dup.natural_key
 ),
 
 -- Step 3: classify each investment (notebook 03 §2).

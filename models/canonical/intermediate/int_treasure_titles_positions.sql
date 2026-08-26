@@ -50,7 +50,7 @@ repaired AS (
 -- Tesouro Direto has one title per name ("Tesouro Selic 2031"); ISIN would
 -- be the cleaner key but is blank in ~400 rows, and no account maps one name
 -- to two real ISINs (notebook 03 §1.2).
-keyed AS (
+with_natural_key AS (
     SELECT *, product_name AS natural_key
     FROM repaired
 ),

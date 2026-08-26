@@ -59,7 +59,7 @@ repaired AS (
 -- under one such pair, so ISIN stays in the key despite being blank in ~220
 -- rows (notebook 03 §1.2). Any NULL part means the row cannot be identified
 -- and travels alone as missing_key.
-keyed AS (
+with_natural_key AS (
     SELECT *,
         CASE WHEN isin_code IS NOT NULL AND debtor_cnpj IS NOT NULL
                   AND due_date IS NOT NULL

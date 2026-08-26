@@ -42,7 +42,7 @@ repaired AS (
 
 -- ticker alone: ISIN is blank in ~900 rows and would fragment the key; no
 -- account quotes two real ISINs under one ticker (notebook 03 §1.2).
-keyed AS (
+with_natural_key AS (
     SELECT *, ticker AS natural_key
     FROM repaired
 ),
