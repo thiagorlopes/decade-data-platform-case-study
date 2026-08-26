@@ -24,11 +24,11 @@
     {{ json_field('transaction_json', '$.', path, type, required) }}
 {%- endmacro %}
 
-{# Identity columns (cnpj, isin, ticker, product_name) feed the natural keys
-   derived in the intermediate layer. A blank string passes IS NOT NULL and
-   would silently fragment those keys, so staging normalizes '' to NULL: the
-   warn-severity not_null tests then count blanks as the D1 defects they are. #}
-{% macro identity_field(path, required=false) -%}
+{# Used on the columns that feed natural keys (cnpj, isin, ticker,
+   product_name): a blank string passes IS NOT NULL and would silently
+   fragment those keys, and the warn-severity not_null tests then count
+   blanks as the D1 defects they are. #}
+{% macro blank_to_null_field(path, required=false) -%}
     nullif(trim({{ payload_field(path, 'VARCHAR', required) }}), '')
 {%- endmacro %}
 
