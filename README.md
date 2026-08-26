@@ -9,6 +9,7 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Installation](#installation)**<br>
 **[Development cycle](#development-cycle)**<br>
 **[Browsing the data model](#browsing-the-data-model)**<br>
+**[Consumers](#consumers)**<br>
 
 ## General Information
 
@@ -42,6 +43,7 @@ make check       # smoke test the wiring: list declared dbt sources
 make parse       # validate project config (fast, no warehouse writes)
 make build       # run all dbt models and tests
 make test        # re-run tests only against the current warehouse
+make wealth      # export the wealth consumer output for the sample customers
 make shell       # open duckdb CLI on the warehouse (inside container)
 make clean       # wipe warehouse and dbt artifacts if state gets stuck
 make help        # list all targets
@@ -58,6 +60,23 @@ make docs-serve    # generates the catalog and serves it at http://localhost:808
 ```
 
 The generated site lets you browse the DAG, jump between models, and see the OFB spec fields, enum values and defect handling rules for every column. Docs are built against `warehouse.duckdb`; run `make build` first if it's missing.
+
+## Consumers
+
+The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL queries over the consumption layer, never raw or staging.
+
+- [`holdings.sql`](consumers/wealth/holdings.sql): what one customer holds, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
+- [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each tagged with the current holding it belongs to by matching its `investment_id` against the holding's contributing ids.
+
+`make wealth` runs both for three sample customers and writes CSVs to `consumers/wealth/output/<party_id>/`. The samples are chosen to show the quality machinery working, not to hide it:
+
+| Customer | Why it is here |
+|---|---|
+| `9c39c85f...` | Clean: five product families, every flag list empty. |
+| `9e22a589...` | Flagged: `merged_lots` and `missing_key` visible in the current portfolio, resolved duplicates behind them. |
+| `11cc5703...` | A `zero_flap` glitch in its history (on the affected sync in `fct_holdings`; the current snapshot shows `merged_lots` and `zero_gross_lot`), plus movements flagged `missing:transaction_date`. |
+
+Rerun with your own customers: `make wealth WEALTH_PARTIES="<uuid> <uuid>"`. A new consumer lands the same way: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`models/consumption/_consumption.yml`](models/consumption/_consumption.yml).
 
 ## Target Architecture & Environments
 
@@ -115,7 +134,7 @@ How a consumer finds out which happened (§2.2's closing question):
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
 
-**State today**: DETECT, RESOLVE, and the cross-sync signals of GUARANTEE are all shipped inside `models/canonical/`. DETECT lives in `staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial. GUARANTEE ships in `models/consumption/`: `fct_holdings` and `fct_movements` union the five families into one conformed shape each, with dbt contracts enforced (build fails on column or type drift) and grain tests at error severity. Consumers under `consumers/` read those two models and nothing below them.
+**State today**: DETECT, RESOLVE, and the cross-sync signals of GUARANTEE are all shipped inside `models/canonical/`. DETECT lives in `staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial. GUARANTEE ships in `models/consumption/`: `fct_holdings` and `fct_movements` union the five families into one conformed shape each, with dbt contracts enforced (build fails on column or type drift) and grain tests at error severity. The `consumers/wealth/` page reads those two models and nothing below them.
 
 #### Admission at a glance
 
