@@ -75,8 +75,8 @@ duplicate_groups AS (
         account_id,
         natural_key,
         count(*)                                 AS n_group_rows,
-        count(DISTINCT {{ qty_col }})            AS n_distinct_quantities,
-        count(DISTINCT gross_amount)             AS n_distinct_gross_amounts,
+        count(DISTINCT {{ qty_col }})    <= 1    AS quantities_agree,
+        count(DISTINCT gross_amount)     <= 1    AS gross_amounts_agree,
         count(*) FILTER (WHERE gross_amount > 0) AS n_positive_gross_amounts
     FROM with_natural_key
     WHERE natural_key IS NOT NULL
@@ -91,8 +91,8 @@ with_group_stats AS (
         with_natural_key.*,
         dup.natural_key IS NOT NULL AS is_in_duplicate_group,
         dup.n_group_rows,
-        dup.n_distinct_quantities,
-        dup.n_distinct_gross_amounts,
+        dup.quantities_agree,
+        dup.gross_amounts_agree,
         dup.n_positive_gross_amounts
     FROM with_natural_key
     LEFT JOIN duplicate_groups AS dup
@@ -105,8 +105,6 @@ with_group_stats AS (
 classified AS (
     SELECT
         *,
-        n_distinct_quantities    <= 1 AS quantities_agree,
-        n_distinct_gross_amounts <= 1 AS gross_amounts_agree,
         CASE WHEN natural_key IS NULL           THEN 'missing_key'  -- no key, cannot check for duplicates
              WHEN NOT is_in_duplicate_group     THEN 'no_duplicate'
              WHEN NOT quantities_agree          THEN 'separate_lots'     -- genuinely separate investments
@@ -130,9 +128,8 @@ classified AS (
 
 -- Step 4: the admission verdict, plus the defect flags.
 SELECT
-    * EXCLUDE (is_in_duplicate_group, n_group_rows, n_distinct_quantities,
-               n_distinct_gross_amounts, n_positive_gross_amounts,
-               quantities_agree, gross_amounts_agree, dup_class,
+    * EXCLUDE (is_in_duplicate_group, n_group_rows, quantities_agree,
+               gross_amounts_agree, n_positive_gross_amounts, dup_class,
                is_resolvable_conflict, dedup_rank),
     CASE
         WHEN dup_class = 'redundant_copies' AND dedup_rank > 1 THEN 'reject_duplicate'
@@ -149,4 +146,40 @@ SELECT
         CASE WHEN {{ cond }} THEN '{{ label }}' END{% endfor %}
     ], f -> f IS NOT NULL) AS data_quality_flags
 FROM classified
+{%- endmacro %}
+
+{# --- holdings cross-sync flags (shared by every holdings_*_family model).
+   `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
+   over the holding-grain window). `holding_data_quality_flags()` emits the final
+   data_quality_flags expression: per-investment flags unioned with the cross-sync
+   signals (merged_lots, zero_gross_lot, zero_flap, id_handoff). --- #}
+{% macro holding_timeline() -%}
+timeline AS (
+    SELECT
+        *,
+        lag(gross_amount)   OVER win AS prev_gross,
+        lead(gross_amount)  OVER win AS next_gross,
+        lag(quantity)       OVER win AS prev_qty,
+        lead(quantity)      OVER win AS next_qty,
+        lag(investment_ids) OVER win AS prev_ids,
+        len(list_filter(investment_ids, id -> NOT list_contains(prev_ids, id))) > 0 AS has_arrived_ids,
+        len(list_filter(prev_ids, id -> NOT list_contains(investment_ids, id))) > 0 AS has_departed_ids
+    FROM holding
+    WINDOW win AS (
+        PARTITION BY account_id, holding_key
+        ORDER BY snapshot_created_at, snapshot_id
+    )
+)
+{%- endmacro %}
+
+{% macro holding_data_quality_flags() -%}
+list_distinct(lot_flags || list_filter([
+    CASE WHEN n_lots > 1 THEN 'merged_lots' END,
+    CASE WHEN n_lots > 1 AND has_zero_lot THEN 'zero_gross_lot' END,
+    CASE WHEN gross_amount = 0 AND prev_gross > 0 AND next_gross > 0
+              AND quantity = prev_qty AND quantity = next_qty
+         THEN 'zero_flap' END,
+    -- The provider reissued investment_ids for the same holding.
+    CASE WHEN has_arrived_ids AND has_departed_ids THEN 'id_handoff' END
+], f -> f IS NOT NULL))
 {%- endmacro %}
