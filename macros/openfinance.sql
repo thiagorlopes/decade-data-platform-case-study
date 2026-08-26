@@ -52,12 +52,22 @@
     nullif({{ column }}, DATE '0001-01-01')
 {%- endmacro %}
 
-{# --- investment classification (notebook 03), shared by every int_*_positions model.
-   Consumes a `keyed` CTE with a `natural_key` column; emits `duplicate_groups`
-   and `classified` CTEs plus the final SELECT that stamps `admission` and
-   `dq_flags`. `qty_col` names the quantity for partition detection (funds use
-   `quota_quantity`). `extra_flags` is a list of (condition, label) pairs
-   appended to dq_flags for family-specific missing-field signals. --- #}
+{# --- Classify duplicate investment_ids per natural key and stamp each row
+   with an admission verdict (notebook 03). Shared by every int_*_positions
+   model so the five families agree on what counts as a duplicate and how
+   to resolve one.
+
+   Caller contract:
+     - Provides a CTE named `keyed` with columns `snapshot_id`, `account_id`,
+       `natural_key`, `investment_id`, `gross_amount`, and the quantity column
+       named by `qty_col` (default `quantity`; funds pass `quota_quantity`).
+     - Gets back the final SELECT of the model, with every input column plus
+       `admission` (admit / reject_duplicate / reject_fossil / quarantine) and
+       `dq_flags` (array of defect labels).
+
+   `extra_flags` lets a family append its own (condition, label) pairs to
+   dq_flags — used for missing-field signals like ('indexer IS NULL',
+   'missing:indexer'). --- #}
 {% macro classify_and_admit(qty_col='quantity', extra_flags=[]) -%}
 -- A duplicate group is two or more investment_ids under one natural key in
 -- one sync. Most investments belong to no group and stay 'sole' below.
@@ -68,8 +78,7 @@ duplicate_groups AS (
         natural_key,
         count(DISTINCT {{ qty_col }})            AS n_distinct_quantities,
         count(DISTINCT gross_amount)             AS n_distinct_gross_amounts,
-        -- live = has money; a zero-gross twin of a live investment is a fossil.
-        count(*) FILTER (WHERE gross_amount > 0) AS n_live_investments
+        count(*) FILTER (WHERE gross_amount > 0) AS n_positive_gross_amounts
     FROM keyed
     WHERE natural_key IS NOT NULL
     GROUP BY ALL
@@ -85,7 +94,7 @@ classified AS (
              WHEN dup.n_distinct_quantities > 1      THEN 'partition'
              WHEN dup.n_distinct_gross_amounts <= 1  THEN 'hard_dup'
              ELSE 'conflict' END AS dup_class,
-        dup_class = 'conflict' AND dup.n_live_investments = 1 AS is_resolvable_conflict,
+        dup_class = 'conflict' AND dup.n_positive_gross_amounts = 1 AS is_resolvable_conflict,
         -- Rank 1 is the copy a hard_dup keeps: prefer a priced one, then
         -- lowest investment_id for determinism.
         row_number() OVER (
