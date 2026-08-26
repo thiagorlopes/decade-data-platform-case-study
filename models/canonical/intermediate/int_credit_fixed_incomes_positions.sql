@@ -69,6 +69,9 @@ with_natural_key AS (
 ),
 
 {{ resolve_duplicate_investments(extra_flags=[
+    ('isin_code IS NULL',     'missing:isin_code'),
+    ('debtor_cnpj IS NULL',   'missing:debtor_cnpj'),
+    ('due_date IS NULL',      'missing:due_date'),
     ('indexer IS NULL',       'missing:indexer'),
     ('purchase_date IS NULL', 'missing:purchase_date'),
 ]) }}

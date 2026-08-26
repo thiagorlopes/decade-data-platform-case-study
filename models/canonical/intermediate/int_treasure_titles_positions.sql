@@ -56,6 +56,7 @@ with_natural_key AS (
 ),
 
 {{ resolve_duplicate_investments(extra_flags=[
+    ('product_name IS NULL',  'missing:product_name'),
     ('isin_code IS NULL',     'missing:isin_code'),
     ('indexer IS NULL',       'missing:indexer'),
     ('purchase_date IS NULL', 'missing:purchase_date'),

@@ -48,5 +48,6 @@ with_natural_key AS (
 ),
 
 {{ resolve_duplicate_investments(extra_flags=[
+    ('ticker IS NULL',    'missing:ticker'),
     ('isin_code IS NULL', 'missing:isin_code'),
 ]) }}

@@ -48,6 +48,7 @@ with_natural_key AS (
 ),
 
 {{ resolve_duplicate_investments(qty_col='quota_quantity', extra_flags=[
+    ('fund_cnpj IS NULL',      'missing:fund_cnpj'),
     ('gross_amount IS NULL',   'missing:gross_amount'),
     ('quota_quantity IS NULL', 'missing:quota_quantity'),
 ]) }}
