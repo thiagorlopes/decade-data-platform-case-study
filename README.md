@@ -62,20 +62,21 @@ The generated site lets you browse the DAG, jump between models, and see the OFB
 
 ## Contracts
 
-The executable contract artifacts are dbt `schema.yml` files. [`contracts/`](contracts/) is declared as a dbt model path in `dbt_project.yml`, so dbt parses and enforces its contents like anything under `models/`:
+Contracts are dbt `schema.yml` files. `dbt_project.yml` declares [`contracts/`](contracts/) as a model path, so dbt parses and enforces the files there like anything under `models/`.
 
-- [`contracts/_consumption.yml`](contracts/_consumption.yml): the output contract for `fct_holdings` and `fct_movements`, plus grain and enum tests at error severity.
-- The per-family canonical contracts live next to their models in [`models/canonical/_canonical.yml`](models/canonical/_canonical.yml), and the within-record quality rules (the warn-severity DETECT tier) in [`models/canonical/staging/_staging_quality.yml`](models/canonical/staging/_staging_quality.yml).
+- [`contracts/_consumption.yml`](contracts/_consumption.yml): the output contract for `fct_holdings` and `fct_movements`. Grain and enum tests run at error severity.
+- [`models/canonical/_canonical.yml`](models/canonical/_canonical.yml): per-family canonical contracts, kept next to their models.
+- [`models/canonical/staging/_staging_quality.yml`](models/canonical/staging/_staging_quality.yml): within-record quality rules. This is the DETECT tier, at warn severity.
 
 ### What `contract: enforced` guarantees
 
-On every `dbt build`, before materializing, dbt compares the compiled output of `fct_holdings` and `fct_movements` against the columns declared in `contracts/_consumption.yml`. Any drift kills the build, so the bad table never exists for a consumer to read:
+On every `dbt build`, dbt compares the compiled output of `fct_holdings` and `fct_movements` against the columns declared in `contracts/_consumption.yml`. It does this before writing the table. The build fails on any drift, so a broken table never reaches a consumer:
 
-- a column is **renamed or dropped**: build fails (missing from the contract's column set)
-- a column's **type changes** (e.g. an amount silently becomes `varchar`): build fails
-- a **new column appears** without being declared: build fails
+- a column is **renamed or dropped**
+- a column's **type changes** (for example, an amount silently becomes `varchar`)
+- a **new column appears** without being declared
 
-The consequence for consumers: whatever `make build` produced is guaranteed to match the contract file. A team can develop against the declared columns and types without talking to the platform team, and a platform-side refactor can never break a consumer silently; it either preserves the contract or is forced to change the contract file in the same PR, which is the review signal.
+What this means for consumers: the output of `make build` always matches the contract file. Teams can develop against the declared columns and types without talking to the platform team. A platform-side refactor cannot break a consumer silently. It either preserves the contract, or it must update the contract file in the same PR. That file change is the review signal.
 
 ## Target Architecture & Environments
 
@@ -165,11 +166,11 @@ Quarantined lots live in `int_*_positions` with `admission = 'quarantine'`: the 
 
 #### Beyond the listed defects
 
-The brief warns that "an institution respecting [the spec] is a hope, not a guarantee," so the §2.2 list is treated as illustrative, not exhaustive. Two audits ran against the built warehouse:
+The brief warns that "an institution respecting [the spec] is a hope, not a guarantee." So the §2.2 list is illustrative, not exhaustive. Two audits ran against the built warehouse.
 
-**Listed classes seeded in unlisted costumes** — the case authors dressed the announced defect classes in forms the brief doesn't name. Handled in the intermediate layer's repair macros; the raw counts stay visible via the staging warn tests.
+**Listed classes in new forms.** The case authors seeded the announced defect classes in forms the brief does not name. The intermediate layer's repair macros handle them. Raw counts stay visible in the staging warn tests.
 
-| Costume | Class it belongs to | Where handled | Raw count |
+| Form | Class it belongs to | Where handled | Raw count |
 |---|---|---|---|
 | `0001-01-01` placeholder dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | 1 951 |
 | Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | see warn tests |
@@ -177,7 +178,7 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 | `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` + `missing:transaction_date` flag on `fct_movements` | 3 001 |
 | CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | 1 370 |
 
-**Unlisted classes probed, all zero hits** — nine classes the brief doesn't name and the sample doesn't contain. Zero hits is evidence the seeding stuck to the announced classes, not proof of absence in production. In production these would become warn tests in `_staging_quality.yml`; the sample doesn't warrant permanent tripwires for data that demonstrably isn't there.
+**Unlisted classes, all zero hits.** Nine defect classes the brief does not name and the sample does not contain. Zero hits shows the seeding stuck to the announced classes. It does not prove these defects are absent in production. In production, each would become a warn test in `_staging_quality.yml`. The sample does not justify permanent tests for data that is not there.
 
 | Probe | Rationale |
 |---|---|
@@ -189,7 +190,7 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 | Zero quantity with positive gross_amount | Mirror of the zero-flap defect at a single row |
 | Quantity change with no transaction behind it | Cross-feed reconciliation: positions and transactions disagreeing on a movement |
 
-Quantities never move in the sample, so the last probe is also a modeling finding: every seeded across-record defect keys on "quantity unchanged" precisely because quantity is the invariant the sample offers.
+The last probe is also a modeling finding. Quantities never move in the sample. Every seeded across-record defect keys on "quantity unchanged" because quantity is the only invariant the sample offers.
 
 ### Materializations
 
@@ -200,7 +201,7 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
 | intermediate (positions) | incremental | Only records past the watermark (`ingested_at`, the arrival time) are processed each run; `unique_key (snapshot_id, investment_id)` makes re-deliveries an upsert and repeated runs idempotent. Late records still land because the watermark is on arrival, not event time. Replay after a transform fix: `dbt build --full-refresh`. |
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; promote to table per the progression above if the timeline outgrows a view. |
-| consumption | table | Contract-enforced union of the five families, read by every consumer and by ad-hoc queries: worth the storage so the guarantee layer is a physical artifact, not a query plan. |
+| consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 
