@@ -34,7 +34,7 @@ WITH joined AS (
         bal.quantity,
         bal.updated_unit_price,
         bal.gross_amount,
-        bal.gross_amount_currency,
+        bal.gross_amount_currency AS currency,
         bal.net_amount,
         bal.income_tax_amount,
         bal.financial_transaction_tax_amount,

@@ -18,7 +18,7 @@ WITH joined AS (
         bal.reference_date,
         bal.price_factor,
         bal.gross_amount,
-        bal.gross_amount_currency,
+        bal.gross_amount_currency AS currency,
         bal.blocked_amount,
         bal.quantity,
         bal.closing_price

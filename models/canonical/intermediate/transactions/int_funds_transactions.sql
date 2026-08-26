@@ -1,24 +1,34 @@
 -- One row per transaction_id: re-delivered copies collapse to the latest delivery.
+-- Column order follows staging spec order; per-amount currency siblings are dropped
+-- and transaction_gross_amount_currency stands in as the row's `currency` stamp.
 {{ config(unique_key='transaction_id') }}
 
--- Per-amount currency siblings dropped; transaction_gross_amount_currency
--- stands in as the row-currency stamp.
 SELECT
-    * EXCLUDE (
-        transaction_quota_price_currency,
-        transaction_amount_currency,
-        income_tax_amount_currency,
-        financial_transaction_tax_amount_currency,
-        transaction_exit_fee_currency,
-        transaction_net_amount_currency
-    ),
-    list_filter([
-        CASE WHEN movement_type IS NULL               THEN 'missing:movement_type' END,
-        CASE WHEN transaction_type IS NULL            THEN 'missing:transaction_type' END,
-        CASE WHEN transaction_conversion_date IS NULL THEN 'missing:transaction_conversion_date' END,
-        CASE WHEN transaction_amount IS NULL          THEN 'missing:transaction_amount' END,
-        CASE WHEN transaction_quota_quantity IS NULL  THEN 'missing:transaction_quota_quantity' END
-    ], f -> f IS NOT NULL) AS data_quality_flags
+    snapshot_id,
+    payload_source,
+    snapshot_created_at,
+    institution_id,
+    institution_name,
+    party_id,
+    account_id,
+    connection_id,
+    investment_id,
+    ingested_at,
+    transaction_id,
+    movement_type,
+    transaction_type,
+    transaction_type_additional_info,
+    transaction_conversion_date,
+    transaction_quota_price,
+    transaction_quota_quantity,
+    transaction_amount,
+    transaction_gross_amount,
+    transaction_gross_amount_currency AS currency,
+    income_tax_amount,
+    financial_transaction_tax_amount,
+    transaction_exit_fee,
+    transaction_net_amount,
+    count(*) OVER (PARTITION BY transaction_id) AS n_copies
 FROM {{ ref('stg_openfinance__funds_transactions') }}
 {% if is_incremental() %}
 -- watermark rationale: README § Materializations

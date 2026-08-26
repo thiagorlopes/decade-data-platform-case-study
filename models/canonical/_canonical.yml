@@ -7,7 +7,7 @@ version: 2
 #
 # Column order follows the staging spec order: envelope, then detail block,
 # then balances block. Per-amount currency siblings are dropped from both
-# sides; a single gross_amount_currency stands in as the row-currency stamp.
+# sides; a single `currency` column stands in as the row-currency stamp.
 #
 # The layer also repairs within-record defects (cnpj decimal tails, the
 # IPC-A enum spelling, the 0001-01-01 fake-when-missing date; notebook 02), derives
@@ -82,8 +82,8 @@ models:
         description: '{{ doc("ofb_price_factor") }}'
       - name: gross_amount
         description: '{{ doc("ofb_gross_amount") }}'
-      - &c_gross_amount_currency
-        name: gross_amount_currency
+      - &c_currency
+        name: currency
         description: '{{ doc("ofb_currency") }}'
       - name: blocked_amount
         description: '{{ doc("ofb_blocked_amount") }}'
@@ -147,7 +147,7 @@ models:
         description: '{{ doc("ofb_reference_date") }}'
       - name: gross_amount
         description: '{{ doc("ofb_gross_amount") }}'
-      - *c_gross_amount_currency
+      - *c_currency
       - name: net_amount
         description: '{{ doc("ofb_net_amount") }}'
       - name: income_tax_amount
@@ -248,7 +248,7 @@ models:
       - &c_gross_amount
         name: gross_amount
         description: '{{ doc("ofb_gross_amount") }}'
-      - *c_gross_amount_currency
+      - *c_currency
       - &c_net_amount
         name: net_amount
         description: '{{ doc("ofb_net_amount") }}'
@@ -335,7 +335,7 @@ models:
       - *c_updated_unit_price
       - *c_position_quantity
       - *c_gross_amount
-      - *c_gross_amount_currency
+      - *c_currency
       - *c_net_amount
       - *c_income_tax_provision
       - *c_iof_provision
@@ -389,7 +389,7 @@ models:
       - *c_reference_datetime
       - *c_updated_unit_price
       - *c_gross_amount
-      - *c_gross_amount_currency
+      - *c_currency
       - *c_net_amount
       - *c_income_tax_provision
       - *c_iof_provision
@@ -410,9 +410,10 @@ models:
 # the missing: field flags. Tests error because grain and flag integrity are
 # our own guarantees, not the provider's.
 #
-# Per-amount currency siblings are dropped; transaction_gross_amount_currency
-# (transaction_amount_currency for variable_incomes, which has no gross
-# column) stands in as the row-currency stamp.
+# Per-amount currency siblings are dropped; a single `currency` column
+# (transaction_gross_amount_currency, or transaction_amount_currency for
+# variable_incomes which has no gross column) stands in as the row-currency
+# stamp.
 
   - name: int_bank_fixed_incomes_transactions
     description: >
@@ -451,9 +452,7 @@ models:
       - &c_transaction_gross_amount
         name: transaction_gross_amount
         description: '{{ doc("ofb_transaction_gross_amount") }}'
-      - &c_transaction_gross_amount_currency
-        name: transaction_gross_amount_currency
-        description: '{{ doc("ofb_currency") }}'
+      - *c_currency
       - &c_txn_income_tax_amount
         name: income_tax_amount
         description: '{{ doc("ofb_income_tax_amount") }}'
@@ -473,7 +472,12 @@ models:
         name: transaction_id
         description: '{{ doc("ofb_transaction_id") }}'
         data_tests: [unique, not_null]
-      - *c_data_quality_flags
+      - &c_n_copies
+        name: n_copies
+        description: >-
+          Number of byte-identical copies of this transaction seen in staging
+          across sync re-deliveries; the intermediate keeps one. Filter n_copies > 1
+          for transactions that were re-delivered.
 
   - name: int_credit_fixed_incomes_transactions
     description: >
@@ -498,14 +502,14 @@ models:
       - *c_transaction_unit_price
       - *c_transaction_quantity
       - *c_transaction_gross_amount
-      - *c_transaction_gross_amount_currency
+      - *c_currency
       - *c_txn_income_tax_amount
       - *c_txn_iof_amount
       - *c_transaction_net_amount
       - *c_remuneration_rate
       - *c_indexer_percentage
       - *c_transaction_id
-      - *c_data_quality_flags
+      - *c_n_copies
 
   - name: int_treasure_titles_transactions
     description: >
@@ -530,13 +534,13 @@ models:
       - *c_transaction_unit_price
       - *c_transaction_quantity
       - *c_transaction_gross_amount
-      - *c_transaction_gross_amount_currency
+      - *c_currency
       - *c_txn_income_tax_amount
       - *c_txn_iof_amount
       - *c_transaction_net_amount
       - *c_remuneration_rate
       - *c_transaction_id
-      - *c_data_quality_flags
+      - *c_n_copies
 
   - name: int_funds_transactions
     description: >
@@ -568,13 +572,13 @@ models:
         name: transaction_amount
         description: '{{ doc("ofb_transaction_amount") }}'
       - *c_transaction_gross_amount
-      - *c_transaction_gross_amount_currency
+      - *c_currency
       - *c_txn_income_tax_amount
       - *c_txn_iof_amount
       - name: transaction_exit_fee
         description: '{{ doc("ofb_transaction_exit_fee") }}'
       - *c_transaction_net_amount
-      - *c_data_quality_flags
+      - *c_n_copies
 
   - name: int_variable_incomes_transactions
     description: >
@@ -601,12 +605,11 @@ models:
       - *c_transaction_unit_price
       - *c_transaction_quantity
       - *c_transaction_amount
-      - name: transaction_amount_currency
-        description: '{{ doc("ofb_currency") }}'
+      - *c_currency
       - *c_transaction_id
       - name: broker_note_id
         description: '{{ doc("ofb_broker_note_id") }}'
-      - *c_data_quality_flags
+      - *c_n_copies
 
 # Holdings sub-layer: one row per (snapshot_id, account_id, holding_key),
 # admitted lots summed on the natural key. Views over the incremental

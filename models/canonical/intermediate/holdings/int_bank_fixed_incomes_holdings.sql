@@ -14,7 +14,7 @@ holding AS (
         any_value(isin_code)                            AS isin_code,
         sum(quantity)                                   AS quantity,
         sum(gross_amount)                               AS gross_amount,
-        any_value(gross_amount_currency)                AS currency,
+        any_value(currency)                AS currency,
         count(*)                                        AS n_lots,
         array_agg(investment_id ORDER BY investment_id) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,
