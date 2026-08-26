@@ -18,7 +18,7 @@ SELECT
     movement_type,
     transaction_type,
     transaction_type_additional_info,
-    transaction_date,
+    {{ clean_missing_date('transaction_date') }} AS transaction_date,
     price_factor,
     transaction_unit_price,
     transaction_quantity,
