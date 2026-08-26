@@ -10,6 +10,7 @@
 SELECT
     party_id,
     account_id,
+    institution_id,
     institution_name,
     '{{ family }}' AS product_family,
     holding_key,
@@ -18,6 +19,7 @@ SELECT
     snapshot_created_at,
     CAST(quantity AS DECIMAL(38, 10)) AS quantity,
     CAST(gross_amount AS DECIMAL(38, 10)) AS gross_amount,
+    CAST(net_amount AS DECIMAL(38, 10)) AS net_amount,
     currency,
     n_lots,
     investment_ids,

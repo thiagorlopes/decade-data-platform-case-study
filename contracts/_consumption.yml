@@ -1,23 +1,41 @@
 version: 2
 
-# Consumption layer: the five product families conformed to one shape, one
-# model per feed. fct_holdings unions the int_*_holdings views (holding
-# grain per sync, admitted lots only); fct_movements unions the
-# int_*_transactions tables (one row per transaction_id, latest delivery).
-# Family-specific columns (fund_cnpj, isin_code, rates) deliberately stay
-# in the canonical layer; consumers that need them ref the family model.
+# Consumption layer. Two models publish the five product families in one shape:
 #
-# This is the GUARANTEE layer: contracts are enforced (build fails on any
-# column or type drift) and tests run at error severity. Consumers under
-# consumers/ read these two models and nothing below them.
+#   fct_holdings:  one row per (snapshot, account, family, holding).
+#                  Unions the int_*_holdings views. Admitted lots only;
+#                  quarantined and rejected lots stop at canonical.
+#   fct_movements: one row per transaction_id. When a transaction is
+#                  re-delivered, only the latest delivery survives.
+#                  Unions int_*_transactions.
+#
+# Family-only columns (fund_cnpj, isin_code, rates, tax breakdowns) stay in
+# canonical. If you need one, query the family's canonical model directly.
+#
+# Joining a movement to its holding:
+#   Both models expose holding_key. Join on it:
+#     fct_movements.holding_key = fct_holdings.holding_key
+#   fct_movements builds holding_key by looking up the investment_id in the
+#   family's positions and taking its natural_key. If no positions row exists,
+#   holding_key falls back to investment_id. fct_holdings follows the same rule.
+#
+# Conformed measures:
+#   quantity, gross_amount, net_amount are decimal(38,10) on both facts.
+#   net_amount is NULL for variable_incomes: that family carries no net
+#   figure in either positions or transactions.
+#
+# GUARANTEE layer:
+#   Contracts are enforced; the build fails if any column name or type drifts.
+#   Every test here runs at error severity. Downstream consumers read only
+#   these two models, and nothing below them.
 
 models:
   - name: fct_holdings
     description: >
-      One row per holding per sync, across all five product families.
-      A holding is the set of admitted lots sharing a natural key within an
+      One row per holding per sync, across all five product families. A
+      holding groups the admitted lots that share a natural key within an
       account; quarantined and rejected lots never reach this model (README
-      §Quarantine runbook). Current state for a customer is the latest
+      §Quarantine runbook). For a customer's current state, take the latest
       snapshot per (account_id, product_family).
     config:
       contract:
@@ -34,6 +52,9 @@ models:
         data_type: varchar
         description: '{{ doc("stg_account_id") }}'
         data_tests: [not_null]
+      - name: institution_id
+        data_type: varchar
+        description: '{{ doc("stg_institution_id") }}'
       - name: institution_name
         data_type: varchar
         description: '{{ doc("stg_institution_name") }}'
@@ -70,6 +91,9 @@ models:
       - name: gross_amount
         data_type: decimal(38,10)
         description: '{{ doc("ofb_gross_amount") }} Summed over the holding''s admitted lots.'
+      - name: net_amount
+        data_type: decimal(38,10)
+        description: '{{ doc("ofb_net_amount") }} Summed over the holding''s admitted lots. NULL for variable incomes: the position payload for that family carries no net_amount.'
       - name: currency
         data_type: varchar
         description: '{{ doc("ofb_currency") }}'
@@ -78,7 +102,7 @@ models:
         description: Number of admitted lots aggregated under the holding.
       - name: investment_ids
         data_type: varchar[]
-        description: '{{ doc("ofb_investment_id") }} All ids contributing to the holding; joins a movement''s investment_id to its holding.'
+        description: '{{ doc("ofb_investment_id") }} Every investment_id that fed this holding. To join movements to holdings, prefer holding_key on both sides; use this array only when you need the raw investment ids.'
       - name: data_quality_flags
         data_type: varchar[]
         description: '{{ doc("data_quality_flags") }}'
@@ -86,11 +110,11 @@ models:
 
   - name: fct_movements
     description: >
-      One row per movement, across all five product families, deduplicated to
-      the latest delivery per transaction_id. Amount and date semantics are
-      conformed per family (funds date at quota conversion; variable incomes
-      carry no separate gross/net split, so gross_amount is the transaction
-      amount and net_amount is NULL).
+      One row per movement, across all five product families. When a
+      transaction is re-delivered, only the latest delivery survives.
+      Amounts and dates are conformed per family: funds carry the quota
+      conversion date; variable incomes have no gross/net split, so
+      gross_amount holds the transaction amount and net_amount is NULL.
     config:
       contract:
         enforced: true
@@ -103,6 +127,9 @@ models:
         data_type: varchar
         description: '{{ doc("stg_account_id") }}'
         data_tests: [not_null]
+      - name: institution_id
+        data_type: varchar
+        description: '{{ doc("stg_institution_id") }}'
       - name: institution_name
         data_type: varchar
         description: '{{ doc("stg_institution_name") }}'
@@ -120,6 +147,13 @@ models:
       - name: investment_id
         data_type: varchar
         description: '{{ doc("ofb_investment_id") }}'
+      - name: holding_key
+        data_type: varchar
+        description: >-
+          Same value as fct_holdings.holding_key for this investment_id — the
+          equi-join key from a movement to its holding. Resolved from the
+          family's natural key on any snapshot in which the investment appears;
+          falls back to investment_id when no natural key is available.
       - name: transaction_date
         data_type: date
         description: '{{ doc("ofb_transaction_date") }} For funds, the quota conversion date (cotizacao).'
@@ -135,11 +169,14 @@ models:
       - name: transaction_type_additional_info
         data_type: varchar
         description: '{{ doc("ofb_transaction_type_additional_info") }}'
+      - name: quantity
+        data_type: decimal(38,10)
+        description: '{{ doc("ofb_transaction_quantity") }} For funds, the transacted quota quantity.'
       - name: gross_amount
-        data_type: decimal(25,10)
+        data_type: decimal(38,10)
         description: '{{ doc("ofb_transaction_gross_amount") }} For variable incomes, the transaction amount (the family has no gross/net split).'
       - name: net_amount
-        data_type: decimal(25,10)
+        data_type: decimal(38,10)
         description: '{{ doc("ofb_transaction_net_amount") }} NULL for variable incomes.'
       - name: currency
         data_type: varchar
