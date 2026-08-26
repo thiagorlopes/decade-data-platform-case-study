@@ -110,11 +110,34 @@ raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental
 
 How a consumer finds out which happened (§2.2's closing question):
 
-- **Row-level**: `dq_flags` column on the fct table (e.g. `['missing:purchase_date']`).
+- **Row-level**: `dq_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero_flap']`). Empty list means clean.
+- **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to holdings; `reject_duplicate`, `reject_fossil` and `quarantine` stay in the int table for audit.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
-- **Contract-level**: a `contracts/` artifact (planned, symlink to `_canonical.yml`) pinning what fct promises is never wrong, enforced as error.
+- **Contract-level**: `models/canonical/_canonical.yml` and `models/consumption/_consumption.yml`. The full admission enum and dq_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
 
-**State today**: DETECT is shipped (`models/canonical/staging/_staging_quality.yml`; audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb)). RESOLVE and GUARANTEE land in follow-up PRs against this shape.
+**State today**: all three layers are shipped. DETECT lives in `models/canonical/staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `models/canonical/intermediate/int_*_positions.sql` with the `classify_and_admit` macro and the admission enum contract-tested at error severity. GUARANTEE lives in `models/consumption/` with unique-grain tests on every holdings view and a warn-severity quarantine monitor on `holdings_quarantine`.
+
+#### Admission at a glance
+
+| Value | Meaning | Downstream effect |
+|---|---|---|
+| `admit` | Lot is clean or a resolved conflict winner. | Aggregated into holdings. |
+| `reject_duplicate` | Redundant copy of a hard duplicate (all measures agree under one natural key). | Ignored; kept in `int_*` for audit. |
+| `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero_conflict_resolved`). | Ignored; kept in `int_*` for audit. |
+| `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; surfaces in `holdings_quarantine`. |
+
+The full `dq_flags` vocabulary (lot-grain and holding-grain) is in the [`dq_flags` doc block](models/canonical/_docs.md); browse it in the generated site with `make docs-serve`.
+
+#### Quarantine runbook
+
+Rows landing in `holdings_quarantine` mean the classifier refused to guess. Every alert is actionable:
+
+1. **Triage.** `holdings_quarantine` already carries the minimum triage columns (natural key, both investment_ids, quantity, conflicting gross amounts, family). Cross-check the transactions feed for the same account and holding (did a redemption explain the drop?), then look at the next sync (did one copy fossilize while the other moved?).
+2. **Resolve.** One of three paths:
+   - **Transient** — the next sync disambiguates on its own. No code change; the holding re-admits itself. Close the alert.
+   - **Systematic** — a pattern emerges (e.g. the row with the newer `reference_datetime` is always the live one). Encode it as a new classification branch in `classify_and_admit`, then replay history with `make clean && make build` (the incremental-idempotency deliverable pays for exactly this).
+   - **Provider defect** — neither feed explains it. Escalate to the institution with the `main_dbt_test__audit.dq_quarantine_empty` rows as evidence; the raw defect counts in the staging warn tests are the corroborating context.
+3. **Meanwhile, the consumer is protected by construction.** Quarantined lots never reach `holdings_*`, so the wealth page under-counts one holding rather than fabricating a number. This is a deliberate product stance: when valuations conflict irreconcilably, a conservative omission beats a made-up value, and the omission is discoverable in the intermediate table.
 
 ### Materializations
 

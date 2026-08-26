@@ -20,12 +20,17 @@ models:
     data_tests: &holding_grain
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, account_id, holding_key]
+    columns: &holding_dq_columns
+      - name: dq_flags
+        description: '{{ doc("dq_flags") }}'
+        data_tests: [not_null]
 
   - name: holdings_funds
     description: >
       Fund holdings per sync, keyed by fund CNPJ (repaired upstream, so
       decimal-tailed CNPJs no longer split a fund into two holdings).
     data_tests: *holding_grain
+    columns: *holding_dq_columns
 
   - name: holdings_bank_fixed_incomes
     description: >
@@ -34,6 +39,7 @@ models:
       repaired before keying, so the 1370 decimal-tailed rows merge with
       their clean siblings instead of forming phantom holdings.
     data_tests: *holding_grain
+    columns: *holding_dq_columns
 
   - name: holdings_credit_fixed_incomes
     description: >
@@ -41,30 +47,33 @@ models:
       (isin_code, debtor_cnpj, due_date). Rows missing identity fields keep
       their investment_id as holding_key and carry the missing_identity flag.
     data_tests: *holding_grain
+    columns: *holding_dq_columns
 
   - name: holdings_treasure_titles
     description: >
       Treasury title holdings per sync, keyed by product_name.
     data_tests: *holding_grain
+    columns: *holding_dq_columns
 
   - name: portfolio
     description: >
       All five families in one uniform schema, one row per holding per
       sync. instrument is the family's human-readable identifier: ticker,
-      fund name, product name, or ISIN for fixed incomes. dq_flags is part
-      of the contract: [] means clean, anything else names the repair or
-      resolution applied.
+      fund name, product name, or ISIN for fixed incomes.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, account_id, investment_type, holding_key]
+    columns: *holding_dq_columns
 
   - name: holdings_quarantine
     description: >
-      Conflict groups the classifier refused to resolve (same key, same
-      quantity, multiple distinct gross amounts, not exactly one live row).
-      Expected empty. Rows landing here mean the provider produced a
-      conflict shape we have not seen; the warn test below surfaces them
-      without blocking the build.
+      Triage view: one row per lot the classifier refused to resolve
+      (same key, same quantity, multiple distinct gross amounts, not
+      exactly one live row). Columns are the minimum needed to
+      disambiguate: natural_key, investment_id, quantity, and the
+      conflicting gross_amount, per family. Expected empty; the warn test
+      below surfaces new rows without blocking the build. See README
+      §Quarantine runbook for the resolution path.
     data_tests:
       - dbt_utils.expression_is_true:
           name: dq_quarantine_empty

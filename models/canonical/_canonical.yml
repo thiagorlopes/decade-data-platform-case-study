@@ -95,23 +95,14 @@ models:
           dq_flags [missing_identity] and never merged with anything.
       - &c_admission
         name: admission
-        description: >-
-          What downstream may do with the lot. admit = aggregate it.
-          reject_duplicate = redundant copy of a hard duplicate, kept for
-          audit. reject_fossil = frozen zero-valued side of a same-sync
-          conflict pair. quarantine = conflict where both sides are live,
-          needs a human decision; surfaces in holdings_quarantine.
+        description: '{{ doc("dq_admission") }}'
         data_tests:
           - not_null
           - accepted_values:
               values: [admit, reject_duplicate, reject_fossil, quarantine]
       - &c_dq_flags
         name: dq_flags
-        description: >-
-          Row-level warnings the lot was admitted with (missing_identity,
-          zero_conflict_resolved, missing:indexer, missing:purchase_date).
-          Empty list = clean. Holding-grain flags (merged_lots, zero_flap,
-          id_handoff) are added in the consumption layer.
+        description: '{{ doc("dq_flags") }}'
         data_tests: [not_null]
 
   - name: int_funds_positions

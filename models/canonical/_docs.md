@@ -2,7 +2,60 @@
 # Descriptions and enum values come from the Open Finance Brasil investment API specs
 # (see the header of each staging model for the exact spec file and line anchors).
 # Blocks prefixed `ofb_` describe provider payload fields; blocks prefixed
-# `stg_` describe our envelope columns and staging conventions.
+# `stg_` describe our envelope columns and staging conventions. Blocks prefixed
+# `dq_` describe the data-quality contract carried on every intermediate and
+# consumption row (see README §Data quality for the narrative).
+
+{% docs dq_admission %}
+What downstream may do with each lot. The intermediate layer classifies but
+never deletes: rejected and quarantined rows stay in the int_*_positions
+tables for audit.
+
+- `admit`: aggregate into holdings. This is what the consumption layer
+  filters on.
+- `reject_duplicate`: redundant copy of a hard duplicate (all measures
+  agree under one natural key). One row per group is kept as `admit`; the
+  rest carry this label so consumers ignore them without losing the audit
+  trail.
+- `reject_fossil`: same-sync conflict where exactly one side is a frozen
+  zero-valued row. The zero side gets this label; the live side is
+  admitted and flagged `zero_conflict_resolved`.
+- `quarantine`: same-sync conflict with no single live row to pick.
+  Neither side is safe to aggregate automatically. Surfaces in the
+  consumption view `holdings_quarantine` (expected empty; warn test fires
+  if it grows). See README §Quarantine runbook.
+{% enddocs %}
+
+{% docs dq_flags %}
+Row-level warnings the lot or holding was admitted with. Empty list means
+clean. Each flag names a specific defect or resolution applied, so a
+consumer can filter on the presence or absence of a class of issue without
+needing to know the SQL that produced it.
+
+Lot-grain, added in int_*_positions:
+
+- `missing_identity`: natural key could not be derived from the repaired
+  columns. The row travels alone at investment_id grain, never merged.
+- `zero_conflict_resolved`: the classifier kept this live row and rejected
+  a zero-valued sibling in the same sync (see `reject_fossil` in
+  admission). Presence of this flag means the holding's number is stable
+  even though the raw feed disagreed.
+- `missing:indexer`, `missing:purchase_date`: non-repairable NULL in a
+  column the OFB spec marks required. Bank, credit and treasury only.
+
+Holding-grain, added in holdings_*_family (cross-sync signals that only
+make sense once lots are aggregated by natural key):
+
+- `merged_lots`: two or more admitted lots aggregated under one holding.
+- `zero_gross_lot`: a merged holding contains at least one lot with
+  gross_amount = 0 alongside a live lot.
+- `zero_flap`: the holding's gross flipped 0 → nonzero across consecutive
+  syncs with quantity unchanged — a transient provider glitch, not a
+  real trade or valuation change.
+- `id_handoff`: the holding's contributing investment_ids changed across
+  syncs (a lot re-issued under a new provider id). The natural key is
+  stable; the id set is not.
+{% enddocs %}
 
 {% docs stg_contract %}
 Staging is a 1:1 flatten of the verbatim provider payload into typed columns
