@@ -19,3 +19,5 @@ models:
           # view, not incremental: zero_flap/id_handoff lag over the full
           # timeline of the incremental positions tables
           +materialized: view
+    consumption:
+      +materialized: table
