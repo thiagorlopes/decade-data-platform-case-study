@@ -1,8 +1,3 @@
-{{ config(materialized='view') }}
--- One row per holding per sync: admitted lots aggregated on the natural key.
--- Missing-identity lots use their own investment_id as key and travel alone.
--- View, not incremental: the cross-sync flags (zero_flap, id_handoff) need
--- lag/lead over the full timeline of the incremental int_*_positions table.
 WITH admitted AS (
     SELECT * FROM {{ ref('int_funds_positions') }}
     WHERE admission = 'admit'
