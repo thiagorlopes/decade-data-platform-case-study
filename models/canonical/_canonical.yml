@@ -5,6 +5,10 @@ version: 2
 # Envelope columns are coalesced across the two sides; ingested_at is the
 # max of the two, and drives the incremental watermark.
 #
+# Column order follows the staging spec order: envelope, then detail block,
+# then balances block. Per-amount currency siblings are dropped from both
+# sides; a single gross_amount_currency stands in as the row-currency stamp.
+#
 # The layer also repairs within-record defects (cnpj decimal tails, the
 # IPC-A enum spelling, the 0001-01-01 fake-when-missing date; notebook 02), derives
 # each family's natural key from the repaired columns, and classifies
@@ -78,14 +82,15 @@ models:
         description: '{{ doc("ofb_price_factor") }}'
       - name: gross_amount
         description: '{{ doc("ofb_gross_amount") }}'
+      - &c_gross_amount_currency
+        name: gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
       - name: blocked_amount
         description: '{{ doc("ofb_blocked_amount") }}'
       - name: quantity
         description: '{{ doc("ofb_position_quantity") }}'
       - name: closing_price
         description: '{{ doc("ofb_closing_price") }}'
-      - name: gross_amount_currency
-        description: '{{ doc("ofb_currency") }}'
       - &c_natural_key
         name: natural_key
         description: >-
@@ -130,12 +135,19 @@ models:
         description: '{{ doc("ofb_fund_name") }}'
       - name: fund_cnpj
         description: '{{ doc("ofb_fund_cnpj") }} {{ doc("stg_cnpj_format") }}'
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
       - name: anbima_category
         description: '{{ doc("ofb_anbima_category") }}'
+      - name: anbima_class
+        description: '{{ doc("ofb_anbima_class") }}'
+      - name: anbima_subclass
+        description: '{{ doc("ofb_anbima_subclass") }}'
       - name: reference_date
         description: '{{ doc("ofb_reference_date") }}'
       - name: gross_amount
         description: '{{ doc("ofb_gross_amount") }}'
+      - *c_gross_amount_currency
       - name: net_amount
         description: '{{ doc("ofb_net_amount") }}'
       - name: income_tax_amount
@@ -148,8 +160,6 @@ models:
         description: '{{ doc("ofb_quota_quantity") }}'
       - name: quota_gross_price
         description: '{{ doc("ofb_quota_gross_price") }}'
-      - name: gross_amount_currency
-        description: '{{ doc("ofb_currency") }}'
       - *c_natural_key
       - *c_admission
       - *c_data_quality_flags
@@ -185,47 +195,75 @@ models:
         description: '{{ doc("ofb_isin_code") }}'
       - name: investment_type
         description: '{{ doc("ofb_product_type__bank_fixed_incomes") }}'
-      - name: indexer
+      - &c_pre_fixed_rate
+        name: pre_fixed_rate
+        description: '{{ doc("ofb_pre_fixed_rate") }}'
+      - &c_post_fixed_indexer_percentage
+        name: post_fixed_indexer_percentage
+        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
+      - &c_rate_type
+        name: rate_type
+        description: '{{ doc("ofb_rate_type") }}'
+      - &c_rate_periodicity
+        name: rate_periodicity
+        description: '{{ doc("ofb_rate_periodicity") }}'
+      - &c_calculation
+        name: calculation
+        description: '{{ doc("ofb_calculation") }}'
+      - &c_indexer_repaired
+        name: indexer
         description: '{{ doc("ofb_indexer") }} Repaired here: the market spelling IPC-A is mapped to the enum value IPCA.'
         data_tests:
           - accepted_values:
               values: &ofb_indexers_repaired [CDI, DI, TR, IPCA, IGP_M, IGP_DI, INPC, BCP, TLC, SELIC, PRE_FIXADO, OUTROS]
-      - name: pre_fixed_rate
-        description: '{{ doc("ofb_pre_fixed_rate") }}'
-      - name: post_fixed_indexer_percentage
-        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
-      - name: issue_unit_price
+      - &c_indexer_additional_info
+        name: indexer_additional_info
+        description: '{{ doc("ofb_indexer_additional_info") }}'
+      - &c_issue_unit_price
+        name: issue_unit_price
         description: '{{ doc("ofb_issue_unit_price") }}'
-      - name: due_date
+      - &c_due_date
+        name: due_date
         description: '{{ doc("ofb_due_date") }}'
-      - name: issue_date
+      - &c_issue_date
+        name: issue_date
         description: '{{ doc("ofb_issue_date") }}'
-      - name: clearing_code
+      - &c_clearing_code
+        name: clearing_code
         description: '{{ doc("ofb_clearing_code") }}'
-      - name: purchase_date
+      - &c_purchase_date
+        name: purchase_date
         description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
       - name: grace_period_date
         description: '{{ doc("ofb_grace_period_date") }}'
-      - name: reference_datetime
+      - &c_reference_datetime
+        name: reference_datetime
         description: '{{ doc("ofb_reference_datetime") }}'
-      - name: quantity
+      - &c_position_quantity
+        name: quantity
         description: '{{ doc("ofb_position_quantity") }}'
-      - name: updated_unit_price
+      - &c_updated_unit_price
+        name: updated_unit_price
         description: '{{ doc("ofb_updated_unit_price") }}'
-      - name: gross_amount
+      - &c_gross_amount
+        name: gross_amount
         description: '{{ doc("ofb_gross_amount") }}'
-      - name: net_amount
+      - *c_gross_amount_currency
+      - &c_net_amount
+        name: net_amount
         description: '{{ doc("ofb_net_amount") }}'
-      - name: income_tax_amount
+      - &c_income_tax_provision
+        name: income_tax_amount
         description: '{{ doc("ofb_income_tax_provision") }}'
-      - name: financial_transaction_tax_amount
+      - &c_iof_provision
+        name: financial_transaction_tax_amount
         description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
-      - name: blocked_amount
+      - &c_blocked_amount
+        name: blocked_amount
         description: '{{ doc("ofb_blocked_amount") }}'
-      - name: purchase_unit_price
+      - &c_purchase_unit_price
+        name: purchase_unit_price
         description: '{{ doc("ofb_purchase_unit_price") }}'
-      - name: gross_amount_currency
-        description: '{{ doc("ofb_currency") }}'
       - *c_natural_key
       - *c_admission
       - *c_data_quality_flags
@@ -270,45 +308,43 @@ models:
         description: '{{ doc("ofb_debtor_name") }}'
       - name: tax_exempt
         description: '{{ doc("ofb_tax_exempt") }}'
-      - name: indexer
-        description: '{{ doc("ofb_indexer") }} Repaired here: the market spelling IPC-A is mapped to the enum value IPCA.'
-        data_tests:
-          - accepted_values:
-              values: *ofb_indexers_repaired
-      - name: pre_fixed_rate
-        description: '{{ doc("ofb_pre_fixed_rate") }}'
-      - name: post_fixed_indexer_percentage
-        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
-      - name: issue_unit_price
-        description: '{{ doc("ofb_issue_unit_price") }}'
-      - name: issue_date
-        description: '{{ doc("ofb_issue_date") }}'
-      - name: due_date
-        description: '{{ doc("ofb_due_date") }}'
-      - name: clearing_code
-        description: '{{ doc("ofb_clearing_code") }}'
-      - name: purchase_date
-        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
-      - name: reference_datetime
-        description: '{{ doc("ofb_reference_datetime") }}'
-      - name: updated_unit_price
-        description: '{{ doc("ofb_updated_unit_price") }}'
-      - name: quantity
-        description: '{{ doc("ofb_position_quantity") }}'
-      - name: gross_amount
-        description: '{{ doc("ofb_gross_amount") }}'
-      - name: net_amount
-        description: '{{ doc("ofb_net_amount") }}'
-      - name: income_tax_amount
-        description: '{{ doc("ofb_income_tax_provision") }}'
-      - name: financial_transaction_tax_amount
-        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
-      - name: blocked_amount
-        description: '{{ doc("ofb_blocked_amount") }}'
-      - name: purchase_unit_price
-        description: '{{ doc("ofb_purchase_unit_price") }}'
-      - name: gross_amount_currency
-        description: '{{ doc("ofb_currency") }}'
+      - *c_pre_fixed_rate
+      - *c_post_fixed_indexer_percentage
+      - *c_rate_type
+      - *c_rate_periodicity
+      - *c_calculation
+      - *c_indexer_repaired
+      - *c_indexer_additional_info
+      - *c_issue_unit_price
+      - *c_issue_date
+      - *c_due_date
+      - &c_voucher_payment_indicator
+        name: voucher_payment_indicator
+        description: '{{ doc("ofb_voucher_payment_indicator") }}'
+      - &c_voucher_payment_periodicity
+        name: voucher_payment_periodicity
+        description: '{{ doc("ofb_voucher_payment_periodicity") }}'
+      - &c_voucher_payment_periodicity_additional_info
+        name: voucher_payment_periodicity_additional_info
+        description: '{{ doc("ofb_voucher_payment_periodicity_additional_info") }}'
+      - *c_clearing_code
+      - *c_purchase_date
+      - name: grace_period_date
+        description: '{{ doc("ofb_grace_period_date") }}'
+      - *c_reference_datetime
+      - *c_updated_unit_price
+      - *c_position_quantity
+      - *c_gross_amount
+      - *c_gross_amount_currency
+      - *c_net_amount
+      - *c_income_tax_provision
+      - *c_iof_provision
+      - *c_blocked_amount
+      - *c_purchase_unit_price
+      - name: fine_amount
+        description: '{{ doc("ofb_fine_amount") }}'
+      - name: late_payment_amount
+        description: '{{ doc("ofb_late_payment_amount") }}'
       - *c_natural_key
       - *c_admission
       - *c_data_quality_flags
@@ -339,39 +375,27 @@ models:
         description: '{{ doc("ofb_isin_code") }}'
       - name: product_name
         description: '{{ doc("ofb_product_name") }}'
-      - name: indexer
-        description: '{{ doc("ofb_indexer") }} Repaired here: the market spelling IPC-A is mapped to the enum value IPCA.'
-        data_tests:
-          - accepted_values:
-              values: *ofb_indexers_repaired
-      - name: pre_fixed_rate
-        description: '{{ doc("ofb_pre_fixed_rate") }}'
-      - name: post_fixed_indexer_percentage
-        description: '{{ doc("ofb_post_fixed_indexer_percentage") }}'
-      - name: due_date
-        description: '{{ doc("ofb_due_date") }}'
-      - name: purchase_date
-        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
-      - name: reference_datetime
-        description: '{{ doc("ofb_reference_datetime") }}'
-      - name: updated_unit_price
-        description: '{{ doc("ofb_updated_unit_price") }}'
-      - name: gross_amount
-        description: '{{ doc("ofb_gross_amount") }}'
-      - name: net_amount
-        description: '{{ doc("ofb_net_amount") }}'
-      - name: income_tax_amount
-        description: '{{ doc("ofb_income_tax_provision") }}'
-      - name: financial_transaction_tax_amount
-        description: '{{ doc("ofb_financial_transaction_tax_provision") }}'
-      - name: blocked_amount
-        description: '{{ doc("ofb_blocked_amount") }}'
-      - name: purchase_unit_price
-        description: '{{ doc("ofb_purchase_unit_price") }}'
-      - name: quantity
-        description: '{{ doc("ofb_position_quantity") }}'
-      - name: gross_amount_currency
-        description: '{{ doc("ofb_currency") }}'
+      - *c_indexer_repaired
+      - *c_indexer_additional_info
+      - *c_pre_fixed_rate
+      - *c_post_fixed_indexer_percentage
+      - *c_rate_periodicity
+      - *c_calculation
+      - *c_due_date
+      - *c_purchase_date
+      - *c_voucher_payment_indicator
+      - *c_voucher_payment_periodicity
+      - *c_voucher_payment_periodicity_additional_info
+      - *c_reference_datetime
+      - *c_updated_unit_price
+      - *c_gross_amount
+      - *c_gross_amount_currency
+      - *c_net_amount
+      - *c_income_tax_provision
+      - *c_iof_provision
+      - *c_blocked_amount
+      - *c_purchase_unit_price
+      - *c_position_quantity
       - *c_natural_key
       - *c_admission
       - *c_data_quality_flags
@@ -385,43 +409,204 @@ models:
 # no conflicting copies exist to arbitrate, so the only defect signals are
 # the missing: field flags. Tests error because grain and flag integrity are
 # our own guarantees, not the provider's.
+#
+# Per-amount currency siblings are dropped; transaction_gross_amount_currency
+# (transaction_amount_currency for variable_incomes, which has no gross
+# column) stands in as the row-currency stamp.
+
+  - name: int_bank_fixed_incomes_transactions
+    description: >
+      Bank fixed income movements, one row per transaction_id: the latest
+      delivered copy of each transaction, flagged for absent spec-required fields.
+    columns:
+      - *c_snapshot_id
+      - &c_payload_source
+        name: payload_source
+        description: '{{ doc("stg_payload_source") }}'
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_investment_id
+      - *c_ingested_at
+      - &c_movement_type
+        name: movement_type
+        description: '{{ doc("ofb_movement_type") }}'
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__bank_fixed_incomes") }}'
+      - &c_transaction_type_additional_info
+        name: transaction_type_additional_info
+        description: '{{ doc("ofb_transaction_type_additional_info") }}'
+      - &c_transaction_date
+        name: transaction_date
+        description: '{{ doc("ofb_transaction_date") }}'
+      - &c_transaction_unit_price
+        name: transaction_unit_price
+        description: '{{ doc("ofb_transaction_unit_price") }}'
+      - &c_transaction_quantity
+        name: transaction_quantity
+        description: '{{ doc("ofb_transaction_quantity") }}'
+      - &c_transaction_gross_amount
+        name: transaction_gross_amount
+        description: '{{ doc("ofb_transaction_gross_amount") }}'
+      - &c_transaction_gross_amount_currency
+        name: transaction_gross_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - &c_txn_income_tax_amount
+        name: income_tax_amount
+        description: '{{ doc("ofb_income_tax_amount") }}'
+      - &c_txn_iof_amount
+        name: financial_transaction_tax_amount
+        description: '{{ doc("ofb_financial_transaction_tax_amount") }}'
+      - &c_transaction_net_amount
+        name: transaction_net_amount
+        description: '{{ doc("ofb_transaction_net_amount") }}'
+      - &c_remuneration_rate
+        name: remuneration_rate
+        description: '{{ doc("ofb_remuneration_rate") }}'
+      - &c_indexer_percentage
+        name: indexer_percentage
+        description: '{{ doc("ofb_indexer_percentage") }}'
+      - &c_transaction_id
+        name: transaction_id
+        description: '{{ doc("ofb_transaction_id") }}'
+        data_tests: [unique, not_null]
+      - *c_data_quality_flags
+
+  - name: int_credit_fixed_incomes_transactions
+    description: >
+      Credit fixed income movements, one row per transaction_id: the latest
+      delivered copy of each transaction, flagged for absent spec-required fields.
+    columns:
+      - *c_snapshot_id
+      - *c_payload_source
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_investment_id
+      - *c_ingested_at
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__credit_fixed_incomes") }}'
+      - *c_transaction_type_additional_info
+      - *c_transaction_date
+      - *c_transaction_unit_price
+      - *c_transaction_quantity
+      - *c_transaction_gross_amount
+      - *c_transaction_gross_amount_currency
+      - *c_txn_income_tax_amount
+      - *c_txn_iof_amount
+      - *c_transaction_net_amount
+      - *c_remuneration_rate
+      - *c_indexer_percentage
+      - *c_transaction_id
+      - *c_data_quality_flags
+
+  - name: int_treasure_titles_transactions
+    description: >
+      Treasury title movements, one row per transaction_id: the latest
+      delivered copy of each transaction, flagged for absent spec-required fields.
+    columns:
+      - *c_snapshot_id
+      - *c_payload_source
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_investment_id
+      - *c_ingested_at
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__treasure_titles") }}'
+      - *c_transaction_type_additional_info
+      - *c_transaction_date
+      - *c_transaction_unit_price
+      - *c_transaction_quantity
+      - *c_transaction_gross_amount
+      - *c_transaction_gross_amount_currency
+      - *c_txn_income_tax_amount
+      - *c_txn_iof_amount
+      - *c_transaction_net_amount
+      - *c_remuneration_rate
+      - *c_transaction_id
+      - *c_data_quality_flags
 
   - name: int_funds_transactions
     description: >
       Fund movements, one row per transaction_id: the latest delivered copy
       of each transaction, flagged for absent spec-required fields.
-    columns: &txn_contract_columns
-      - name: transaction_id
-        description: '{{ doc("ofb_transaction_id") }}'
-        data_tests: [unique, not_null]
-      - name: movement_type
-        description: '{{ doc("ofb_movement_type") }}'
+    columns:
+      - *c_snapshot_id
+      - *c_payload_source
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_investment_id
       - *c_ingested_at
+      - *c_transaction_id
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__funds") }}'
+      - *c_transaction_type_additional_info
+      - name: transaction_conversion_date
+        description: '{{ doc("ofb_transaction_conversion_date") }}'
+      - name: transaction_quota_price
+        description: '{{ doc("ofb_transaction_quota_price") }}'
+      - name: transaction_quota_quantity
+        description: '{{ doc("ofb_transaction_quota_quantity") }}'
+      - &c_transaction_amount
+        name: transaction_amount
+        description: '{{ doc("ofb_transaction_amount") }}'
+      - *c_transaction_gross_amount
+      - *c_transaction_gross_amount_currency
+      - *c_txn_income_tax_amount
+      - *c_txn_iof_amount
+      - name: transaction_exit_fee
+        description: '{{ doc("ofb_transaction_exit_fee") }}'
+      - *c_transaction_net_amount
       - *c_data_quality_flags
 
   - name: int_variable_incomes_transactions
     description: >
       Equity movements, one row per transaction_id: the latest delivered copy
       of each transaction, flagged for absent spec-required fields.
-    columns: *txn_contract_columns
-
-  - name: int_bank_fixed_incomes_transactions
-    description: >
-      Bank fixed income movements, one row per transaction_id: the latest
-      delivered copy of each transaction, flagged for absent spec-required fields.
-    columns: *txn_contract_columns
-
-  - name: int_credit_fixed_incomes_transactions
-    description: >
-      Credit fixed income movements, one row per transaction_id: the latest
-      delivered copy of each transaction, flagged for absent spec-required fields.
-    columns: *txn_contract_columns
-
-  - name: int_treasure_titles_transactions
-    description: >
-      Treasury title movements, one row per transaction_id: the latest
-      delivered copy of each transaction, flagged for absent spec-required fields.
-    columns: *txn_contract_columns
+    columns:
+      - *c_snapshot_id
+      - *c_payload_source
+      - *c_snapshot_created_at
+      - *c_institution_id
+      - *c_institution_name
+      - *c_party_id
+      - *c_account_id
+      - *c_connection_id
+      - *c_investment_id
+      - *c_ingested_at
+      - *c_movement_type
+      - name: transaction_type
+        description: '{{ doc("ofb_transaction_type__variable_incomes") }}'
+      - *c_transaction_type_additional_info
+      - *c_transaction_date
+      - name: price_factor
+        description: '{{ doc("ofb_price_factor") }}'
+      - *c_transaction_unit_price
+      - *c_transaction_quantity
+      - *c_transaction_amount
+      - name: transaction_amount_currency
+        description: '{{ doc("ofb_currency") }}'
+      - *c_transaction_id
+      - name: broker_note_id
+        description: '{{ doc("ofb_broker_note_id") }}'
+      - *c_data_quality_flags
 
 # Holdings sub-layer: one row per (snapshot_id, account_id, holding_key),
 # admitted lots summed on the natural key. Views over the incremental

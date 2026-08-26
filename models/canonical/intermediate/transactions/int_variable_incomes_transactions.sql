@@ -1,8 +1,10 @@
 -- One row per transaction_id: re-delivered copies collapse to the latest delivery.
 {{ config(unique_key='transaction_id') }}
 
+-- transaction_unit_price_currency dropped; transaction_amount_currency
+-- stands in as the row-currency stamp (no gross column in this family).
 SELECT
-    *,
+    * EXCLUDE (transaction_unit_price_currency),
     list_filter([
         CASE WHEN movement_type IS NULL      THEN 'missing:movement_type' END,
         CASE WHEN transaction_type IS NULL   THEN 'missing:transaction_type' END,

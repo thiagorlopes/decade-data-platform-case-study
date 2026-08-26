@@ -1,6 +1,7 @@
 -- One row per investment (snapshot_id, investment_id), classified but never deleted.
 WITH joined AS (
     -- FULL JOIN because some investments arrive with balances only (no detail payload).
+    -- Column order follows staging spec order: envelope, then detail, then balances.
     SELECT
         snapshot_id,
         investment_id,
@@ -13,16 +14,19 @@ WITH joined AS (
         greatest(det.ingested_at, bal.ingested_at) AS ingested_at,
         det.fund_name,
         det.fund_cnpj,
+        det.isin_code,
         det.anbima_category,
+        det.anbima_class,
+        det.anbima_subclass,
         bal.reference_date,
         bal.gross_amount,
+        bal.gross_amount_currency,
         bal.net_amount,
         bal.income_tax_amount,
         bal.financial_transaction_tax_amount,
         bal.blocked_amount,
         bal.quota_quantity,
-        bal.quota_gross_price,
-        bal.gross_amount_currency
+        bal.quota_gross_price
     FROM {{ ref('stg_openfinance__funds_positions_detail') }} AS det
     FULL JOIN {{ ref('stg_openfinance__funds_positions_balances') }} AS bal
         USING (snapshot_id, investment_id)

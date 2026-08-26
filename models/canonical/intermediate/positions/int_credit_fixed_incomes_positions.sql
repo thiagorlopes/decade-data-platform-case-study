@@ -1,6 +1,9 @@
 -- One row per investment (snapshot_id, investment_id), classified but never deleted.
 WITH joined AS (
     -- FULL JOIN because some investments arrive with balances only (no detail payload).
+    -- Column order follows staging spec order: envelope, then detail, then balances.
+    -- pre_fixed_rate / post_fixed_indexer_percentage appear in both sides; the
+    -- detail copy is authoritative (static contract of the security).
     SELECT
         snapshot_id,
         investment_id,
@@ -17,24 +20,34 @@ WITH joined AS (
         det.debtor_cnpj,
         det.debtor_name,
         det.tax_exempt,
-        det.indexer,
         det.pre_fixed_rate,
         det.post_fixed_indexer_percentage,
+        det.rate_type,
+        det.rate_periodicity,
+        det.calculation,
+        det.indexer,
+        det.indexer_additional_info,
         det.issue_unit_price,
         det.issue_date,
         det.due_date,
+        det.voucher_payment_indicator,
+        det.voucher_payment_periodicity,
+        det.voucher_payment_periodicity_additional_info,
         det.clearing_code,
         det.purchase_date,
+        det.grace_period_date,
         bal.reference_datetime,
         bal.updated_unit_price,
         bal.quantity,
         bal.gross_amount,
+        bal.gross_amount_currency,
         bal.net_amount,
         bal.income_tax_amount,
         bal.financial_transaction_tax_amount,
         bal.blocked_amount,
         bal.purchase_unit_price,
-        bal.gross_amount_currency
+        bal.fine_amount,
+        bal.late_payment_amount
     FROM {{ ref('stg_openfinance__credit_fixed_incomes_positions_detail') }} AS det
     FULL JOIN {{ ref('stg_openfinance__credit_fixed_incomes_positions_balances') }} AS bal
         USING (snapshot_id, investment_id)
