@@ -109,8 +109,8 @@ classified AS (
         n_distinct_gross_amounts <= 1 AS gross_amounts_agree,
         CASE WHEN natural_key IS NULL           THEN 'missing_key'  -- no key, cannot check for duplicates
              WHEN NOT is_in_duplicate_group     THEN 'no_duplicate'
-             WHEN NOT quantities_agree          THEN 'partition'    -- genuinely separate investments
-             WHEN gross_amounts_agree           THEN 'hard_dup'     -- redundant copies of one
+             WHEN NOT quantities_agree          THEN 'separate_lots'     -- genuinely separate investments
+             WHEN gross_amounts_agree           THEN 'redundant_copies'  -- of the same investment
              ELSE 'conflict'                                        -- same quantity, gross disagrees
         END AS dup_class,
         -- The exact shape notebook 03 §3 asserts before resolving: a pair,
@@ -119,8 +119,8 @@ classified AS (
             AND n_group_rows = 2
             AND n_positive_gross_amounts = 1
             AND coalesce({{ qty_col }}, 0) > 0 AS is_resolvable_conflict,
-        -- Rank 1 is the copy a hard_dup keeps: prefer a priced one, then
-        -- lowest investment_id for determinism.
+        -- Rank 1 is the copy redundant_copies keeps: prefer a priced one,
+        -- then lowest investment_id for determinism.
         row_number() OVER (
             PARTITION BY snapshot_id, account_id, natural_key
             ORDER BY (gross_amount IS NULL), investment_id
@@ -135,7 +135,7 @@ SELECT
                quantities_agree, gross_amounts_agree, dup_class,
                is_resolvable_conflict, dedup_rank),
     CASE
-        WHEN dup_class = 'hard_dup' AND dedup_rank > 1 THEN 'reject_duplicate'
+        WHEN dup_class = 'redundant_copies' AND dedup_rank > 1 THEN 'reject_duplicate'
         WHEN is_resolvable_conflict
              AND coalesce(gross_amount, 0) = 0         THEN 'reject_fossil'
         WHEN dup_class = 'conflict'
