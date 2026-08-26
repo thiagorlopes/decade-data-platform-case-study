@@ -55,6 +55,7 @@ repaired AS (
     SELECT * REPLACE (
         {{ clean_cnpj('issuer_cnpj') }}        AS issuer_cnpj,
         {{ clean_cnpj('debtor_cnpj') }}        AS debtor_cnpj,
+        {{ blank_to_null('isin_code') }}       AS isin_code,
         {{ clean_indexer('indexer') }}         AS indexer,
         {{ clean_missing_date('purchase_date') }} AS purchase_date
     )

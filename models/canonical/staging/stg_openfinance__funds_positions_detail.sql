@@ -13,8 +13,8 @@ SELECT
     connection_id,
     CAST(ingested_at AS TIMESTAMP) AS ingested_at,
     {{ payload_field('name',           'VARCHAR', required=true) }} AS fund_name,
-    {{ blank_to_null_field('cnpjNumber',    required=true) }}            AS fund_cnpj,
-    {{ blank_to_null_field('isinCode') }}                                AS isin_code,
+    {{ payload_field('cnpjNumber',     'VARCHAR', required=true) }} AS fund_cnpj,
+    {{ payload_field('isinCode',       'VARCHAR') }}                AS isin_code,
     {{ payload_field('anbimaCategory', 'VARCHAR') }}                AS anbima_category,
     {{ payload_field('anbimaClass',    'VARCHAR') }}                AS anbima_class,
     {{ payload_field('anbimaSubclass', 'VARCHAR') }}                AS anbima_subclass

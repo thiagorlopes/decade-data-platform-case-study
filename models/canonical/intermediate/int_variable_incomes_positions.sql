@@ -37,7 +37,9 @@ WITH joined AS (
 -- issuer_cnpj is clean in today's data; the repair is kept as a guard.
 repaired AS (
     SELECT * REPLACE (
-        {{ clean_cnpj('issuer_cnpj') }} AS issuer_cnpj
+        {{ clean_cnpj('issuer_cnpj') }}   AS issuer_cnpj,
+        {{ blank_to_null('isin_code') }}  AS isin_code,
+        {{ blank_to_null('ticker') }}     AS ticker
     )
     FROM joined
 ),

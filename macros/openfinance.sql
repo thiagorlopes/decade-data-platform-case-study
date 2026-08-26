@@ -24,15 +24,15 @@
     {{ json_field('transaction_json', '$.', path, type, required) }}
 {%- endmacro %}
 
-{# Used on the columns that feed natural keys (cnpj, isin, ticker,
-   product_name): a blank string passes IS NOT NULL and would silently
-   fragment those keys. #}
-{% macro blank_to_null_field(path, required=false) -%}
-    nullif(trim({{ payload_field(path, 'VARCHAR', required) }}), '')
-{%- endmacro %}
-
 {# --- within-record repairs (notebook 02), applied in the intermediate layer
    so the staging warn tests keep counting the raw defects. --- #}
+
+{# Used on the columns that feed natural keys (isin, ticker, product_name):
+   a blank string passes IS NOT NULL and would silently fragment those keys.
+   CNPJ columns get this for free from clean_cnpj. #}
+{% macro blank_to_null(column) -%}
+    nullif(trim({{ column }}), '')
+{%- endmacro %}
 
 {# Providers serialize CNPJs through a numeric type and pick up a decimal
    tail ('92894922000108.00'). Strip the tail, then demand exactly 14 digits;

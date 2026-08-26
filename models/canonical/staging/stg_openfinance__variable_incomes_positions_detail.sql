@@ -12,8 +12,8 @@ SELECT
     account_id,
     connection_id,
     CAST(ingested_at AS TIMESTAMP) AS ingested_at,
-    {{ blank_to_null_field('issuerInstitutionCnpjNumber') }}                          AS issuer_cnpj,
-    {{ blank_to_null_field('isinCode',                   required=true) }}            AS isin_code,
-    {{ blank_to_null_field('ticker',                     required=true) }}            AS ticker
+    {{ payload_field('issuerInstitutionCnpjNumber', 'VARCHAR') }}                AS issuer_cnpj,
+    {{ payload_field('isinCode',                    'VARCHAR', required=true) }} AS isin_code,
+    {{ payload_field('ticker',                      'VARCHAR', required=true) }} AS ticker
 FROM {{ source('raw_openfinance', 'positions') }}
 WHERE investment_type = 'VARIABLE_INCOMES' AND payload_kind = 'detail'
