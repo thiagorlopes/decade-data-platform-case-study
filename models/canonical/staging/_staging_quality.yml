@@ -806,6 +806,10 @@ models:
           values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO, VENCIMENTO,
                    TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, MORA, MULTA, PREMIO, OUTROS]
           config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_txn_date_not_epoch
+          expression: "transaction_date <> DATE '1970-01-01'"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -926,6 +930,10 @@ models:
           column_name: transaction_type
           values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO,
                    VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_txn_date_not_epoch
+          expression: "transaction_date <> DATE '1970-01-01'"
           config: *dq_warn_stored
     columns:
       - *env_snapshot_id
