@@ -26,8 +26,7 @@
 
 {# Used on the columns that feed natural keys (cnpj, isin, ticker,
    product_name): a blank string passes IS NOT NULL and would silently
-   fragment those keys, and the warn-severity not_null tests then count
-   blanks as the D1 defects they are. #}
+   fragment those keys. #}
 {% macro blank_to_null_field(path, required=false) -%}
     nullif(trim({{ payload_field(path, 'VARCHAR', required) }}), '')
 {%- endmacro %}
