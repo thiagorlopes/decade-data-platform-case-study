@@ -69,7 +69,8 @@
    'missing:indexer'). --- #}
 {% macro resolve_duplicate_investments(qty_col='quantity', extra_flags=[]) -%}
 -- A duplicate group is two or more investment_ids under one natural key in
--- one sync. Most investments belong to no group and stay 'no_duplicate' below.
+-- one sync. Rows with a NULL natural_key are excluded here (can't be grouped
+-- by an identifier that isn't there) and are handled by the classifier below.
 duplicate_groups AS (
     SELECT
         snapshot_id,
@@ -84,12 +85,17 @@ duplicate_groups AS (
     HAVING count(DISTINCT investment_id) > 1
 ),
 
--- Notebook 03 §2: 'partition' groups are genuinely separate investments,
--- 'hard_dup' redundant copies of one, 'conflict' usually a live/fossil pair.
+-- Notebook 03 §2 ladder, read top to bottom:
+--   no natural key           -> we cannot check for duplicates ('missing_identity')
+--   key not in a group       -> unique in the sync             ('no_duplicate')
+--   quantities differ        -> genuinely separate investments ('partition')
+--   quantities agree + gross agrees -> redundant copies        ('hard_dup')
+--   quantities agree + gross differs -> same position, two valuations ('conflict')
 classified AS (
     SELECT
         keyed.*,
-        CASE WHEN dup.natural_key IS NULL            THEN 'no_duplicate'
+        CASE WHEN keyed.natural_key IS NULL          THEN 'missing_identity'
+             WHEN dup.natural_key IS NULL            THEN 'no_duplicate'
              WHEN dup.n_distinct_quantities > 1      THEN 'partition'
              WHEN dup.n_distinct_gross_amounts <= 1  THEN 'hard_dup'
              ELSE 'conflict' END AS dup_class,
