@@ -105,11 +105,13 @@ with_group_stats AS (
 classified AS (
     SELECT
         *,
-        CASE WHEN natural_key IS NULL           THEN 'missing_key' -- no key, cannot check for duplicates
-             WHEN NOT is_in_duplicate_group        THEN 'no_duplicate'
-             WHEN n_distinct_quantities > 1     THEN 'partition'        -- genuinely separate investments
-             WHEN n_distinct_gross_amounts <= 1 THEN 'hard_dup'         -- redundant copies of one
-             ELSE 'conflict'                                            -- same quantity, gross disagrees
+        n_distinct_quantities    <= 1 AS quantities_agree,
+        n_distinct_gross_amounts <= 1 AS gross_amounts_agree,
+        CASE WHEN natural_key IS NULL           THEN 'missing_key'  -- no key, cannot check for duplicates
+             WHEN NOT is_in_duplicate_group     THEN 'no_duplicate'
+             WHEN NOT quantities_agree          THEN 'partition'    -- genuinely separate investments
+             WHEN gross_amounts_agree           THEN 'hard_dup'     -- redundant copies of one
+             ELSE 'conflict'                                        -- same quantity, gross disagrees
         END AS dup_class,
         -- The exact shape notebook 03 §3 asserts before resolving: a pair,
         -- one positive side, shared positive quantity. Anything else quarantines.
@@ -129,7 +131,8 @@ classified AS (
 -- Step 4: the admission verdict, plus the defect flags.
 SELECT
     * EXCLUDE (is_in_duplicate_group, n_group_rows, n_distinct_quantities,
-               n_distinct_gross_amounts, n_positive_gross_amounts, dup_class,
+               n_distinct_gross_amounts, n_positive_gross_amounts,
+               quantities_agree, gross_amounts_agree, dup_class,
                is_resolvable_conflict, dedup_rank),
     CASE
         WHEN dup_class = 'hard_dup' AND dedup_rank > 1 THEN 'reject_duplicate'
