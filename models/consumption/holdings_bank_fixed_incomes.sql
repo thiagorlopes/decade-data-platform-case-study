@@ -1,5 +1,5 @@
--- One row per holding per sync: admitted lots aggregated on the natural key.
--- Missing-identity lots use their investment_id as key and travel alone.
+-- One row per holding per sync: admitted investments aggregated on the natural key.
+-- Missing-identity investments use their own investment_id as key and travel alone.
 -- Cross-sync flags (zero_flap, id_handoff) need the holding-grain timeline,
 -- so they are computed here rather than in the intermediate layer.
 WITH admitted AS (

@@ -1,10 +1,10 @@
--- One row per lot (snapshot_id, investment_id), classified but never deleted.
+-- One row per investment (snapshot_id, investment_id), classified but never deleted.
 -- Pipeline: join detail+balances, repair within-record defects (notebook 02),
 -- derive the natural key from the REPAIRED columns, then classify duplicate
 -- groups within each sync (notebook 03). `admission` says what downstream may
 -- aggregate; rejected and quarantined rows stay here for audit.
 WITH joined AS (
-    -- FULL JOIN because some lots arrive with balances only (no detail payload).
+    -- FULL JOIN because some investments arrive with balances only (no detail payload).
     SELECT
         snapshot_id,
         investment_id,

@@ -52,62 +52,66 @@
     nullif({{ column }}, DATE '0001-01-01')
 {%- endmacro %}
 
-{# --- lot classification (notebook 03), shared by every int_*_positions model.
-   Consumes a `keyed` CTE with a `natural_key` column; emits `groups` and
-   `classified` CTEs plus the final SELECT that stamps `admission` and
+{# --- investment classification (notebook 03), shared by every int_*_positions model.
+   Consumes a `keyed` CTE with a `natural_key` column; emits `duplicate_groups`
+   and `classified` CTEs plus the final SELECT that stamps `admission` and
    `dq_flags`. `qty_col` names the quantity for partition detection (funds use
    `quota_quantity`). `extra_flags` is a list of (condition, label) pairs
    appended to dq_flags for family-specific missing-field signals. --- #}
 {% macro classify_and_admit(qty_col='quantity', extra_flags=[]) -%}
--- Duplicate groups: two or more investment_ids under one key in one sync.
-groups AS (
+-- A duplicate group is two or more investment_ids under one natural key in
+-- one sync. Most investments belong to no group and stay 'sole' below.
+duplicate_groups AS (
     SELECT
         snapshot_id,
         account_id,
         natural_key,
-        count(DISTINCT {{ qty_col }})            AS n_qty,
-        count(DISTINCT gross_amount)             AS n_gross,
-        count(*) FILTER (WHERE gross_amount > 0) AS n_live
+        count(DISTINCT {{ qty_col }})            AS n_distinct_quantities,
+        count(DISTINCT gross_amount)             AS n_distinct_gross_amounts,
+        -- live = has money; a zero-gross twin of a live investment is a fossil.
+        count(*) FILTER (WHERE gross_amount > 0) AS n_live_investments
     FROM keyed
     WHERE natural_key IS NOT NULL
     GROUP BY ALL
     HAVING count(DISTINCT investment_id) > 1
 ),
 
--- The notebook 03 §2 ladder: quantities differ = partition (real lots),
--- everything agrees = hard_dup (redundant copies), same quantity but gross
--- disagrees = conflict (one side is usually a frozen-zero fossil).
+-- Notebook 03 §2: 'partition' groups are genuinely separate investments,
+-- 'hard_dup' redundant copies of one, 'conflict' usually a live/fossil pair.
 classified AS (
     SELECT
         keyed.*,
-        CASE WHEN groups.n_qty IS NULL   THEN 'sole'
-             WHEN groups.n_qty > 1       THEN 'partition'
-             WHEN groups.n_gross <= 1    THEN 'hard_dup'
+        CASE WHEN dup.natural_key IS NULL            THEN 'sole'
+             WHEN dup.n_distinct_quantities > 1      THEN 'partition'
+             WHEN dup.n_distinct_gross_amounts <= 1  THEN 'hard_dup'
              ELSE 'conflict' END AS dup_class,
-        groups.n_live,
+        dup_class = 'conflict' AND dup.n_live_investments = 1 AS is_resolvable_conflict,
+        -- Rank 1 is the copy a hard_dup keeps: prefer a priced one, then
+        -- lowest investment_id for determinism.
         row_number() OVER (
             PARTITION BY keyed.snapshot_id, keyed.account_id, keyed.natural_key
             ORDER BY (keyed.gross_amount IS NULL), keyed.investment_id
         ) AS dedup_rank
     FROM keyed
-    LEFT JOIN groups
-        ON  keyed.snapshot_id = groups.snapshot_id
-        AND keyed.account_id  = groups.account_id
-        AND keyed.natural_key = groups.natural_key
+    LEFT JOIN duplicate_groups AS dup
+        ON  keyed.snapshot_id = dup.snapshot_id
+        AND keyed.account_id  = dup.account_id
+        AND keyed.natural_key = dup.natural_key
 )
 
 SELECT
-    * EXCLUDE (dup_class, n_live, dedup_rank),
+    * EXCLUDE (dup_class, is_resolvable_conflict, dedup_rank),
     CASE
         WHEN dup_class = 'hard_dup' AND dedup_rank > 1 THEN 'reject_duplicate'
-        WHEN dup_class = 'conflict' AND n_live = 1
+        WHEN is_resolvable_conflict
              AND coalesce(gross_amount, 0) = 0         THEN 'reject_fossil'
-        WHEN dup_class = 'conflict' AND n_live <> 1    THEN 'quarantine'
+        WHEN dup_class = 'conflict'
+             AND NOT is_resolvable_conflict            THEN 'quarantine'
         ELSE 'admit'
     END AS admission,
     list_filter([
         CASE WHEN natural_key IS NULL THEN 'missing_identity' END,
-        CASE WHEN dup_class = 'conflict' AND n_live = 1 AND gross_amount > 0
+        CASE WHEN is_resolvable_conflict AND gross_amount > 0
              THEN 'zero_conflict_resolved' END{% for cond, label in extra_flags %},
         CASE WHEN {{ cond }} THEN '{{ label }}' END{% endfor %}
     ], f -> f IS NOT NULL) AS dq_flags
@@ -117,7 +121,7 @@ FROM classified
 {# --- holdings cross-sync flags (shared by every holdings_*_family model).
    `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
    over the holding-grain window). `holding_dq_flags()` emits the final
-   dq_flags expression: prior lot flags unioned with the cross-sync
+   dq_flags expression: per-investment flags unioned with the cross-sync
    signals (merged_lots, zero_gross_lot, zero_flap, id_handoff). --- #}
 {% macro holding_timeline() -%}
 timeline AS (
@@ -127,7 +131,9 @@ timeline AS (
         lead(gross_amount)  OVER win AS next_gross,
         lag(quantity)       OVER win AS prev_qty,
         lead(quantity)      OVER win AS next_qty,
-        lag(investment_ids) OVER win AS prev_ids
+        lag(investment_ids) OVER win AS prev_ids,
+        len(list_filter(investment_ids, id -> NOT list_contains(prev_ids, id))) > 0 AS has_arrived_ids,
+        len(list_filter(prev_ids, id -> NOT list_contains(investment_ids, id))) > 0 AS has_departed_ids
     FROM holding
     WINDOW win AS (
         PARTITION BY account_id, holding_key
@@ -143,8 +149,7 @@ list_distinct(lot_flags || list_filter([
     CASE WHEN gross_amount = 0 AND prev_gross > 0 AND next_gross > 0
               AND quantity = prev_qty AND quantity = next_qty
          THEN 'zero_flap' END,
-    CASE WHEN len(list_filter(investment_ids, id -> NOT list_contains(prev_ids, id))) > 0
-          AND len(list_filter(prev_ids, id -> NOT list_contains(investment_ids, id))) > 0
-         THEN 'id_handoff' END
+    -- The provider reissued investment_ids for the same holding.
+    CASE WHEN has_arrived_ids AND has_departed_ids THEN 'id_handoff' END
 ], f -> f IS NOT NULL))
 {%- endmacro %}
