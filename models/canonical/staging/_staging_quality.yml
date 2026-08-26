@@ -710,6 +710,12 @@ models:
           values: [APLICACAO, RESGATE, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO,
                    VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
           config: *dq_warn_stored
+      # missing date in an epoch costume (Unix time zero): the transactions-side
+      # analogue of the 0001-01-01 sentinel on purchase_date
+      - dbt_utils.expression_is_true:
+          name: dq_bank_txn_date_not_epoch
+          expression: "transaction_date <> DATE '1970-01-01'"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -800,6 +806,10 @@ models:
           values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO, VENCIMENTO,
                    TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, MORA, MULTA, PREMIO, OUTROS]
           config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_credit_txn_date_not_epoch
+          expression: "transaction_date <> DATE '1970-01-01'"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -852,6 +862,10 @@ models:
       - accepted_values:
           column_name: transaction_type
           values: [APLICACAO, RESGATE, AMORTIZACAO, COME_COTAS, TRANSFERENCIA_COTAS, OUTROS]
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_funds_txn_conversion_date_not_epoch
+          expression: "transaction_conversion_date <> DATE '1970-01-01'"
           config: *dq_warn_stored
     columns:
       - *env_snapshot_id
@@ -917,6 +931,10 @@ models:
           values: [COMPRA, VENDA, CANCELAMENTO, PAGAMENTO_JUROS, AMORTIZACAO,
                    VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
           config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_txn_date_not_epoch
+          expression: "transaction_date <> DATE '1970-01-01'"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -969,6 +987,10 @@ models:
           column_name: transaction_type
           values: [COMPRA, VENDA, TRANSFERENCIA_CUSTODIA, TRANSFERENCIA_TITULARIDADE,
                    DIVIDENDOS, JCP, ALUGUEIS, OUTROS]
+          config: *dq_warn_stored
+      - dbt_utils.expression_is_true:
+          name: dq_variable_txn_date_not_epoch
+          expression: "transaction_date <> DATE '1970-01-01'"
           config: *dq_warn_stored
     columns:
       - *env_snapshot_id

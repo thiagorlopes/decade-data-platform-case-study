@@ -45,9 +45,10 @@
     CASE {{ column }} WHEN 'IPC-A' THEN 'IPCA' ELSE {{ column }} END
 {%- endmacro %}
 
-{# 0001-01-01 is .NET DateTime.MinValue: a missing date in a date costume. #}
+{# 0001-01-01 is .NET DateTime.MinValue and 1970-01-01 is Unix epoch zero:
+   missing dates in a date costume. #}
 {% macro clean_missing_date(column) -%}
-    nullif({{ column }}, DATE '0001-01-01')
+    CASE WHEN {{ column }} IN (DATE '0001-01-01', DATE '1970-01-01') THEN NULL ELSE {{ column }} END
 {%- endmacro %}
 
 {# --- Classify duplicate investment_ids per natural key and stamp each row
