@@ -115,7 +115,7 @@ How a consumer finds out which happened (§2.2's closing question):
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
 
-**State today**: DETECT, RESOLVE, and the cross-sync signals of GUARANTEE are all shipped inside `models/canonical/`. DETECT lives in `staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial. Analyst-facing consumption views (portfolio, movements) are a follow-up PR.
+**State today**: DETECT, RESOLVE, and the cross-sync signals of GUARANTEE are all shipped inside `models/canonical/`. DETECT lives in `staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial. GUARANTEE ships in `models/consumption/`: `fct_holdings` and `fct_movements` union the five families into one conformed shape each, with dbt contracts enforced (build fails on column or type drift) and grain tests at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
 #### Admission at a glance
 
@@ -139,6 +139,34 @@ Quarantined lots live in `int_*_positions` with `admission = 'quarantine'`: the 
    - **Provider defect**: neither feed explains it. Escalate to the institution with the staging warn tests as corroborating evidence.
 3. **Meanwhile, the consumer is protected by construction.** Quarantined lots never reach `int_*_holdings`, so the wealth page under-counts one holding rather than fabricating a number. This is a deliberate product stance: when valuations conflict irreconcilably, a conservative omission beats a made-up value, and the omission is discoverable in the positions table.
 
+#### Beyond the listed defects
+
+The brief warns that "an institution respecting [the spec] is a hope, not a guarantee," so the §2.2 list is treated as illustrative, not exhaustive. Two audits ran against the built warehouse:
+
+**Listed classes seeded in unlisted costumes** — the case authors dressed the announced defect classes in forms the brief doesn't name. Handled in the intermediate layer's repair macros; the raw counts stay visible via the staging warn tests.
+
+| Costume | Class it belongs to | Where handled | Raw count |
+|---|---|---|---|
+| `0001-01-01` sentinel dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | 1 951 |
+| Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | see warn tests |
+| `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | 2 |
+| `1970-01-01` sentinel dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` + `missing:transaction_date` flag on `fct_movements` | 3 001 |
+| CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | 1 370 |
+
+**Unlisted classes probed, all zero hits** — nine classes the brief doesn't name and the sample doesn't contain. Zero hits is evidence the seeding stuck to the announced classes, not proof of absence in production. In production these would become warn tests in `_staging_quality.yml`; the sample doesn't warrant permanent tripwires for data that demonstrably isn't there.
+
+| Probe | Rationale |
+|---|---|
+| Same `transaction_id`, conflicting `transaction_amount` | Transactions-side analogue of the redundant-copies defect |
+| Negative `transaction_amount` or `gross_amount` | Sign errors on values the domain treats as positive |
+| Transaction dated after its own snapshot | Envelope violation: the payload references a future the snapshot can't see |
+| Holding switching currency between syncs | Cross-sync contradiction not covered by zero-flap |
+| Holding dropout (present, absent one sync, present again) | Missing-row cousin of zero_flap; the provider drops the row instead of zeroing it |
+| Zero quantity with positive gross_amount | Mirror of the zero-flap defect at a single row |
+| Quantity change with no transaction behind it | Cross-feed reconciliation: positions and transactions disagreeing on a movement |
+
+Quantities never move in the sample, so the last probe is also a modeling finding: every seeded across-record defect keys on "quantity unchanged" precisely because quantity is the invariant the sample offers.
+
 ### Materializations
 
 Layer materializations follow dbt Labs' guidance — [staging as views](https://docs.getdbt.com/best-practices/how-we-structure/2-staging) and the general progression from the [materializations best practices](https://docs.getdbt.com/best-practices/materializations/1-guide-overview): *"Start with a view. When the view gets too long to query for end users, make it a table. When the table gets too long to build, build it incrementally."*
@@ -148,6 +176,7 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
 | intermediate (positions) | incremental | Only records past the watermark (`ingested_at`, the arrival time) are processed each run; `unique_key (snapshot_id, investment_id)` makes re-deliveries an upsert and repeated runs idempotent. Late records still land because the watermark is on arrival, not event time. Replay after a transform fix: `dbt build --full-refresh`. |
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; promote to table per the progression above if the timeline outgrows a view. |
+| consumption | table | Contract-enforced union of the five families, read by every consumer and by ad-hoc queries: worth the storage so the guarantee layer is a physical artifact, not a query plan. |
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 

@@ -57,6 +57,13 @@ make sense once lots are aggregated by natural key):
 - `id_handoff`: the holding's contributing investment_ids changed across
   syncs (a lot re-issued under a new provider id). The natural key is
   stable; the id set is not.
+
+Movement-grain, added in fct_movements:
+
+- `missing:transaction_date`: the provider sent no usable movement date
+  (NULL, or a sentinel: `0001-01-01` .NET MinValue, `1970-01-01` Unix
+  epoch zero). The date is NULL; the movement still counts toward totals
+  but cannot be placed on a timeline.
 {% enddocs %}
 
 {% docs stg_contract %}
