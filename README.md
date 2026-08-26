@@ -10,6 +10,7 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Development cycle](#development-cycle)**<br>
 **[Browsing the data model](#browsing-the-data-model)**<br>
 **[Consumers](#consumers)**<br>
+**[Contracts](#contracts)**<br>
 
 ## General Information
 
@@ -76,7 +77,24 @@ The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL
 | `9e22a589...` | Flagged: `merged_lots` and `missing_key` visible in the current portfolio, resolved duplicates behind them. |
 | `11cc5703...` | A `zero_flap` glitch in its history (on the affected sync in `fct_holdings`; the current snapshot shows `merged_lots` and `zero_gross_lot`), plus movements flagged `missing:transaction_date`. |
 
-Rerun with your own customers: `make wealth WEALTH_PARTIES="<uuid> <uuid>"`. A new consumer lands the same way: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`models/consumption/_consumption.yml`](models/consumption/_consumption.yml).
+Rerun with your own customers: `make wealth WEALTH_PARTIES="<uuid> <uuid>"`. A new consumer lands the same way: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
+
+## Contracts
+
+The executable contract artifacts are dbt `schema.yml` files. [`contracts/`](contracts/) is declared as a dbt model path in `dbt_project.yml`, so dbt parses and enforces its contents like anything under `models/`:
+
+- [`contracts/_consumption.yml`](contracts/_consumption.yml): the output contract for `fct_holdings` and `fct_movements`, plus grain and enum tests at error severity.
+- The per-family canonical contracts live next to their models in [`models/canonical/_canonical.yml`](models/canonical/_canonical.yml), and the within-record quality rules (the warn-severity DETECT tier) in [`models/canonical/staging/_staging_quality.yml`](models/canonical/staging/_staging_quality.yml).
+
+### What `contract: enforced` guarantees
+
+On every `dbt build`, before materializing, dbt compares the compiled output of `fct_holdings` and `fct_movements` against the columns declared in `contracts/_consumption.yml`. Any drift kills the build, so the bad table never exists for a consumer to read:
+
+- a column is **renamed or dropped**: build fails (missing from the contract's column set)
+- a column's **type changes** (e.g. an amount silently becomes `varchar`): build fails
+- a **new column appears** without being declared: build fails
+
+The consequence for consumers: whatever `make build` produced is guaranteed to match the contract file. A team can develop against the declared columns and types without talking to the platform team, and a platform-side refactor can never break a consumer silently; it either preserves the contract or is forced to change the contract file in the same PR, which is the review signal.
 
 ## Target Architecture & Environments
 
