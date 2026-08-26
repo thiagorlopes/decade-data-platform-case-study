@@ -27,8 +27,7 @@ SELECT
     transaction_net_amount,
     remuneration_rate,
     indexer_percentage,
-    transaction_id,
-    count(*) OVER (PARTITION BY transaction_id) AS n_copies
+    transaction_id
 FROM {{ ref('stg_openfinance__bank_fixed_incomes_transactions') }}
 {% if is_incremental() %}
 -- watermark rationale: README § Materializations

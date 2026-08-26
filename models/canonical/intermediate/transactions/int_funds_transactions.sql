@@ -27,8 +27,7 @@ SELECT
     income_tax_amount,
     financial_transaction_tax_amount,
     transaction_exit_fee,
-    transaction_net_amount,
-    count(*) OVER (PARTITION BY transaction_id) AS n_copies
+    transaction_net_amount
 FROM {{ ref('stg_openfinance__funds_transactions') }}
 {% if is_incremental() %}
 -- watermark rationale: README § Materializations

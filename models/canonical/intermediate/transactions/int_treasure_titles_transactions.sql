@@ -26,8 +26,7 @@ SELECT
     financial_transaction_tax_amount,
     transaction_net_amount,
     remuneration_rate,
-    transaction_id,
-    count(*) OVER (PARTITION BY transaction_id) AS n_copies
+    transaction_id
 FROM {{ ref('stg_openfinance__treasure_titles_transactions') }}
 {% if is_incremental() %}
 -- watermark rationale: README § Materializations

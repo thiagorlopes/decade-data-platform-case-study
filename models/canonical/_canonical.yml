@@ -472,12 +472,6 @@ models:
         name: transaction_id
         description: '{{ doc("ofb_transaction_id") }}'
         data_tests: [unique, not_null]
-      - &c_n_copies
-        name: n_copies
-        description: >-
-          Number of byte-identical copies of this transaction seen in staging
-          across sync re-deliveries; the intermediate keeps one. Filter n_copies > 1
-          for transactions that were re-delivered.
 
   - name: int_credit_fixed_incomes_transactions
     description: >
@@ -509,7 +503,6 @@ models:
       - *c_remuneration_rate
       - *c_indexer_percentage
       - *c_transaction_id
-      - *c_n_copies
 
   - name: int_treasure_titles_transactions
     description: >
@@ -540,7 +533,6 @@ models:
       - *c_transaction_net_amount
       - *c_remuneration_rate
       - *c_transaction_id
-      - *c_n_copies
 
   - name: int_funds_transactions
     description: >
@@ -578,7 +570,6 @@ models:
       - name: transaction_exit_fee
         description: '{{ doc("ofb_transaction_exit_fee") }}'
       - *c_transaction_net_amount
-      - *c_n_copies
 
   - name: int_variable_incomes_transactions
     description: >
@@ -609,7 +600,6 @@ models:
       - *c_transaction_id
       - name: broker_note_id
         description: '{{ doc("ofb_broker_note_id") }}'
-      - *c_n_copies
 
 # Holdings sub-layer: one row per (snapshot_id, account_id, holding_key),
 # admitted lots summed on the natural key. Views over the incremental

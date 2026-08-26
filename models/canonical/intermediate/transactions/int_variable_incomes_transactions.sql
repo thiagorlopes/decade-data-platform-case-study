@@ -25,8 +25,7 @@ SELECT
     transaction_amount,
     transaction_amount_currency AS currency,
     transaction_id,
-    broker_note_id,
-    count(*) OVER (PARTITION BY transaction_id) AS n_copies
+    broker_note_id
 FROM {{ ref('stg_openfinance__variable_incomes_transactions') }}
 {% if is_incremental() %}
 -- watermark rationale: README § Materializations
