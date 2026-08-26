@@ -68,9 +68,8 @@
    data_quality_flags — used for missing-field signals like ('indexer IS NULL',
    'missing:indexer'). --- #}
 {% macro resolve_duplicate_investments(qty_col='quantity', extra_flags=[]) -%}
--- A duplicate group is two or more investment_ids under one natural key in
--- one sync. Rows with a NULL natural_key are excluded here (can't be grouped
--- by an identifier that isn't there) and are handled by the classifier below.
+-- Step 1: find the duplicate groups. A duplicate group is one natural key
+-- held by two or more investment_ids within the same sync.
 duplicate_groups AS (
     SELECT
         snapshot_id,
@@ -85,36 +84,46 @@ duplicate_groups AS (
     HAVING count(DISTINCT investment_id) > 1
 ),
 
--- Notebook 03 §2 ladder, read top to bottom:
---   no natural key           -> we cannot check for duplicates ('missing_identity')
---   key not in a group       -> unique in the sync             ('no_duplicate')
---   quantities differ        -> genuinely separate investments ('partition')
---   quantities agree + gross agrees -> redundant copies        ('hard_dup')
---   quantities agree + gross differs -> same position, two valuations ('conflict')
-classified AS (
+-- Step 2: hand each investment the stats of its duplicate group.
+-- Investments in no group (unique key, or no key at all) get NULL stats.
+with_group_stats AS (
     SELECT
         keyed.*,
-        CASE WHEN keyed.natural_key IS NULL          THEN 'missing_identity'
-             WHEN dup.natural_key IS NULL            THEN 'no_duplicate'
-             WHEN dup.n_distinct_quantities > 1      THEN 'partition'
-             WHEN dup.n_distinct_gross_amounts <= 1  THEN 'hard_dup'
-             ELSE 'conflict' END AS dup_class,
-        dup_class = 'conflict' AND dup.n_positive_gross_amounts = 1 AS is_resolvable_conflict,
-        -- Rank 1 is the copy a hard_dup keeps: prefer a priced one, then
-        -- lowest investment_id for determinism.
-        row_number() OVER (
-            PARTITION BY keyed.snapshot_id, keyed.account_id, keyed.natural_key
-            ORDER BY (keyed.gross_amount IS NULL), keyed.investment_id
-        ) AS dedup_rank
+        dup.natural_key IS NOT NULL AS in_duplicate_group,
+        dup.n_distinct_quantities,
+        dup.n_distinct_gross_amounts,
+        dup.n_positive_gross_amounts
     FROM keyed
     LEFT JOIN duplicate_groups AS dup
         ON  keyed.snapshot_id = dup.snapshot_id
         AND keyed.account_id  = dup.account_id
         AND keyed.natural_key = dup.natural_key
+),
+
+-- Step 3: classify each investment (notebook 03 §2).
+classified AS (
+    SELECT
+        *,
+        CASE WHEN natural_key IS NULL           THEN 'missing_identity' -- no key, cannot check for duplicates
+             WHEN NOT in_duplicate_group        THEN 'no_duplicate'
+             WHEN n_distinct_quantities > 1     THEN 'partition'        -- genuinely separate investments
+             WHEN n_distinct_gross_amounts <= 1 THEN 'hard_dup'         -- redundant copies of one
+             ELSE 'conflict'                                            -- same quantity, gross disagrees
+        END AS dup_class,
+        dup_class = 'conflict' AND n_positive_gross_amounts = 1 AS is_resolvable_conflict,
+        -- Rank 1 is the copy a hard_dup keeps: prefer a priced one, then
+        -- lowest investment_id for determinism.
+        row_number() OVER (
+            PARTITION BY snapshot_id, account_id, natural_key
+            ORDER BY (gross_amount IS NULL), investment_id
+        ) AS dedup_rank
+    FROM with_group_stats
 )
 
+-- Step 4: the admission verdict, plus the defect flags.
 SELECT
-    * EXCLUDE (dup_class, is_resolvable_conflict, dedup_rank),
+    * EXCLUDE (in_duplicate_group, n_distinct_quantities, n_distinct_gross_amounts,
+               n_positive_gross_amounts, dup_class, is_resolvable_conflict, dedup_rank),
     CASE
         WHEN dup_class = 'hard_dup' AND dedup_rank > 1 THEN 'reject_duplicate'
         WHEN is_resolvable_conflict
