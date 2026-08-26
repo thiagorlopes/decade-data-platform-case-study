@@ -140,39 +140,3 @@ SELECT
     ], f -> f IS NOT NULL) AS data_quality_flags
 FROM classified
 {%- endmacro %}
-
-{# --- holdings cross-sync flags (shared by every holdings_*_family model).
-   `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
-   over the holding-grain window). `holding_data_quality_flags()` emits the final
-   data_quality_flags expression: per-investment flags unioned with the cross-sync
-   signals (merged_lots, zero_gross_lot, zero_flap, id_handoff). --- #}
-{% macro holding_timeline() -%}
-timeline AS (
-    SELECT
-        *,
-        lag(gross_amount)   OVER win AS prev_gross,
-        lead(gross_amount)  OVER win AS next_gross,
-        lag(quantity)       OVER win AS prev_qty,
-        lead(quantity)      OVER win AS next_qty,
-        lag(investment_ids) OVER win AS prev_ids,
-        len(list_filter(investment_ids, id -> NOT list_contains(prev_ids, id))) > 0 AS has_arrived_ids,
-        len(list_filter(prev_ids, id -> NOT list_contains(investment_ids, id))) > 0 AS has_departed_ids
-    FROM holding
-    WINDOW win AS (
-        PARTITION BY account_id, holding_key
-        ORDER BY snapshot_created_at, snapshot_id
-    )
-)
-{%- endmacro %}
-
-{% macro holding_data_quality_flags() -%}
-list_distinct(lot_flags || list_filter([
-    CASE WHEN n_lots > 1 THEN 'merged_lots' END,
-    CASE WHEN n_lots > 1 AND has_zero_lot THEN 'zero_gross_lot' END,
-    CASE WHEN gross_amount = 0 AND prev_gross > 0 AND next_gross > 0
-              AND quantity = prev_qty AND quantity = next_qty
-         THEN 'zero_flap' END,
-    -- The provider reissued investment_ids for the same holding.
-    CASE WHEN has_arrived_ids AND has_departed_ids THEN 'id_handoff' END
-], f -> f IS NOT NULL))
-{%- endmacro %}
