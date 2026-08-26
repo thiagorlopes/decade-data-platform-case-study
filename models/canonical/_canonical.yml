@@ -6,7 +6,7 @@ version: 2
 # max of the two, and drives the incremental watermark.
 #
 # The layer also repairs within-record defects (cnpj decimal tails, the
-# IPC-A enum spelling, the 0001-01-01 sentinel date; notebook 02), derives
+# IPC-A enum spelling, the 0001-01-01 fake-when-missing date; notebook 02), derives
 # each family's natural key from the repaired columns, and classifies
 # duplicate groups within each sync (notebook 03) into `admission` and
 # `dq_flags`. Rows are classified, never deleted: consumers filter

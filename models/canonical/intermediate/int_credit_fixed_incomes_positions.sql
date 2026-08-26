@@ -56,7 +56,7 @@ repaired AS (
         {{ clean_cnpj('issuer_cnpj') }}        AS issuer_cnpj,
         {{ clean_cnpj('debtor_cnpj') }}        AS debtor_cnpj,
         {{ clean_indexer('indexer') }}         AS indexer,
-        {{ desentinel_date('purchase_date') }} AS purchase_date
+        {{ clean_missing_date('purchase_date') }} AS purchase_date
     )
     FROM joined
 ),

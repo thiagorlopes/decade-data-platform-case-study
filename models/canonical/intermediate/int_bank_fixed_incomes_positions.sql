@@ -53,7 +53,7 @@ repaired AS (
     SELECT * REPLACE (
         {{ clean_cnpj('issuer_cnpj') }}        AS issuer_cnpj,
         {{ clean_indexer('indexer') }}         AS indexer,
-        {{ desentinel_date('purchase_date') }} AS purchase_date
+        {{ clean_missing_date('purchase_date') }} AS purchase_date
     )
     FROM joined
 ),

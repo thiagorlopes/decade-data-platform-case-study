@@ -116,11 +116,13 @@ Do not join on this column raw.
 {% enddocs %}
 
 {% docs stg_purchase_date_sentinel %}
-Providers send the sentinel `0001-01-01` (.NET `DateTime.MinValue`) when the
-real purchase date is unknown: it looks like a valid date but means
-"missing". Flagged by the `*_purchase_date_not_sentinel` warn test; treat it
-as NULL, never as a real date. Real values must fall between `issue_date`
-and `due_date` (warn tests).
+Some providers send `0001-01-01` when they do not know the real purchase
+date — a fake date that means "missing". It looks like a valid date, so
+downstream code that treats it as one silently corrupts date ranges and
+sort orders. Staging leaves it as-is and flags it via the
+`*_purchase_date_not_sentinel` warn test; the intermediate layer nulls it
+out (`clean_missing_date`). Treat as NULL, never as a real date. Real
+values must fall between `issue_date` and `due_date` (warn tests).
 {% enddocs %}
 
 {% docs stg_isin_format %}

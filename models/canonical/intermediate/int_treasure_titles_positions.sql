@@ -46,7 +46,7 @@ WITH joined AS (
 repaired AS (
     SELECT * REPLACE (
         {{ clean_indexer('indexer') }}         AS indexer,
-        {{ desentinel_date('purchase_date') }} AS purchase_date
+        {{ clean_missing_date('purchase_date') }} AS purchase_date
     )
     FROM joined
 ),

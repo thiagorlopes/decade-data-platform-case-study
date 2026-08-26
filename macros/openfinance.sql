@@ -48,7 +48,7 @@
 {%- endmacro %}
 
 {# 0001-01-01 is .NET DateTime.MinValue: a missing date in a date costume. #}
-{% macro desentinel_date(column) -%}
+{% macro clean_missing_date(column) -%}
     nullif({{ column }}, DATE '0001-01-01')
 {%- endmacro %}
 
