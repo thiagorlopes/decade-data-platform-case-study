@@ -60,8 +60,6 @@ keyed AS (
 ),
 
 -- Duplicate groups: two or more investment_ids under one key in one sync.
--- ponytail: group stats assume a snapshot never straddles two incremental
--- batches (ingestion writes snapshots atomically); revisit if that changes.
 groups AS (
     SELECT
         snapshot_id,
