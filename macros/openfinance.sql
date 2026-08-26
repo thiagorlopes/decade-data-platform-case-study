@@ -28,8 +28,7 @@
    so the staging warn tests keep counting the raw defects. --- #}
 
 {# Used on the columns that feed natural keys (isin, ticker, product_name):
-   a blank string passes IS NOT NULL and would silently fragment those keys.
-   CNPJ columns get this for free from clean_cnpj. #}
+   a blank string passes IS NOT NULL and would silently fragment those keys. #}
 {% macro blank_to_null(column) -%}
     nullif(trim({{ column }}), '')
 {%- endmacro %}
