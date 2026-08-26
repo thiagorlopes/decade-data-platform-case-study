@@ -34,7 +34,7 @@ needing to know the SQL that produced it.
 
 Lot-grain, added in int_*_positions:
 
-- `missing_identity`: natural key could not be derived from the repaired
+- `missing_key`: natural key could not be derived from the repaired
   columns. The row travels alone at investment_id grain, never merged.
 - `zero_conflict_resolved`: the classifier kept this live row and rejected
   a zero-valued sibling in the same sync (see `reject_fossil` in

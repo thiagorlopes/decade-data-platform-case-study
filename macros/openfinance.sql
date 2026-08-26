@@ -89,7 +89,7 @@ duplicate_groups AS (
 with_group_stats AS (
     SELECT
         keyed.*,
-        dup.natural_key IS NOT NULL AS in_duplicate_group,
+        dup.natural_key IS NOT NULL AS is_in_duplicate_group,
         dup.n_distinct_quantities,
         dup.n_distinct_gross_amounts,
         dup.n_positive_gross_amounts
@@ -104,8 +104,8 @@ with_group_stats AS (
 classified AS (
     SELECT
         *,
-        CASE WHEN natural_key IS NULL           THEN 'missing_identity' -- no key, cannot check for duplicates
-             WHEN NOT in_duplicate_group        THEN 'no_duplicate'
+        CASE WHEN natural_key IS NULL           THEN 'missing_key' -- no key, cannot check for duplicates
+             WHEN NOT is_in_duplicate_group        THEN 'no_duplicate'
              WHEN n_distinct_quantities > 1     THEN 'partition'        -- genuinely separate investments
              WHEN n_distinct_gross_amounts <= 1 THEN 'hard_dup'         -- redundant copies of one
              ELSE 'conflict'                                            -- same quantity, gross disagrees
@@ -122,7 +122,7 @@ classified AS (
 
 -- Step 4: the admission verdict, plus the defect flags.
 SELECT
-    * EXCLUDE (in_duplicate_group, n_distinct_quantities, n_distinct_gross_amounts,
+    * EXCLUDE (is_in_duplicate_group, n_distinct_quantities, n_distinct_gross_amounts,
                n_positive_gross_amounts, dup_class, is_resolvable_conflict, dedup_rank),
     CASE
         WHEN dup_class = 'hard_dup' AND dedup_rank > 1 THEN 'reject_duplicate'
@@ -133,7 +133,7 @@ SELECT
         ELSE 'admit'
     END AS admission,
     list_filter([
-        CASE WHEN natural_key IS NULL THEN 'missing_identity' END,
+        CASE WHEN natural_key IS NULL THEN 'missing_key' END,
         CASE WHEN is_resolvable_conflict AND gross_amount > 0
              THEN 'zero_conflict_resolved' END{% for cond, label in extra_flags %},
         CASE WHEN {{ cond }} THEN '{{ label }}' END{% endfor %}

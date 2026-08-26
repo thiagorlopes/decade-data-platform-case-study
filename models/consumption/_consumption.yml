@@ -45,7 +45,7 @@ models:
     description: >
       Credit fixed income holdings per sync, keyed by
       (isin_code, debtor_cnpj, due_date). Rows missing identity fields keep
-      their investment_id as holding_key and carry the missing_identity flag.
+      their investment_id as holding_key and carry the missing_key flag.
     data_tests: *holding_grain
     columns: *holding_dq_columns
 
