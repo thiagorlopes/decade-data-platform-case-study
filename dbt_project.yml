@@ -14,5 +14,8 @@ models:
       +unique_key: [snapshot_id, investment_id]
       staging:
         +materialized: view
-    consumption:
-      +materialized: view
+      intermediate:
+        holdings:
+          # view, not incremental: zero_flap/id_handoff lag over the full
+          # timeline of the incremental positions tables
+          +materialized: view

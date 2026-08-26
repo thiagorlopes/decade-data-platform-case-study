@@ -2,7 +2,62 @@
 # Descriptions and enum values come from the Open Finance Brasil investment API specs
 # (see the header of each staging model for the exact spec file and line anchors).
 # Blocks prefixed `ofb_` describe provider payload fields; blocks prefixed
-# `stg_` describe our envelope columns and staging conventions.
+# `stg_` describe our envelope columns and staging conventions. Blocks prefixed
+# `dq_` describe the data-quality contract carried on every intermediate and
+# consumption row (see README §Data quality for the narrative).
+
+{% docs dq_admission %}
+What downstream may do with each lot. The intermediate layer classifies but
+never deletes: rejected and quarantined rows stay in the int_*_positions
+tables for audit.
+
+- `admit`: aggregate into holdings. This is what the consumption layer
+  filters on.
+- `reject_duplicate`: redundant copy of a hard duplicate (all measures
+  agree under one natural key). One row per group is kept as `admit`; the
+  rest carry this label so consumers ignore them without losing the audit
+  trail.
+- `reject_fossil`: same-sync conflict where exactly one side is a frozen
+  zero-valued row. The zero side gets this label; the live side is
+  admitted and flagged `zero_conflict_resolved`.
+- `quarantine`: same-sync conflict with no single live row to pick.
+  Neither side is safe to aggregate automatically. Rows stay in
+  `int_*_positions` for audit; the holdings views drop them so consumers
+  under-count rather than fabricate a number. See README §Quarantine runbook.
+{% enddocs %}
+
+{% docs data_quality_flags %}
+Row-level warnings the lot or holding was admitted with. Empty list means
+clean. Each flag names a specific defect or resolution applied, so a
+consumer can filter on the presence or absence of a class of issue without
+needing to know the SQL that produced it.
+
+Lot-grain, added in int_*_positions:
+
+- `missing_key`: natural key could not be derived from the repaired
+  columns. The row travels alone at investment_id grain, never merged.
+- `zero_conflict_resolved`: the classifier kept this live row and rejected
+  a zero-valued sibling in the same sync (see `reject_fossil` in
+  admission). Presence of this flag means the holding's number is stable
+  even though the raw feed disagreed.
+- `missing:<column>` (e.g. `missing:indexer`, `missing:gross_amount`):
+  non-repairable NULL in a column the OFB spec marks required, when the
+  column is not already covered by `missing_key`. The per-family list is
+  the `extra_flags` argument of each int_*_positions model.
+
+Holding-grain, added in int_*_holdings (cross-sync signals that only
+make sense once lots are aggregated by natural key):
+
+- `merged_lots`: two or more admitted lots aggregated under one holding.
+- `zero_gross_lot`: a merged holding contains at least one lot with
+  gross_amount = 0 alongside a live lot.
+- `zero_flap`: the holding's gross flipped 0 → nonzero across consecutive
+  syncs with quantity unchanged — a transient provider glitch, not a
+  real trade or valuation change.
+- `id_handoff`: the holding's contributing investment_ids changed across
+  syncs (a lot re-issued under a new provider id). The natural key is
+  stable; the id set is not.
+{% enddocs %}
 
 {% docs stg_contract %}
 Staging is a 1:1 flatten of the verbatim provider payload into typed columns
@@ -63,11 +118,13 @@ Do not join on this column raw.
 {% enddocs %}
 
 {% docs stg_purchase_date_sentinel %}
-Providers send the sentinel `0001-01-01` (.NET `DateTime.MinValue`) when the
-real purchase date is unknown: it looks like a valid date but means
-"missing". Flagged by the `*_purchase_date_not_sentinel` warn test; treat it
-as NULL, never as a real date. Real values must fall between `issue_date`
-and `due_date` (warn tests).
+Some providers send `0001-01-01` when they do not know the real purchase
+date — a fake date that means "missing". It looks like a valid date, so
+downstream code that treats it as one silently corrupts date ranges and
+sort orders. Staging leaves it as-is and flags it via the
+`*_purchase_date_not_sentinel` warn test; the intermediate layer nulls it
+out (`clean_missing_date`). Treat as NULL, never as a real date. Real
+values must fall between `issue_date` and `due_date` (warn tests).
 {% enddocs %}
 
 {% docs stg_isin_format %}
