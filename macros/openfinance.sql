@@ -74,7 +74,7 @@ duplicate_groups AS (
         snapshot_id,
         account_id,
         natural_key,
-        count(*)                                 AS n_group_rows,
+        count(*)                          =  2   AS is_pair,
         count(DISTINCT {{ qty_col }})    <= 1    AS quantities_agree,
         count(DISTINCT gross_amount)     <= 1    AS gross_amounts_agree,
         count(*) FILTER (WHERE gross_amount > 0) AS n_positive_gross_amounts
@@ -90,7 +90,7 @@ with_group_stats AS (
     SELECT
         with_natural_key.*,
         dup.natural_key IS NOT NULL AS is_in_duplicate_group,
-        dup.n_group_rows,
+        dup.is_pair,
         dup.quantities_agree,
         dup.gross_amounts_agree,
         dup.n_positive_gross_amounts
@@ -106,15 +106,15 @@ classified AS (
     SELECT
         *,
         CASE WHEN natural_key IS NULL           THEN 'missing_key'  -- no key, cannot check for duplicates
-             WHEN NOT is_in_duplicate_group     THEN 'no_duplicate'
-             WHEN NOT quantities_agree          THEN 'separate_lots'     -- genuinely separate investments
-             WHEN gross_amounts_agree           THEN 'redundant_copies'  -- of the same investment
+             WHEN NOT is_in_duplicate_group     THEN 'sole_lot'
+             WHEN NOT quantities_agree          THEN 'separate_lots'
+             WHEN gross_amounts_agree           THEN 'redundant_copies'
              ELSE 'conflict'                                        -- same quantity, gross disagrees
         END AS dup_class,
         -- The exact shape notebook 03 §3 asserts before resolving: a pair,
         -- one positive side, shared positive quantity. Anything else quarantines.
         dup_class = 'conflict'
-            AND n_group_rows = 2
+            AND is_pair
             AND n_positive_gross_amounts = 1
             AND coalesce({{ qty_col }}, 0) > 0 AS is_resolvable_conflict,
         -- Rank 1 is the copy redundant_copies keeps: prefer a priced one,
@@ -128,7 +128,7 @@ classified AS (
 
 -- Step 4: the admission verdict, plus the defect flags.
 SELECT
-    * EXCLUDE (is_in_duplicate_group, n_group_rows, quantities_agree,
+    * EXCLUDE (is_in_duplicate_group, is_pair, quantities_agree,
                gross_amounts_agree, n_positive_gross_amounts, dup_class,
                is_resolvable_conflict, dedup_rank),
     CASE
