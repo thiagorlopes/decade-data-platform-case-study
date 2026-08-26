@@ -52,11 +52,11 @@ models:
       # a real-looking date costume. Named explicitly so it doesn't leak
       # into the cross-field rules below as a false positive.
       - dbt_utils.expression_is_true:
-          name: dq_bank_detail_purchase_date_not_sentinel
+          name: dq_bank_detail_purchase_date_not_placeholder
           expression: "purchase_date <> DATE '0001-01-01'"
           config: *dq_warn_stored
-      # cross-field date ordering. sentinel rows excluded so they don't
-      # double-warn: they belong to the dedicated sentinel check above.
+      # cross-field date ordering. placeholder rows excluded so they don't
+      # double-warn: they belong to the dedicated placeholder check above.
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_purchase_after_issue
           expression: "purchase_date = DATE '0001-01-01' OR purchase_date >= issue_date"
@@ -196,7 +196,7 @@ models:
         description: '{{ doc("ofb_clearing_code") }}'
       - &col_purchase_date_req
         name: purchase_date
-        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_sentinel") }}'
+        description: '{{ doc("ofb_purchase_date") }} {{ doc("stg_purchase_date_placeholder") }}'
         data_tests:
           - not_null: {config: *dq_warn_stored}
       - name: grace_period_date
@@ -219,7 +219,7 @@ models:
           expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
           config: *dq_warn_stored
       - dbt_utils.expression_is_true:
-          name: dq_credit_detail_purchase_date_not_sentinel
+          name: dq_credit_detail_purchase_date_not_placeholder
           expression: "purchase_date <> DATE '0001-01-01'"
           config: *dq_warn_stored
       - dbt_utils.expression_is_true:
@@ -360,7 +360,7 @@ models:
     data_tests:
       - *lot_grain
       - dbt_utils.expression_is_true:
-          name: dq_treasure_detail_purchase_date_not_sentinel
+          name: dq_treasure_detail_purchase_date_not_placeholder
           expression: "purchase_date <> DATE '0001-01-01'"
           config: *dq_warn_stored
       - dbt_utils.expression_is_true:
@@ -711,7 +711,7 @@ models:
                    VENCIMENTO, TRANSFERENCIA_TITULARIDADE, TRANSFERENCIA_CUSTODIA, OUTROS]
           config: *dq_warn_stored
       # missing date in an epoch costume (Unix time zero): the transactions-side
-      # analogue of the 0001-01-01 sentinel on purchase_date
+      # analogue of the 0001-01-01 placeholder on purchase_date
       - dbt_utils.expression_is_true:
           name: dq_bank_txn_date_not_epoch
           expression: "transaction_date <> DATE '1970-01-01'"
