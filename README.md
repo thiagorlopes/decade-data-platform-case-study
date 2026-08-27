@@ -9,19 +9,22 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Installation](#installation)**<br>
 **[Development cycle](#development-cycle)**<br>
 **[Browsing the data model](#browsing-the-data-model)**<br>
+**[Contracts](#contracts)**<br>
 
 ## General Information
 
-Lorem ipsum
+This repo turns Open Finance Brasil investment snapshots into two consumption-ready fact tables (`fct_holdings`, `fct_movements`) using dbt on DuckDB. Raw parquet lands in `data/`, dbt transforms it through staging, intermediate, and consumption layers, and enforced contracts guarantee the output shape.
+
+For architecture and design rationale, see [Target Architecture & Environments](#target-architecture--environments) and [Data quality: detect, resolve, guarantee](#data-quality-detect-resolve-guarantee) below.
 
 ## Prerequisites
 
-- Docker Engine + Docker Compose v2
-- `make`, `git`
+- Docker Engine with Docker Compose v2
+- `make` and `git`
 
-Everything the pipeline needs (Python, dbt, DuckDB CLI) is bundled inside the image. No host-side Python setup required.
+The docker image ships Python, dbt, and the DuckDB CLI. You don't need a host-side Python install to run the pipeline.
 
-Notebook exploration (`notebooks/`) uses jupyterlab + pandas + pyarrow. Those are dev-only and kept out of the image. Install them into a local venv if you need to re-run the notebook:
+Notebooks under `notebooks/` are dev-only and stay out of the image. To re-run them, install the deps into a local venv:
 
 ```bash
 pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
@@ -30,34 +33,53 @@ pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
 ## Installation
 
 ```bash
-make install     # builds the docker image
+make install     # build the docker image
 ```
 
 ## Development cycle
 
-After `make install`, the loop when editing models or tests:
+After `make install`, use these targets to iterate:
 
-```bash
-make check       # smoke test the wiring: list declared dbt sources
-make parse       # validate project config (fast, no warehouse writes)
-make build       # run all dbt models and tests
-make test        # re-run tests only against the current warehouse
-make shell       # open duckdb CLI on the warehouse (inside container)
-make clean       # wipe warehouse and dbt artifacts if state gets stuck
-make help        # list all targets
-```
+| Command | What it does |
+|---|---|
+| `make build` | Run models + tests. The safe default. |
+| `make run` | Run models only. Faster when you know tests will pass. |
+| `make test` | Run tests against the current warehouse. No rebuild. |
+| `make docs` | Regenerate the docs catalog and serve at http://localhost:8080. |
+| `make refresh` | `build` + `docs` in one shot. Use after changing SQL to see updated docs. |
+| `make shell` | Open the DuckDB CLI on `warehouse.duckdb` inside the container. |
+| `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
+| `make help` | List all targets. |
 
-`make build` is idempotent: canonical models are incremental keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process new arrivals. To reprocess everything after a transform change, `make clean && make build` (equivalent to `dbt build --full-refresh` against a fresh warehouse).
+`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process new arrivals. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
 
 ## Browsing the data model
 
-Every staging and intermediate model carries a description and per-column documentation, sourced from the Open Finance Brasil investment API specs and referenced via shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md). To read it in your browser:
+Every staging and intermediate model carries a description and per-column docs, sourced from the Open Finance Brasil investment API specs and referenced through shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md).
 
-```bash
-make docs-serve    # generates the catalog and serves it at http://localhost:8080
-```
+Run `make docs` and open http://localhost:8080. The site lets you browse the DAG, jump between models, and read OFB spec fields, enum values, and defect handling rules per column. Docs render from `warehouse.duckdb` — run `make build` first if it's missing.
 
-The generated site lets you browse the DAG, jump between models, and see the OFB spec fields, enum values and defect handling rules for every column. Docs are built against `warehouse.duckdb`; run `make build` first if it's missing.
+<img width="1828" height="927" alt="image" src="https://github.com/user-attachments/assets/0fc52a71-f6ed-4aed-8fa7-2c66e25bcb2f" />
+
+<img width="1898" height="972" alt="image" src="https://github.com/user-attachments/assets/d09a46c7-526f-417b-baf8-16c565e4b369" />
+
+## Contracts
+
+Contracts are dbt `schema.yml` files. `dbt_project.yml` declares [`contracts/`](contracts/) as a model path, so dbt parses and enforces the files there like anything under `models/`.
+
+- [`contracts/_consumption.yml`](contracts/_consumption.yml): the output contract for `fct_holdings` and `fct_movements`. Grain and enum tests run at error severity.
+- [`models/canonical/_canonical.yml`](models/canonical/_canonical.yml): per-family canonical contracts, kept next to their models.
+- [`models/canonical/staging/_staging_quality.yml`](models/canonical/staging/_staging_quality.yml): within-record quality rules. This is the DETECT tier, at warn severity.
+
+### What `contract: enforced` guarantees
+
+On every `dbt build`, dbt compares the compiled output of `fct_holdings` and `fct_movements` against the columns declared in `contracts/_consumption.yml`. It does this before writing the table. The build fails on any drift, so a broken table never reaches a consumer:
+
+- a column is **renamed or dropped**
+- a column's **type changes** (for example, an amount silently becomes `varchar`)
+- a **new column appears** without being declared
+
+What this means for consumers: the output of `make build` always matches the contract file. Teams can develop against the declared columns and types without talking to the platform team. A platform-side refactor cannot break a consumer silently. It either preserves the contract, or it must update the contract file in the same PR. That file change is the review signal.
 
 ## Target Architecture & Environments
 
@@ -70,6 +92,15 @@ Git is the source of truth ("if it isn't in version control, it doesn't exist"),
 <img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
 
 This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required; the same dbt models run against Databricks when promoted. The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. That way, we would be able to close one tradeoff this shortcut carries: SQL dialect drift between the two engines.
+
+### Orchestration
+
+All the orchestrator has to do is run two commands on timers:
+
+- `dbt build`, every few minutes: matches the arrival cadence of the raw feeds. The job is watermarked and idempotent, so a repeated or overlapping run leaves the same result as a single run.
+- `dbt source freshness`, on its own cadence: pages the on-call when a feed stalls. Staleness never blocks the build, so consumers keep reading correct data that is merely old.
+
+In the Databricks target this is a two-task Workflows job. Airflow, Dagster, or cron can do the same work, because each command is self-contained: ordering, retries, and state all live in dbt and the watermark. This keeps the scheduler free of pipeline logic, so swapping it is a profile-sized change.
 
 ### Data quality: detect, resolve, guarantee
 
@@ -113,9 +144,15 @@ How a consumer finds out which happened (§2.2's closing question):
 - **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero_flap']`). Empty list means clean.
 - **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_fossil` and `quarantine` stay in the positions table for audit.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
-- **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
+- **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
 
-**State today**: DETECT, RESOLVE, and the cross-sync signals of GUARANTEE are all shipped inside `models/canonical/`. DETECT lives in `staging/_staging_quality.yml`; the audit ledger populates `main_dbt_test__audit.*` after `make build`; every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb). RESOLVE lives in `intermediate/` with the `resolve_duplicate_investments` macro for positions, latest-delivery dedup for transactions, and the admission enum contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial. Analyst-facing consumption views (portfolio, movements) are a follow-up PR.
+**State today**: three stages, one folder each.
+
+**DETECT** lives in `models/canonical/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
+
+**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial.
+
+**GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
 #### Admission at a glance
 
@@ -126,7 +163,7 @@ How a consumer finds out which happened (§2.2's closing question):
 | `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero_conflict_resolved`). | Ignored; kept in `int_*` for audit. |
 | `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
-The full `data_quality_flags` vocabulary (lot-grain and holding-grain) is in the [`data_quality_flags` doc block](models/canonical/_docs.md); browse it in the generated site with `make docs-serve`.
+The full `data_quality_flags` vocabulary (lot-grain and holding-grain) is in the [`data_quality_flags` doc block](models/canonical/_docs.md); browse it in the generated site with `make docs`.
 
 #### Quarantine runbook
 
@@ -139,6 +176,34 @@ Quarantined lots live in `int_*_positions` with `admission = 'quarantine'`: the 
    - **Provider defect**: neither feed explains it. Escalate to the institution with the staging warn tests as corroborating evidence.
 3. **Meanwhile, the consumer is protected by construction.** Quarantined lots never reach `int_*_holdings`, so the wealth page under-counts one holding rather than fabricating a number. This is a deliberate product stance: when valuations conflict irreconcilably, a conservative omission beats a made-up value, and the omission is discoverable in the positions table.
 
+#### Beyond the listed defects
+
+The brief warns that "an institution respecting [the spec] is a hope, not a guarantee." So the §2.2 list is illustrative, not exhaustive. Two audits ran against the built warehouse.
+
+**Listed classes in new forms.** The case authors seeded the announced defect classes in forms the brief does not name. The intermediate layer's repair macros handle them. Raw counts stay visible in the staging warn tests.
+
+| Form | Class it belongs to | Where handled | Raw count |
+|---|---|---|---|
+| `0001-01-01` placeholder dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | 1 951 |
+| Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | see warn tests |
+| `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | 2 |
+| `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` + `missing:transaction_date` flag on `fct_movements` | 3 001 |
+| CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | 1 370 |
+
+**Unlisted classes, all zero hits.** Nine defect classes the brief does not name and the sample does not contain. Zero hits shows the seeding stuck to the announced classes. It does not prove these defects are absent in production. In production, each would become a warn test in `_staging_quality.yml`. The sample does not justify permanent tests for data that is not there.
+
+| Probe | Rationale |
+|---|---|
+| Same `transaction_id`, conflicting `transaction_amount` | Transactions-side analogue of the redundant-copies defect |
+| Negative `transaction_amount` or `gross_amount` | Sign errors on values the domain treats as positive |
+| Transaction dated after its own snapshot | Envelope violation: the payload references a future the snapshot can't see |
+| Holding switching currency between syncs | Cross-sync contradiction not covered by zero-flap |
+| Holding dropout (present, absent one sync, present again) | Missing-row cousin of zero_flap; the provider drops the row instead of zeroing it |
+| Zero quantity with positive gross_amount | Mirror of the zero-flap defect at a single row |
+| Quantity change with no transaction behind it | Cross-feed reconciliation: positions and transactions disagreeing on a movement |
+
+The last probe is also a modeling finding. Quantities never move in the sample. Every seeded across-record defect keys on "quantity unchanged" because quantity is the only invariant the sample offers.
+
 ### Materializations
 
 Layer materializations follow dbt Labs' guidance — [staging as views](https://docs.getdbt.com/best-practices/how-we-structure/2-staging) and the general progression from the [materializations best practices](https://docs.getdbt.com/best-practices/materializations/1-guide-overview): *"Start with a view. When the view gets too long to query for end users, make it a table. When the table gets too long to build, build it incrementally."*
@@ -148,6 +213,7 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
 | intermediate (positions) | incremental | Only records past the watermark (`ingested_at`, the arrival time) are processed each run; `unique_key (snapshot_id, investment_id)` makes re-deliveries an upsert and repeated runs idempotent. Late records still land because the watermark is on arrival, not event time. Replay after a transform fix: `dbt build --full-refresh`. |
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; promote to table per the progression above if the timeline outgrows a view. |
+| consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 

@@ -3,6 +3,9 @@ version: 1.0.0
 profile: decade
 config-version: 2
 
+# contracts/ is a model path so the output contract is executable from there
+model-paths: ["models", "contracts"]
+
 # materialization rationale: README.md § Materializations
 models:
   decade:
@@ -19,3 +22,5 @@ models:
           # view, not incremental: zero_flap/id_handoff lag over the full
           # timeline of the incremental positions tables
           +materialized: view
+    consumption:
+      +materialized: table
