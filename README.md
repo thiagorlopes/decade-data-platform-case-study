@@ -59,6 +59,12 @@ Every staging and intermediate model carries a description and per-column docs, 
 
 Run `make docs` and open http://localhost:8080. The site lets you browse the DAG, jump between models, and read OFB spec fields, enum values, and defect handling rules per column. Docs render from `warehouse.duckdb` — run `make build` first if it's missing.
 
+<!-- TODO: screenshot — dbt docs lineage graph, e.g. `+fct_holdings+` selection -->
+![dbt docs — lineage graph for fct_holdings](docs/images/dbt-docs-lineage.png)
+
+<!-- TODO: screenshot — a model page in dbt docs (Details + Description + Columns) -->
+![dbt docs — fct_holdings model page](docs/images/dbt-docs-model.png)
+
 ## Contracts
 
 Contracts are dbt `schema.yml` files. `dbt_project.yml` declares [`contracts/`](contracts/) as a model path, so dbt parses and enforces the files there like anything under `models/`.
