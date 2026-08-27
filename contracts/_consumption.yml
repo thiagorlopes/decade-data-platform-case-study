@@ -1,6 +1,6 @@
 version: 2
 
-# Consumption layer. Two models publish the five product families in one shape:
+# Consumption layer. Three models publish the five product families in one shape:
 #
 #   fct_holdings:  one row per (snapshot, account, family, holding).
 #                  Unions the int_*_holdings views. Admitted lots only;
@@ -8,9 +8,13 @@ version: 2
 #   fct_movements: one row per transaction_id. When a transaction is
 #                  re-delivered, only the latest delivery survives.
 #                  Unions int_*_transactions.
+#   dim_holding:   one row per (product_family, holding_key). Static contract
+#                  of the security — maturity, indexer, rate, issuer, ticker,
+#                  fund_cnpj. Join to fct_holdings for balance + attributes in
+#                  a single wealth query without touching canonical.
 #
-# Family-only columns (fund_cnpj, rates, tax breakdowns) stay in canonical.
-# If you need one, query the family's canonical model directly.
+# Tax breakdowns and unit prices stay in canonical; if you need one, query the
+# family's canonical model directly.
 #
 # Joining a movement to its holding:
 #   Both models expose holding_key. Join on it:
@@ -117,6 +121,74 @@ models:
         data_type: varchar[]
         description: '{{ doc("data_quality_flags") }}'
         data_tests: [not_null]
+
+  - name: dim_holding
+    description: >
+      Static contract of each holding across families. Grain: one row per
+      (product_family, holding_key). Attributes reflect the latest observed
+      values across admitted lots; no SCD, later provider corrections overwrite
+      earlier ones. Join fct_holdings on (product_family, holding_key) to get
+      per-snapshot balances alongside static security attributes (maturity,
+      indexer, rate, issuer, ticker, fund_cnpj).
+    config:
+      contract:
+        enforced: true
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [product_family, holding_key]
+    columns:
+      - name: product_family
+        data_type: varchar
+        description: Which of the five OFB investment feeds the holding came from.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [bank_fixed_incomes, credit_fixed_incomes, funds, treasure_titles, variable_incomes]
+      - name: holding_key
+        data_type: varchar
+        description: >-
+          Holding identity within the family: the natural key, or the
+          investment_id for lots flagged missing_key. Same rule as fct_holdings.
+        data_tests: [not_null]
+      - name: isin_code
+        data_type: varchar
+        description: '{{ doc("ofb_isin_code") }} NULL for funds and for holdings whose payload omitted it.'
+      - name: issuer_cnpj
+        data_type: varchar
+        description: '{{ doc("ofb_issuer_cnpj") }} Populated for bank/credit fixed incomes and variable incomes; NULL for funds and treasure titles.'
+      - name: debtor_cnpj
+        data_type: varchar
+        description: CNPJ of the debtor (credit fixed incomes only; NULL for other families).
+      - name: debtor_name
+        data_type: varchar
+        description: Debtor name (credit fixed incomes only; NULL for other families).
+      - name: fund_cnpj
+        data_type: varchar
+        description: CNPJ of the fund (funds only; NULL for other families).
+      - name: ticker
+        data_type: varchar
+        description: Trading ticker (variable incomes only; NULL for other families).
+      - name: investment_type
+        data_type: varchar
+        description: Product type as declared by the provider (bank/credit fixed incomes only; e.g. CDB, LCI, LCA, RDB).
+      - name: indexer
+        data_type: varchar
+        description: Indexer name for fixed incomes (bank/credit/treasure); NULL for funds and variable incomes.
+      - name: pre_fixed_rate
+        data_type: decimal(12,6)
+        description: '{{ doc("ofb_pre_fixed_rate") }} NULL for funds and variable incomes.'
+      - name: post_fixed_indexer_percentage
+        data_type: decimal(12,6)
+        description: Post-fixed indexer percentage for fixed incomes. NULL for funds and variable incomes.
+      - name: issue_date
+        data_type: date
+        description: Issue date of the security (bank/credit fixed incomes only).
+      - name: due_date
+        data_type: date
+        description: Maturity date of the security (bank/credit/treasure fixed incomes only; NULL for funds and variable incomes, which do not mature).
+      - name: purchase_date
+        data_type: date
+        description: Date the customer acquired the security (bank/credit/treasure fixed incomes only).
 
   - name: fct_movements
     description: >
