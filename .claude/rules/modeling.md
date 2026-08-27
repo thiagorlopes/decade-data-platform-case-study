@@ -2,6 +2,7 @@
 description: Extend before adding models, preview data before writing SQL
 paths:
   - models/**/*.sql
+  - consumers/**/*.sql
 ---
 
 # Modeling discipline
