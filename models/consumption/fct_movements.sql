@@ -33,15 +33,16 @@
 
 {% for family, cols in families.items() %}
 SELECT
+    {{ cols.date }} AS transaction_date,
+    ingested_at,
     party_id,
     account_id,
     institution_id,
     institution_name,
     '{{ family }}' AS product_family,
     transaction_id,
-    investment_id,
     coalesce(k.natural_key, investment_id) AS holding_key,
-    {{ cols.date }} AS transaction_date,
+    investment_id,
     movement_type,
     transaction_type,
     transaction_type_additional_info,
@@ -49,7 +50,6 @@ SELECT
     CAST({{ cols.gross }} AS DECIMAL(38, 10)) AS gross_amount,
     CAST({{ cols.net }} AS DECIMAL(38, 10)) AS net_amount,
     currency,
-    ingested_at,
     list_filter([
         CASE WHEN {{ cols.date }} IS NULL THEN 'missing:transaction_date' END
     ], f -> f IS NOT NULL) AS data_quality_flags

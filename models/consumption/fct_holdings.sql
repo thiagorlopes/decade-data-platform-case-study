@@ -8,6 +8,9 @@
 
 {% for family, holding_name in families.items() %}
 SELECT
+    reference_date,
+    snapshot_created_at,
+    snapshot_id,
     party_id,
     account_id,
     institution_id,
@@ -16,9 +19,6 @@ SELECT
     holding_key,
     {{ holding_name }} AS holding_name,
     isin_code,
-    snapshot_id,
-    snapshot_created_at,
-    reference_date,
     CAST(quantity AS DECIMAL(38, 10)) AS quantity,
     CAST(gross_amount AS DECIMAL(38, 10)) AS gross_amount,
     CAST(net_amount AS DECIMAL(38, 10)) AS net_amount,
