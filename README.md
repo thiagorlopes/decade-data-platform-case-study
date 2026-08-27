@@ -8,6 +8,7 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Prerequisites](#prerequisites)**<br>
 **[Installation](#installation)**<br>
 **[Development cycle](#development-cycle)**<br>
+**[Querying the warehouse](#querying-the-warehouse)**<br>
 **[Browsing the data model](#browsing-the-data-model)**<br>
 **[Contracts](#contracts)**<br>
 **[Consumers](#consumers)**<br>
@@ -50,11 +51,24 @@ After `make install`, use these targets to iterate:
 | `make refresh` | `build` + `docs` in one shot. Use after changing SQL to see updated docs. |
 | `make wealth` | Export the wealth consumer output for the sample customers. |
 | `make shell` | Open the DuckDB CLI on `warehouse.duckdb` inside the container. |
-| `make ui` | Browse the warehouse in the DuckDB UI at http://localhost:4213. Opens a snapshot copy, so it never locks builds; re-run it to see fresh data. Needs the [duckdb CLI](https://duckdb.org/install) on the host. |
+| `make ui` | Browse the warehouse in the DuckDB UI. See [Querying the warehouse](#querying-the-warehouse). |
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
 | `make help` | List all targets. |
 
 `make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process new arrivals. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
+
+## Querying the warehouse
+
+The typical loop: edit a model, `make build`, then check the numbers with one of these.
+
+**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. It needs the [duckdb CLI](https://duckdb.org/install) on the host.
+
+The UI queries a snapshot copy of the warehouse, not the live file. This means:
+
+- Builds keep working while the UI is open. DuckDB allows one writer or many readers on a file, never both, so pointing any tool at the live warehouse would block `make build`.
+- After a rebuild, run `make ui` again to load the fresh data.
+
+**`make shell`** opens the DuckDB CLI inside the container. Use it for quick raw SQL in the terminal, or when you can't install duckdb on the host. It opens the live warehouse, so close it before a build.
 
 ## Browsing the data model
 
