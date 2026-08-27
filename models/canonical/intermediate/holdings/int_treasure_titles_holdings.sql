@@ -10,6 +10,7 @@ holding AS (
         coalesce(natural_key, investment_id)            AS holding_key,
         any_value(party_id)                             AS party_id,
         any_value(snapshot_created_at)                  AS snapshot_created_at,
+        CAST(any_value(reference_datetime) AS DATE)     AS reference_date,
         any_value(institution_id)                       AS institution_id,
         any_value(institution_name)                     AS institution_name,
         any_value(product_name)                         AS product_name,
@@ -30,6 +31,7 @@ holding AS (
 
 SELECT
     snapshot_created_at,
+    reference_date,
     snapshot_id,
     account_id,
     party_id,

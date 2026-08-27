@@ -9,8 +9,8 @@ version: 2
 #                  re-delivered, only the latest delivery survives.
 #                  Unions int_*_transactions.
 #
-# Family-only columns (fund_cnpj, isin_code, rates, tax breakdowns) stay in
-# canonical. If you need one, query the family's canonical model directly.
+# Family-only columns (fund_cnpj, rates, tax breakdowns) stay in canonical.
+# If you need one, query the family's canonical model directly.
 #
 # Joining a movement to its holding:
 #   Both models expose holding_key. Join on it:
@@ -77,13 +77,23 @@ models:
           Display name of the holding; per family, the most descriptive
           identity column (fund name, ticker, treasury product name, credit
           debtor, bank product type).
+      - name: isin_code
+        data_type: varchar
+        description: '{{ doc("ofb_isin_code") }} NULL for funds: that family identifies the security by fund_cnpj, kept in canonical only.'
       - name: snapshot_id
         data_type: varchar
         description: '{{ doc("stg_snapshot_id") }}'
         data_tests: [not_null]
       - name: snapshot_created_at
         data_type: timestamp
-        description: '{{ doc("stg_snapshot_created_at") }} This is the valuation moment of the row.'
+        description: '{{ doc("stg_snapshot_created_at") }} This is the delivery moment, not the valuation moment — see reference_date for the latter.'
+        data_tests: [not_null]
+      - name: reference_date
+        data_type: date
+        description: >-
+          Valuation date the balance figures refer to, as stated by the provider
+          (spec fields `referenceDateTime` for bank/credit/treasure, `referenceDate`
+          for funds/variable_incomes). Normalized to DATE across families.
         data_tests: [not_null]
       - name: quantity
         data_type: decimal(38,10)

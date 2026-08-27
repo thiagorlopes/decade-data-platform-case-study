@@ -10,6 +10,7 @@ holding AS (
         coalesce(natural_key, investment_id)            AS holding_key,
         any_value(party_id)                             AS party_id,
         any_value(snapshot_created_at)                  AS snapshot_created_at,
+        any_value(reference_date)                       AS reference_date,
         any_value(institution_id)                       AS institution_id,
         any_value(institution_name)                     AS institution_name,
         any_value(fund_name)                            AS fund_name,
@@ -30,6 +31,7 @@ holding AS (
 
 SELECT
     snapshot_created_at,
+    reference_date,
     snapshot_id,
     account_id,
     party_id,
@@ -38,6 +40,7 @@ SELECT
     holding_key,
     fund_name,
     fund_cnpj,
+    CAST(NULL AS VARCHAR) AS isin_code,
     quantity,
     gross_amount,
     net_amount,
