@@ -41,7 +41,7 @@ SELECT
     institution_name,
     '{{ family }}' AS product_family,
     transaction_id,
-    coalesce(k.natural_key, investment_id) AS holding_key,
+    coalesce(key_map.natural_key, investment_id) AS holding_key,
     investment_id,
     movement_type,
     transaction_type,
@@ -59,6 +59,6 @@ LEFT JOIN (
     SELECT investment_id, any_value(natural_key) AS natural_key
     FROM {{ ref('int_' ~ family ~ '_positions') }}
     GROUP BY investment_id
-) AS k USING (investment_id)
+) AS key_map USING (investment_id)
 {{ 'UNION ALL' if not loop.last }}
 {% endfor %}

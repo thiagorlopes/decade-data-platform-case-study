@@ -1,10 +1,10 @@
 -- The movements behind the customer's holdings. Each movement is tagged with
--- the current holding it belongs to by matching its investment_id against the
--- holding's contributing ids; the tag is NULL when the movement's lot is no
--- longer in the portfolio (closed or handed off).
+-- the current holding it belongs to via the shared holding_key; the tag is
+-- NULL when the movement's lot is no longer in the portfolio (closed or
+-- handed off).
 -- Parameter: SET VARIABLE party_id = '<uuid>'; (see `make wealth`).
 WITH current_holdings AS (
-    SELECT account_id, product_family, holding_key, holding_name, investment_ids
+    SELECT account_id, product_family, holding_key
     FROM fct_holdings
     WHERE party_id = getvariable('party_id')
     QUALIFY dense_rank() OVER (
@@ -14,24 +14,27 @@ WITH current_holdings AS (
 )
 
 SELECT
-    m.transaction_date,
-    m.institution_name,
-    m.account_id,
-    m.product_family,
-    h.holding_name,
-    h.holding_key,
-    m.movement_type,
-    m.transaction_type,
-    m.transaction_type_additional_info,
-    m.gross_amount,
-    m.net_amount,
-    m.currency,
-    m.transaction_id,
-    m.data_quality_flags
-FROM fct_movements AS m
-LEFT JOIN current_holdings AS h
-    ON h.account_id = m.account_id
-    AND h.product_family = m.product_family
-    AND list_contains(h.investment_ids, m.investment_id)
-WHERE m.party_id = getvariable('party_id')
-ORDER BY m.transaction_date, m.transaction_id;
+    mov.transaction_date,
+    mov.institution_name,
+    mov.account_id,
+    mov.product_family,
+    dim.holding_name,
+    cur.holding_key,
+    mov.movement_type,
+    mov.transaction_type,
+    mov.transaction_type_additional_info,
+    mov.gross_amount,
+    mov.net_amount,
+    mov.currency,
+    mov.transaction_id,
+    mov.data_quality_flags
+FROM fct_movements AS mov
+LEFT JOIN current_holdings AS cur
+    ON cur.account_id = mov.account_id
+    AND cur.product_family = mov.product_family
+    AND cur.holding_key = mov.holding_key
+LEFT JOIN dim_holding AS dim
+    ON dim.product_family = cur.product_family
+    AND dim.holding_key = cur.holding_key
+WHERE mov.party_id = getvariable('party_id')
+ORDER BY mov.transaction_date, mov.transaction_id;
