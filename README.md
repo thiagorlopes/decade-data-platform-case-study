@@ -50,6 +50,7 @@ After `make install`, use these targets to iterate:
 | `make refresh` | `build` + `docs` in one shot. Use after changing SQL to see updated docs. |
 | `make wealth` | Export the wealth consumer output for the sample customers. |
 | `make shell` | Open the DuckDB CLI on `warehouse.duckdb` inside the container. |
+| `make ui` | Browse the warehouse in the DuckDB UI at http://localhost:4213. Opens a snapshot copy, so it never locks builds; re-run it to see fresh data. Needs the [duckdb CLI](https://duckdb.org/install) on the host. |
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
 | `make help` | List all targets. |
 
