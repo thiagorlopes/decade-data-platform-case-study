@@ -31,8 +31,10 @@ shell:  ## Open duckdb CLI on the warehouse
 
 ui:  ## Browse warehouse.duckdb read-only at http://localhost:4213 (close before builds)
 	@test -f warehouse.duckdb || { echo "warehouse.duckdb missing. Run: make build"; exit 1; }
+	@( i=0; until curl -s -o /dev/null http://localhost:4213 || [ $$i -ge 60 ]; do i=$$((i+1)); sleep 0.5; done; \
+	  xdg-open http://localhost:4213 || open http://localhost:4213 || explorer.exe "http://localhost:4213" ) >/dev/null 2>&1 &
 	$(COMPOSE) run --rm -u $(shell id -u):$(shell id -g) -e HOME=/workspace -p 4213:4214 dbt \
-	  sh -c "socat TCP-LISTEN:4214,fork,reuseaddr 'TCP6:[::1]:4213' & exec duckdb -readonly -ui warehouse.duckdb"
+	  sh -c "socat TCP-LISTEN:4214,fork,reuseaddr 'TCP6:[::1]:4213' & exec duckdb -ui -cmd \"ATTACH 'warehouse.duckdb' AS warehouse (READ_ONLY);\""
 
 clean:  ## Remove warehouse and dbt artifacts (host side)
 	rm -rf warehouse.duckdb warehouse.duckdb.wal target logs
