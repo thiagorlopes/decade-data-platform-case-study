@@ -30,10 +30,9 @@ shell:  ## Open duckdb CLI on the warehouse
 	$(RUN) duckdb warehouse.duckdb
 
 ui:  ## Browse warehouse.duckdb read-only at http://localhost:4213 (close before builds)
-	@command -v duckdb >/dev/null 2>&1 || { \
-	  echo "duckdb CLI not found on the host. Install it: https://duckdb.org/install"; exit 1; }
 	@test -f warehouse.duckdb || { echo "warehouse.duckdb missing. Run: make build"; exit 1; }
-	@duckdb -readonly -ui warehouse.duckdb
+	$(COMPOSE) run --rm -u $(shell id -u):$(shell id -g) -e HOME=/workspace -p 4213:4214 dbt \
+	  sh -c "socat TCP-LISTEN:4214,fork,reuseaddr 'TCP6:[::1]:4213' & exec duckdb -readonly -ui warehouse.duckdb"
 
 clean:  ## Remove warehouse and dbt artifacts (host side)
 	rm -rf warehouse.duckdb warehouse.duckdb.wal target logs
