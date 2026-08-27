@@ -104,7 +104,7 @@ The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL
 - [`holdings.sql`](consumers/wealth/holdings.sql): what one customer holds, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
 - [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each tagged with the current holding it belongs to by matching its `investment_id` against the holding's contributing ids.
 
-A new consumer lands the same way: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`models/consumption/_consumption.yml`](models/consumption/_consumption.yml).
+Both queries take a customer id. Run them from `make shell` after `SET VARIABLE party_id = '<uuid>';`. A new consumer follows the same pattern: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
 
 ## Target Architecture & Environments
 

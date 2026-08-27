@@ -2,7 +2,7 @@
 -- the current holding it belongs to via the shared holding_key; the tag is
 -- NULL when the movement's lot is no longer in the portfolio (closed or
 -- handed off).
--- Parameter: SET VARIABLE party_id = '<uuid>'; (see `make wealth`).
+-- Parameter: SET VARIABLE party_id = '<uuid>';
 WITH current_holdings AS (
     SELECT account_id, product_family, holding_key
     FROM fct_holdings
