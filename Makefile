@@ -29,19 +29,11 @@ refresh: build docs  ## Rebuild models + regenerate & serve docs
 shell:  ## Open duckdb CLI on the warehouse
 	$(RUN) duckdb warehouse.duckdb
 
-# WSL fallback: duckdb auto-opens via xdg-open when present; otherwise open
-# the Windows default browser. `true` = no-op, the URL still prints.
-OPEN := $(shell command -v xdg-open >/dev/null && echo true || command -v wslview || command -v explorer.exe || echo true)
-
-ui:  ## Browse a snapshot of the warehouse at http://localhost:4213 (never locks builds)
+ui:  ## Browse warehouse.duckdb read-only at http://localhost:4213 (close before builds)
 	@command -v duckdb >/dev/null 2>&1 || { \
 	  echo "duckdb CLI not found on the host. Install it: https://duckdb.org/install"; exit 1; }
 	@test -f warehouse.duckdb || { echo "warehouse.duckdb missing. Run: make build"; exit 1; }
-	@pkill -f '[d]uckdb -ui target/ui-snapshot.duckdb' 2>/dev/null; \
-	  mkdir -p target && cp warehouse.duckdb target/ui-snapshot.duckdb
-	@( sleep 1; $(OPEN) http://localhost:4213 >/dev/null 2>&1 ) &
-	@echo "DuckDB UI on a warehouse snapshot: http://localhost:4213  (Ctrl+C to stop; re-run after builds for fresh data)"
-	@duckdb -ui target/ui-snapshot.duckdb
+	@duckdb -readonly -ui warehouse.duckdb
 
 clean:  ## Remove warehouse and dbt artifacts (host side)
 	rm -rf warehouse.duckdb warehouse.duckdb.wal target logs

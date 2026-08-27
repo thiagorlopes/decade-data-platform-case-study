@@ -60,14 +60,9 @@ After `make install`, use these targets to iterate:
 
 The typical loop: edit a model, `make build`, then check the numbers with one of these.
 
-**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. It needs the [duckdb CLI](https://duckdb.org/install) on the host.
+**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. It needs the [duckdb CLI](https://duckdb.org/install) on the host and opens the warehouse read-only. Close it before running `make build`. DuckDB is single-writer, so an open connection blocks the build.
 
-The UI queries a snapshot copy of the warehouse, not the live file. This means:
-
-- Builds keep working while the UI is open. DuckDB allows one writer or many readers on a file, never both, so pointing any tool at the live warehouse would block `make build`.
-- After a rebuild, run `make ui` again to load the fresh data.
-
-**`make shell`** opens the DuckDB CLI inside the container. Use it for quick raw SQL in the terminal, or when you can't install duckdb on the host. It opens the live warehouse, so close it before a build.
+**`make shell`** opens the DuckDB CLI inside the container. Use it for quick raw SQL, or when you can't install duckdb on the host. Same rule: close it before a build.
 
 ## Browsing the data model
 
