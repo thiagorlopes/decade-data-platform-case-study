@@ -48,6 +48,21 @@ models:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, account_id, product_family, holding_key]
     columns:
+      - name: reference_date
+        data_type: date
+        description: >-
+          Valuation date the balance figures refer to, as stated by the provider
+          (spec fields `referenceDateTime` for bank/credit/treasure, `referenceDate`
+          for funds/variable_incomes). Normalized to DATE across families.
+        data_tests: [not_null]
+      - name: snapshot_created_at
+        data_type: timestamp
+        description: '{{ doc("stg_snapshot_created_at") }} This is the delivery moment, not the valuation moment — see reference_date for the latter.'
+        data_tests: [not_null]
+      - name: snapshot_id
+        data_type: varchar
+        description: '{{ doc("stg_snapshot_id") }}'
+        data_tests: [not_null]
       - name: party_id
         data_type: varchar
         description: '{{ doc("stg_party_id") }}'
@@ -84,21 +99,6 @@ models:
       - name: isin_code
         data_type: varchar
         description: '{{ doc("ofb_isin_code") }} NULL for funds: that family identifies the security by fund_cnpj, kept in canonical only.'
-      - name: snapshot_id
-        data_type: varchar
-        description: '{{ doc("stg_snapshot_id") }}'
-        data_tests: [not_null]
-      - name: snapshot_created_at
-        data_type: timestamp
-        description: '{{ doc("stg_snapshot_created_at") }} This is the delivery moment, not the valuation moment — see reference_date for the latter.'
-        data_tests: [not_null]
-      - name: reference_date
-        data_type: date
-        description: >-
-          Valuation date the balance figures refer to, as stated by the provider
-          (spec fields `referenceDateTime` for bank/credit/treasure, `referenceDate`
-          for funds/variable_incomes). Normalized to DATE across families.
-        data_tests: [not_null]
       - name: quantity
         data_type: decimal(38,10)
         description: '{{ doc("ofb_position_quantity") }} Summed over the holding''s admitted lots.'
@@ -201,6 +201,12 @@ models:
       contract:
         enforced: true
     columns:
+      - name: transaction_date
+        data_type: date
+        description: '{{ doc("ofb_transaction_date") }} For funds, the quota conversion date (cotizacao).'
+      - name: ingested_at
+        data_type: timestamp
+        description: '{{ doc("stg_ingested_at") }}'
       - name: party_id
         data_type: varchar
         description: '{{ doc("stg_party_id") }}'
@@ -226,9 +232,6 @@ models:
         data_type: varchar
         description: '{{ doc("ofb_transaction_id") }}'
         data_tests: [unique, not_null]
-      - name: investment_id
-        data_type: varchar
-        description: '{{ doc("ofb_investment_id") }}'
       - name: holding_key
         data_type: varchar
         description: >-
@@ -236,9 +239,9 @@ models:
           equi-join key from a movement to its holding. Resolved from the
           family's natural key on any snapshot in which the investment appears;
           falls back to investment_id when no natural key is available.
-      - name: transaction_date
-        data_type: date
-        description: '{{ doc("ofb_transaction_date") }} For funds, the quota conversion date (cotizacao).'
+      - name: investment_id
+        data_type: varchar
+        description: '{{ doc("ofb_investment_id") }}'
       - name: movement_type
         data_type: varchar
         description: '{{ doc("ofb_movement_type") }}'
@@ -263,9 +266,6 @@ models:
       - name: currency
         data_type: varchar
         description: '{{ doc("ofb_currency") }}'
-      - name: ingested_at
-        data_type: timestamp
-        description: '{{ doc("stg_ingested_at") }}'
       - name: data_quality_flags
         data_type: varchar[]
         description: '{{ doc("data_quality_flags") }}'
