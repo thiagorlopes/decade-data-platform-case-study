@@ -1,7 +1,5 @@
 ---
 description: dbt CLI conventions, build over run, always select
-paths:
-  - models/**
 ---
 
 # dbt commands
