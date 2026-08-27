@@ -21,7 +21,3 @@
 - Layer-wide narrative lives once, in the yml or macro header, not repeated across model files.
 - Column descriptions reuse `doc()` blocks defined in `_docs.md`; define once, reference everywhere.
 - Prose follows plain language: short sentences, active voice, no invented shorthand, no em dashes.
-
-## Rules
-
-@.claude/rules/readme.md
