@@ -13,16 +13,18 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 
 ## General Information
 
-Lorem ipsum
+This repo turns Open Finance Brasil investment snapshots into two consumption-ready fact tables (`fct_holdings`, `fct_movements`) using dbt on DuckDB. Raw parquet lands in `data/`, dbt transforms it through staging, intermediate, and consumption layers, and enforced contracts guarantee the output shape.
+
+For architecture and design rationale, see [Target Architecture & Environments](#target-architecture--environments) and [Data quality: detect, resolve, guarantee](#data-quality-detect-resolve-guarantee) below.
 
 ## Prerequisites
 
-- Docker Engine + Docker Compose v2
-- `make`, `git`
+- Docker Engine with Docker Compose v2
+- `make` and `git`
 
-Everything the pipeline needs (Python, dbt, DuckDB CLI) is bundled inside the image. No host-side Python setup required.
+The docker image ships Python, dbt, and the DuckDB CLI. You don't need a host-side Python install to run the pipeline.
 
-Notebook exploration (`notebooks/`) uses jupyterlab + pandas + pyarrow. Those are dev-only and kept out of the image. Install them into a local venv if you need to re-run the notebook:
+Notebooks under `notebooks/` are dev-only and stay out of the image. To re-run them, install the deps into a local venv:
 
 ```bash
 pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
@@ -31,34 +33,31 @@ pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
 ## Installation
 
 ```bash
-make install     # builds the docker image
+make install     # build the docker image
 ```
 
 ## Development cycle
 
-After `make install`, the loop when editing models or tests:
+After `make install`, use these targets to iterate:
 
-```bash
-make check       # smoke test the wiring: list declared dbt sources
-make parse       # validate project config (fast, no warehouse writes)
-make build       # run all dbt models and tests
-make test        # re-run tests only against the current warehouse
-make shell       # open duckdb CLI on the warehouse (inside container)
-make clean       # wipe warehouse and dbt artifacts if state gets stuck
-make help        # list all targets
-```
+| Command | What it does |
+|---|---|
+| `make build` | Run models + tests. The safe default. |
+| `make run` | Run models only. Faster when you know tests will pass. |
+| `make test` | Run tests against the current warehouse. No rebuild. |
+| `make docs` | Regenerate the docs catalog and serve at http://localhost:8080. |
+| `make refresh` | `build` + `docs` in one shot. Use after changing SQL to see updated docs. |
+| `make shell` | Open the DuckDB CLI on `warehouse.duckdb` inside the container. |
+| `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
+| `make help` | List all targets. |
 
-`make build` is idempotent: canonical models are incremental keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process new arrivals. To reprocess everything after a transform change, `make clean && make build` (equivalent to `dbt build --full-refresh` against a fresh warehouse).
+`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process new arrivals. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
 
 ## Browsing the data model
 
-Every staging and intermediate model carries a description and per-column documentation, sourced from the Open Finance Brasil investment API specs and referenced via shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md). To read it in your browser:
+Every staging and intermediate model carries a description and per-column docs, sourced from the Open Finance Brasil investment API specs and referenced through shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md).
 
-```bash
-make docs-serve    # generates the catalog and serves it at http://localhost:8080
-```
-
-The generated site lets you browse the DAG, jump between models, and see the OFB spec fields, enum values and defect handling rules for every column. Docs are built against `warehouse.duckdb`; run `make build` first if it's missing.
+Run `make docs` and open http://localhost:8080. The site lets you browse the DAG, jump between models, and read OFB spec fields, enum values, and defect handling rules per column. Docs render from `warehouse.duckdb` — run `make build` first if it's missing.
 
 ## Contracts
 
@@ -89,6 +88,15 @@ Git is the source of truth ("if it isn't in version control, it doesn't exist"),
 <img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
 
 This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required; the same dbt models run against Databricks when promoted. The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. That way, we would be able to close one tradeoff this shortcut carries: SQL dialect drift between the two engines.
+
+### Orchestration
+
+All the orchestrator has to do is run two commands on timers:
+
+- `dbt build`, every few minutes: matches the arrival cadence of the raw feeds. The job is watermarked and idempotent, so a repeated or overlapping run leaves the same result as a single run.
+- `dbt source freshness`, on its own cadence: pages the on-call when a feed stalls. Staleness never blocks the build, so consumers keep reading correct data that is merely old.
+
+In the Databricks target this is a two-task Workflows job. Airflow, Dagster, or cron can do the same work, because each command is self-contained: ordering, retries, and state all live in dbt and the watermark. This keeps the scheduler free of pipeline logic, so swapping it is a profile-sized change.
 
 ### Data quality: detect, resolve, guarantee
 
@@ -132,7 +140,7 @@ How a consumer finds out which happened (§2.2's closing question):
 - **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero_flap']`). Empty list means clean.
 - **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_fossil` and `quarantine` stay in the positions table for audit.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
-- **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs-serve`.
+- **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
 
 **State today**: three stages, one folder each.
 
@@ -151,7 +159,7 @@ How a consumer finds out which happened (§2.2's closing question):
 | `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero_conflict_resolved`). | Ignored; kept in `int_*` for audit. |
 | `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
-The full `data_quality_flags` vocabulary (lot-grain and holding-grain) is in the [`data_quality_flags` doc block](models/canonical/_docs.md); browse it in the generated site with `make docs-serve`.
+The full `data_quality_flags` vocabulary (lot-grain and holding-grain) is in the [`data_quality_flags` doc block](models/canonical/_docs.md); browse it in the generated site with `make docs`.
 
 #### Quarantine runbook
 
