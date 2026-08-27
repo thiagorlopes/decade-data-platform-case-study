@@ -101,10 +101,10 @@ What this means for consumers: the output of `make build` always matches the con
 
 The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL queries over the consumption layer, never raw or staging.
 
-- [`holdings.sql`](consumers/wealth/holdings.sql): what one customer holds, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
+- [`holdings.sql`](consumers/wealth/holdings.sql): what customers hold, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
 - [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each tagged with the current holding it belongs to by matching its `investment_id` against the holding's contributing ids.
 
-Both queries take a customer id. Open `make ui`, set `SET VARIABLE party_id = '<uuid>';`, then run the query. A new consumer follows the same pattern: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
+Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. A new consumer follows the same pattern: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
 
 ## Target Architecture & Environments
 

@@ -1,12 +1,10 @@
--- The movements behind the customer's holdings. Each movement is tagged with
+-- The movements behind the current holdings. Each movement is tagged with
 -- the current holding it belongs to via the shared holding_key; the tag is
 -- NULL when the movement's lot is no longer in the portfolio (closed or
 -- handed off).
--- Parameter: SET VARIABLE party_id = '<uuid>';
 WITH current_holdings AS (
     SELECT account_id, product_family, holding_key
     FROM fct_holdings
-    WHERE party_id = getvariable('party_id')
     QUALIFY dense_rank() OVER (
         PARTITION BY account_id, product_family
         ORDER BY snapshot_created_at DESC, snapshot_id DESC
@@ -36,5 +34,4 @@ LEFT JOIN current_holdings AS cur
 LEFT JOIN dim_holding AS dim
     ON dim.product_family = cur.product_family
     AND dim.holding_key = cur.holding_key
-WHERE mov.party_id = getvariable('party_id')
 ORDER BY mov.transaction_date, mov.transaction_id;
