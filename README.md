@@ -125,6 +125,8 @@ In the Databricks target this is a two-task Workflows job. Airflow, Dagster, or 
 
 Target architecture for §2.2. Provider defects split into within-record (a required field empty, a value in the wrong form, a legal value outside its enum, a cross-field contradiction) and across-record (the same holding under two ids, holdings that freeze under a new id, a zero-then-nonzero valuation). The target pipeline splits their handling across three layers so each layer has one job:
 
+Two terms recur below. A **lot** is one delivered position row from a custodian sync (a row in `int_*_positions`). A **holding** aggregates lots by natural key (account + security), one row per account and security (rows in `int_*_holdings` and `fct_holdings`).
+
 ```
 dbt build (every run)
 
@@ -169,7 +171,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 **DETECT** lives in `models/canonical/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
 
-**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) ride the `int_*_holdings` views in the same folder: unique-grain tested, view-materialized so lag/lead over the full timeline stays trivial.
+**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
 
 **GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
@@ -182,7 +184,7 @@ How a consumer finds out which happened (§2.2's closing question):
 | `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero_conflict_resolved`). | Ignored; kept in `int_*` for audit. |
 | `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
-The full `data_quality_flags` vocabulary (lot-grain and holding-grain) is in the [`data_quality_flags` doc block](models/canonical/_docs.md); browse it in the generated site with `make docs`.
+The full `data_quality_flags` vocabulary is in the [`data_quality_flags` doc block](models/canonical/_docs.md). It groups flags by grain: per-lot (added in `int_*_positions`), per-holding (added in `int_*_holdings`), and per-movement (added in `fct_movements`). Browse the generated site with `make docs`.
 
 #### Quarantine runbook
 
