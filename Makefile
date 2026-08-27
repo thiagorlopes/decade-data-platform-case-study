@@ -2,13 +2,7 @@ COMPOSE := docker compose
 RUN := $(COMPOSE) run --rm -u $(shell id -u):$(shell id -g) dbt
 
 .DEFAULT_GOAL := help
-.PHONY: help install build run test docs refresh shell ui clean wealth
-
-# One clean customer, one with resolved duplicates (merged_lots/id_handoff),
-# one with a zero_flap glitch. Override: make wealth WEALTH_PARTIES=<uuid ...>
-WEALTH_PARTIES := 9c39c85f-da56-58b6-850f-c86d0efd3299 \
-                  9e22a589-e861-5dc1-899e-680bd197a983 \
-                  11cc5703-4e06-5fb6-b1e9-c444f749d74c
+.PHONY: help install build run test docs refresh shell ui clean
 
 help:  ## List targets
 	@awk 'BEGIN{FS=":.*##"} /^[a-z_-]+:.*##/ {printf "  \033[36m%-11s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -48,19 +42,6 @@ ui:  ## Browse a snapshot of the warehouse at http://localhost:4213 (never locks
 	@( sleep 1; $(OPEN) http://localhost:4213 >/dev/null 2>&1 ) &
 	@echo "DuckDB UI on a warehouse snapshot: http://localhost:4213  (Ctrl+C to stop; re-run after builds for fresh data)"
 	@duckdb -ui target/ui-snapshot.duckdb
-
-wealth:  ## Export the wealth consumer output for the sample customers
-	@for p in $(WEALTH_PARTIES); do \
-	  mkdir -p consumers/wealth/output/$$p; \
-	  for q in holdings movements; do \
-	    $(COMPOSE) run --rm -T -u $(shell id -u):$(shell id -g) dbt \
-	      duckdb -readonly warehouse.duckdb -csv \
-	      -c "SET VARIABLE party_id = '$$p';" \
-	      -c ".read consumers/wealth/$$q.sql" \
-	      > consumers/wealth/output/$$p/$$q.csv; \
-	    echo "wrote consumers/wealth/output/$$p/$$q.csv"; \
-	  done; \
-	done
 
 clean:  ## Remove warehouse and dbt artifacts (host side)
 	rm -rf warehouse.duckdb warehouse.duckdb.wal target logs
