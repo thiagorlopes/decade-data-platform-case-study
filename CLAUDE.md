@@ -21,3 +21,9 @@
 - Layer-wide narrative lives once, in the yml or macro header, not repeated across model files.
 - Column descriptions reuse `doc()` blocks defined in `_docs.md`; define once, reference everywhere.
 - Prose follows plain language: short sentences, active voice, no invented shorthand, no em dashes.
+
+## dbt commands
+
+- Use `dbt build`, not `dbt run`. Build runs tests in the same step and catches data issues immediately.
+- Always pass a selector and quiet flags: `dbt build --select <model> --quiet --warn-error-options '{"error": ["NoNodesForSelectionCriteria"]}'`.
+- Never run the whole project without the user asking for it. Preview results with `dbt show --select <model> --limit 10`.
