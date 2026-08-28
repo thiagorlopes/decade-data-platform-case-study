@@ -27,7 +27,8 @@ WITH joined AS (
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations
-    WHERE greatest(det.ingested_at, bal.ingested_at) > (SELECT max(ingested_at) FROM {{ this }})
+    WHERE {{ snapshot_watermark([ref('stg_openfinance__variable_incomes_positions_detail'),
+                                 ref('stg_openfinance__variable_incomes_positions_balances')]) }}
     {% endif %}
 ),
 

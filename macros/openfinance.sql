@@ -51,6 +51,22 @@
     CASE WHEN {{ column }} IN (DATE '0001-01-01', DATE '1970-01-01') THEN NULL ELSE {{ column }} END
 {%- endmacro %}
 
+{# Incremental filter for the int_*_positions models: admit whole snapshots,
+   not single rows. resolve_duplicate_investments compares rows within one
+   sync, so a late or re-delivered row must be re-judged together with the
+   siblings that already landed; a row-level watermark would classify it
+   alone and admit both copies. The (snapshot_id, investment_id) unique_key
+   turns the re-touched rows into an upsert, keeping reruns idempotent. #}
+{% macro snapshot_watermark(staging_refs) -%}
+snapshot_id IN (
+    {%- for staging_ref in staging_refs %}
+    SELECT snapshot_id FROM {{ staging_ref }}
+    WHERE ingested_at > (SELECT max(ingested_at) FROM {{ this }})
+    {{ 'UNION' if not loop.last }}
+    {%- endfor %}
+)
+{%- endmacro %}
+
 {# --- Classify duplicate investment_ids per natural key and stamp each row
    with an admission verdict (notebook 03). Shared by every int_*_positions
    model so the five families agree on what counts as a duplicate and how
