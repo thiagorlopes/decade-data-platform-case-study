@@ -61,10 +61,10 @@
 snapshot_id IN (
     {%- for staging_ref in staging_refs %}
     SELECT snapshot_id FROM {{ staging_ref }}
-    -- >= not >: ingested_at is batch-grain, so a run that reads a batch
-    -- mid-landing must re-admit the boundary stamp next run, or the tail
-    -- of that batch is never processed. Reruns re-touch the boundary
-    -- snapshots, which the upsert keeps idempotent.
+    -- Use >= not >. One arrival batch shares one ingested_at stamp, so a
+    -- run that reads it while it is still landing must read that stamp
+    -- again next run, or the rest of the batch never reaches downstream.
+    -- Reruns re-touch the boundary snapshots; the upsert keeps that idempotent.
     WHERE ingested_at >= (SELECT max(ingested_at) FROM {{ this }})
     {{ 'UNION' if not loop.last }}
     {%- endfor %}
@@ -72,11 +72,11 @@ snapshot_id IN (
 {%- endmacro %}
 
 {# A provider may re-deliver the same (snapshot_id, investment_id) with a
-   changed value. The latest arrival is the provider's current word, so it
-   wins; superseded copies stay visible in staging and in the lot_redelivery
-   warn ledger. Same-stamp copies cannot tie here: the staging grain test
-   errors on (snapshot_id, investment_id, ingested_at), so the sort always
-   has a unique winner. #}
+   changed value. The latest arrival wins. Superseded copies stay visible
+   in staging and in the lot_redelivery warn ledger. Ties cannot happen
+   here: the staging grain test errors on
+   (snapshot_id, investment_id, ingested_at), so the sort always has one
+   winner. #}
 {% macro latest_delivery(staging_ref) -%}
 (
     SELECT * FROM {{ staging_ref }}

@@ -38,10 +38,10 @@ models:
       (isin_code, issuer_cnpj, issue_date, due_date).
       {{ doc("stg_contract") }}
     data_tests:
-      # Envelope grain, per delivery. The same key twice in one arrival batch
-      # is an ingestion bug (ours), so the build halts. The same key arriving
-      # again in a later batch is a provider re-delivery: legal, warned below,
-      # resolved in the intermediate layer by latest-delivery dedup.
+      # Grain within one delivery. The same key twice in one arrival batch
+      # is an ingestion bug on our side, so the build halts here. The same
+      # key in a later batch is a provider re-delivery: allowed, warned by
+      # the lot_redelivery test below, and resolved in the intermediate layer.
       - &lot_grain
         dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, investment_id, ingested_at]
@@ -52,7 +52,7 @@ models:
           config: &dq_warn_stored
             severity: warn
             store_failures: true
-      # Provider re-delivery ledger: one row per re-delivered copy
+      # Warn ledger for provider re-deliveries: one row per superseded copy.
       - &lot_redelivery
         dbt_utils.unique_combination_of_columns:
           combination_of_columns: [snapshot_id, investment_id]
