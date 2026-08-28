@@ -284,12 +284,15 @@ Three decisions serve them:
 
 ### Compliance
 
-The sample is synthetic, so the repo can commit query outputs (`consumers/wealth/output/`); production outputs never land in git. In production every field is personal financial data under LGPD, Brazil's data protection law, and four boundaries would apply:
+The sample is synthetic, so the repo can commit query outputs (`consumers/wealth/output/`); production outputs never land in git. In production every field is personal financial data under LGPD, Brazil's data protection law, and five boundaries would apply:
 
 - **The layer boundary is the access boundary.** Raw and staging hold provider payloads verbatim and stay locked to the pipeline's service principal. Consumers get Unity Catalog grants on the consumption schema only. The rule "consumers read consumption, never raw" stops being a convention and becomes an ACL.
 - **Consumption is pseudonymous.** `party_id`, `account_id`, and `investment_id` are opaque UUIDs end to end. The consumption layer carries product attributes (fund names, issuer CNPJs, tickers) and no customer names or personal documents. Re-identification requires the customer registry, which lives outside this platform.
-- **Erasure is a clustered delete.** LGPD gives customers the right to have their data deleted on request. The tables cluster on `party_id`, so erasing one customer is a targeted `DELETE` plus a vacuum of the affected files, not a full table rewrite. The same key that serves the wealth page serves erasure.
+- **Erasure is a clustered delete, then a purge.** LGPD gives customers the right to have their data deleted on request. The facts cluster on `party_id`, so step one is a targeted `DELETE` that touches only that customer's files; the same key that serves the wealth page serves erasure. A `DELETE` alone is not erasure: the rows survive in raw, in staging, and in Delta time travel. Full erasure also purges the raw and staging copies, runs `VACUUM` past the retention window so old table versions forget the rows, and lets backups expire on a stated schedule.
+- **Consent bounds what the pipeline may hold.** Open Finance consent has a scope and an expiry. When a customer revokes it, ingestion stops for that connection and the erasure path runs. Raw is kept only as long as reprocessing needs it, then purged on a stated retention window. Data serves the consented purpose only; a new use, such as model training, needs a new legal basis.
 - **Access is logged; data stays encrypted and in Brazil.** Unity Catalog audit logs record every read of the consumption schema. Encryption in transit and at rest is the platform default. Data stays in a Brazilian region, where the customers and their Open Finance consent live.
+
+These five boundaries are the platform's technical measures. The organizational side of LGPD (a data protection officer, records of processing, incident response) lives outside this repo.
 
 ## Data flow: two kinds of incremental
 
