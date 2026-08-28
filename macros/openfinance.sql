@@ -150,21 +150,18 @@ FROM classified
 {%- endmacro %}
 
 {# --- receipts replay (shared by every int_*_holdings model).
-   The positions feed writes a lot's quantity at the first buy and never
-   updates it. Not "nobody traded": every sampled lot whose receipts show
-   quantity-bearing trades dated between its first and last sync still
-   reports one unchanged quantity, and for 1,578 of 1,611 variable-income
-   lots the balance equals the first trade, not the latest state
-   (notebook 05). The transactions feed keeps recording every later buy
-   and sell, so the movements are the reliable record of quantity. `replay_quantity(transactions_ref)` derives each lot's quantity
-   from them: buys (ENTRADA) add, sells (SAIDA) subtract, receipts with no
-   quantity count zero. Receipts whose date the provider lost (staging nulls
-   the 1970-01-01 sentinel) get the benefit of the doubt: lost-date buys
-   sort first, lost-date sells last. When the day-by-day running total drops
-   below zero even under that most favorable ordering, receipts must be
-   missing and the lot cannot be replayed; the flags macro below turns that
-   into `movements:incomplete`. Emits three CTEs; models join on `replay`.
-   Funds pass their own column names. --- #}
+   Derives each lot's quantity from transaction movements: ENTRADA adds,
+   SAIDA subtracts, receipts with no quantity count zero. The positions
+   feed cannot be trusted for this: it freezes quantity at the first buy,
+   so for 1,578 of 1,611 variable-income lots the balance equals the first
+   trade, not the latest state (evidence in notebook 05).
+   Receipts whose date the provider lost (staging nulls the 1970-01-01
+   sentinel) get the most favorable ordering: lost-date buys sort first,
+   lost-date sells last. If the running total still drops below zero,
+   receipts are missing and the flags macro below marks the lot
+   `movements:incomplete`.
+   Emits three CTEs; models join on `replay`. Funds pass their own
+   column names. --- #}
 {% macro replay_quantity(transactions_ref, qty_col='transaction_quantity', date_col='transaction_date') -%}
 day_net AS (
     SELECT
