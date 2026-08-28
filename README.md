@@ -62,7 +62,7 @@ After `make install`, use these targets to iterate:
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
 | `make help` | List all targets. |
 
-`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots with new arrivals. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
+`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots at or past the newest arrival. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
 
 ## Querying the warehouse
 
@@ -180,7 +180,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 **DETECT** lives in `models/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
 
-**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero:transient`, `investment_id:replaced`, `investment_id:multiple`, `zero:lot_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
+**RESOLVE** lives in `models/canonical/intermediate/`. Both feeds survive a record re-delivered with a different value: the latest arrival wins, through the `latest_delivery` macro for positions and the same rule inline for transactions, and superseded copies stay countable in the `lot_redelivery` warn ledger. Positions are then deduped across investment_ids by the `resolve_duplicate_investments` macro. The admission enum is contract-tested at error severity. The cross-sync flags (`zero:transient`, `investment_id:replaced`, `investment_id:multiple`, `zero:lot_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
 
 **GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
@@ -258,7 +258,7 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | Layer | Materialization | Why |
 |-------|----------------|-----|
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
-| intermediate (positions) | incremental | Each run reprocesses every snapshot that received an arrival past the watermark (`ingested_at`, the arrival time), whole, not row by row. Duplicate classification compares rows within one sync, so a late or re-delivered row must be re-judged with the siblings that already landed; `unique_key (snapshot_id, investment_id)` makes the re-touched rows an upsert, so repeated runs stay idempotent. Replay after a transform fix: `dbt build --full-refresh`. |
+| intermediate (positions) | incremental | Each run reprocesses every snapshot that received an arrival past the watermark (`ingested_at`, the arrival time), whole, not row by row. Duplicate classification compares rows within one sync, so a late or re-delivered row must be re-judged with the siblings that already landed; `unique_key (snapshot_id, investment_id)` makes the re-touched rows an upsert, so repeated runs stay idempotent. When a lot is re-delivered with a changed value, the `latest_delivery` macro keeps only the newest arrival of each lot before the join. Replay after a transform fix: `dbt build --full-refresh`. |
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; promote to table per the progression above if the timeline outgrows a view. |
 | consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
 

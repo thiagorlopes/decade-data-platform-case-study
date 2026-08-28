@@ -35,8 +35,8 @@ WITH joined AS (
         bal.blocked_amount,
         bal.purchase_unit_price,
         bal.quantity
-    FROM {{ ref('stg_openfinance__treasure_titles_positions_detail') }} AS det
-    FULL JOIN {{ ref('stg_openfinance__treasure_titles_positions_balances') }} AS bal
+    FROM {{ latest_delivery(ref('stg_openfinance__treasure_titles_positions_detail')) }} AS det
+    FULL JOIN {{ latest_delivery(ref('stg_openfinance__treasure_titles_positions_balances')) }} AS bal
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations

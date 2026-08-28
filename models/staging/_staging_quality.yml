@@ -38,9 +38,13 @@ models:
       (isin_code, issuer_cnpj, issue_date, due_date).
       {{ doc("stg_contract") }}
     data_tests:
+      # Envelope grain, per delivery. The same key twice in one arrival batch
+      # is an ingestion bug (ours), so the build halts. The same key arriving
+      # again in a later batch is a provider re-delivery: legal, warned below,
+      # resolved in the intermediate layer by latest-delivery dedup.
       - &lot_grain
         dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [snapshot_id, investment_id]
+          combination_of_columns: [snapshot_id, investment_id, ingested_at]
       # CNPJ must be exactly 14 digits, providers send decimal tails
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_cnpj_form
@@ -48,6 +52,11 @@ models:
           config: &dq_warn_stored
             severity: warn
             store_failures: true
+      # Provider re-delivery ledger: one row per re-delivered copy
+      - &lot_redelivery
+        dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, investment_id]
+          config: *dq_warn_stored
       # 0001-01-01 is .NET DateTime.MinValue: a missing purchase date in
       # a real-looking date costume. Named explicitly so it doesn't leak
       # into the cross-field rules below as a false positive.
@@ -214,6 +223,7 @@ models:
       (isin_code, debtor_cnpj, due_date). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_credit_detail_debtor_cnpj_form
           expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
@@ -313,6 +323,7 @@ models:
       {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_funds_detail_cnpj_form
           expression: "regexp_matches(fund_cnpj, '^[0-9]{14}$')"
@@ -359,6 +370,7 @@ models:
       (isin_code). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_treasure_detail_purchase_date_not_placeholder
           expression: "purchase_date <> DATE '0001-01-01'"
@@ -423,6 +435,7 @@ models:
       (isin_code, ticker). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_variable_detail_issuer_cnpj_form
           expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
@@ -466,6 +479,7 @@ models:
       {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -537,6 +551,7 @@ models:
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -583,6 +598,7 @@ models:
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -621,6 +637,7 @@ models:
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -658,6 +675,7 @@ models:
       value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
     columns:
       - *env_snapshot_id
       - *env_investment_id

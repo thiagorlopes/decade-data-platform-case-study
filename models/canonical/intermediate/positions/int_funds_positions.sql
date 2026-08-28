@@ -27,8 +27,8 @@ WITH joined AS (
         bal.blocked_amount,
         bal.quota_quantity,
         bal.quota_gross_price
-    FROM {{ ref('stg_openfinance__funds_positions_detail') }} AS det
-    FULL JOIN {{ ref('stg_openfinance__funds_positions_balances') }} AS bal
+    FROM {{ latest_delivery(ref('stg_openfinance__funds_positions_detail')) }} AS det
+    FULL JOIN {{ latest_delivery(ref('stg_openfinance__funds_positions_balances')) }} AS bal
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations

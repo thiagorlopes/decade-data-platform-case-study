@@ -40,8 +40,8 @@ WITH joined AS (
         bal.financial_transaction_tax_amount,
         bal.blocked_amount,
         bal.purchase_unit_price
-    FROM {{ ref('stg_openfinance__bank_fixed_incomes_positions_detail') }} AS det
-    FULL JOIN {{ ref('stg_openfinance__bank_fixed_incomes_positions_balances') }} AS bal
+    FROM {{ latest_delivery(ref('stg_openfinance__bank_fixed_incomes_positions_detail')) }} AS det
+    FULL JOIN {{ latest_delivery(ref('stg_openfinance__bank_fixed_incomes_positions_balances')) }} AS bal
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations
