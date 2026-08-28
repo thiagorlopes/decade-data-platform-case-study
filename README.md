@@ -263,6 +263,36 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 
 <img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 
+### Physical layout
+
+Locally the warehouse is one DuckDB file, and at 62 MB no layout tuning pays for itself. The decisions below are for the Databricks target, where the canonical layer absorbs millions of records a day and layout decides what each query has to read.
+
+The layout serves four query patterns:
+
+| Pattern | Shape | Reader |
+|---|---|---|
+| Wealth page | one customer, latest snapshot | product, point lookup |
+| Net worth over time | one customer, full history | product, timeline scan |
+| Portfolio analytics | many customers, bounded dates | analysts and services |
+| The build itself | whole snapshots past the watermark | the incremental job |
+
+Three decisions serve them:
+
+- **Cluster by customer, then time.** Delta tables with liquid clustering on `(party_id, snapshot_created_at)` for holdings and `(party_id, transaction_date)` for movements. Every product query filters on one customer first, so file skipping cuts a point lookup to a handful of files regardless of fleet size. Liquid clustering instead of Hive-style partitioning because `party_id` is far too high-cardinality for a partition key: one folder per customer is the small-file problem by design.
+- **Compact toward ~128 MB files.** A build every few minutes writes small files all day. Auto compaction and optimized writes keep files near the 128 MB target, so the file count tracks data volume, not run count.
+- **Let cost grow with customers, not with history.** Storage grows linearly with connected customers. A point query reads one cluster, so its cost stays flat as the fleet grows. Build compute follows the arrival rate, because the watermark reprocesses only snapshots with new arrivals. At ten times the customers: ten times the storage, the same wealth-page latency, and builds sized by arrivals per window, unchanged.
+
+### Compliance
+
+The sample is synthetic, so this repo commits real query outputs. In production every field is personal financial data under LGPD, and four boundaries would apply:
+
+- **The layer boundary is the access boundary.** Raw and staging hold provider payloads verbatim and stay locked to the pipeline's service principal. Consumers get Unity Catalog grants on the consumption schema only. The rule "consumers read consumption, never raw" stops being a convention and becomes an ACL.
+- **Consumption is pseudonymous.** `party_id`, `account_id`, and `investment_id` are opaque UUIDs end to end. The consumption layer carries product attributes (fund names, issuer CNPJs, tickers) and no customer names or personal documents. Re-identification requires the customer registry, which lives outside this platform.
+- **Erasure is a clustered delete.** LGPD grants deletion on request. The tables cluster on `party_id`, so erasing one customer is a targeted `DELETE` plus a vacuum of the affected files, not a full rewrite. The same key that serves the wealth page serves the eraser.
+- **Access leaves a trail.** Unity Catalog audit logs record every read of the consumption schema. Encryption in transit and at rest is the platform default. Data stays in a Brazilian region, matching where the customers and the Open Finance consent live.
+
+Committed sample outputs under `consumers/wealth/output/` exist because the customers are synthetic. Production outputs never land in git.
+
 ## Data flow: two kinds of incremental
 
 Incremental means two different things in this pipeline.
