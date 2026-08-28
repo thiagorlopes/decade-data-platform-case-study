@@ -104,7 +104,7 @@ models:
         data_tests:
           - not_null
           - accepted_values:
-              values: [admit, reject_duplicate, reject_fossil, quarantine]
+              values: [admit, reject_duplicate, reject_zero_duplicate, quarantine]
       - &c_data_quality_flags
         name: data_quality_flags
         description: '{{ doc("data_quality_flags") }}'

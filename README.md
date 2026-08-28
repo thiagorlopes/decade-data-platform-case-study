@@ -171,7 +171,7 @@ raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental
 How a consumer finds out which happened (§2.2's closing question):
 
 - **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero:transient']`). Empty list means clean.
-- **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_fossil` and `quarantine` stay in the positions table for audit.
+- **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_zero_duplicate` and `quarantine` stay in the positions table for audit.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
 
@@ -189,7 +189,7 @@ How a consumer finds out which happened (§2.2's closing question):
 |---|---|---|
 | `admit` | Lot is clean or a resolved conflict winner. | Aggregated into holdings. |
 | `reject_duplicate` | Redundant copy of a hard duplicate (all measures agree under one natural key). | Ignored; kept in `int_*` for audit. |
-| `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero:duplicate_dropped`). | Ignored; kept in `int_*` for audit. |
+| `reject_zero_duplicate` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero:duplicate_dropped`). | Ignored; kept in `int_*` for audit. |
 | `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
 The full `data_quality_flags` vocabulary is in the [`data_quality_flags` doc block](models/canonical/_docs.md). It groups flags by grain: per-lot (added in `int_*_positions`), per-holding (added in `int_*_holdings`), and per-movement (added in `fct_movements`). Browse the generated site with `make docs`.

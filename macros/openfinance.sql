@@ -61,7 +61,7 @@
        `natural_key`, `investment_id`, `gross_amount`, and the quantity column
        named by `qty_col` (default `quantity`; funds pass `quota_quantity`).
      - Gets back the final SELECT of the model, with every input column plus
-       `admission` (admit / reject_duplicate / reject_fossil / quarantine) and
+       `admission` (admit / reject_duplicate / reject_zero_duplicate / quarantine) and
        `data_quality_flags` (array of defect labels).
 
    `extra_flags` lets a family append its own (condition, label) pairs to
@@ -135,7 +135,7 @@ SELECT
     CASE
         WHEN dup_class = 'redundant_copies' AND dedup_rank > 1 THEN 'reject_duplicate'
         WHEN is_resolvable_conflict
-             AND coalesce(gross_amount, 0) = 0         THEN 'reject_fossil'
+             AND coalesce(gross_amount, 0) = 0         THEN 'reject_zero_duplicate'
         WHEN dup_class = 'conflict'
              AND NOT is_resolvable_conflict            THEN 'quarantine'
         ELSE 'admit'
@@ -151,10 +151,12 @@ FROM classified
 
 {# --- receipts replay (shared by every int_*_holdings model).
    The positions feed writes a lot's quantity at the first buy and never
-   updates it: zero in-place changes across all 10,002 lots in the sample,
-   in every family (notebook 05). The transactions feed keeps recording
-   every later buy and sell, so the movements are the reliable record of
-   quantity. `replay_quantity(transactions_ref)` derives each lot's quantity
+   updates it. Not "nobody traded": every sampled lot whose receipts show
+   quantity-bearing trades dated between its first and last sync still
+   reports one unchanged quantity, and for 1,578 of 1,611 variable-income
+   lots the balance equals the first trade, not the latest state
+   (notebook 05). The transactions feed keeps recording every later buy
+   and sell, so the movements are the reliable record of quantity. `replay_quantity(transactions_ref)` derives each lot's quantity
    from them: buys (ENTRADA) add, sells (SAIDA) subtract, receipts with no
    quantity count zero. Receipts whose date the provider lost (staging nulls
    the 1970-01-01 sentinel) get the benefit of the doubt: lost-date buys

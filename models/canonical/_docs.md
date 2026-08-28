@@ -17,7 +17,7 @@ tables for audit.
   agree under one natural key). One row per group is kept as `admit`; the
   rest carry this label so consumers ignore them without losing the audit
   trail.
-- `reject_fossil`: same-sync conflict where exactly one side is a frozen
+- `reject_zero_duplicate`: same-sync conflict where exactly one side is a frozen
   zero-valued row. The zero side gets this label; the live side is
   admitted and flagged `zero:duplicate_dropped`.
 - `quarantine`: same-sync conflict with no single live row to pick.
@@ -44,7 +44,7 @@ Lot-grain, added in int_*_positions:
   The identity columns it covers are not flagged again individually.
 - `zero:duplicate_dropped`: the provider sent two copies of this lot in
   the same sync, one live and one zero-valued. The live row was kept and
-  carries this flag; the zero copy was dropped (see `reject_fossil` in
+  carries this flag; the zero copy was dropped (see `reject_zero_duplicate` in
   admission). The holding's number is stable even though the raw feed
   disagreed.
 
