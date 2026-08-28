@@ -203,7 +203,7 @@ Every flag follows the shape `family:detail`, so a consumer selects a whole clas
 | Lot | `zero:duplicate_dropped` | The sync delivered two copies of the lot, one live and one zero. The live copy was kept; the zero copy was dropped. |
 | Holding | `investment_id:multiple` | The provider keeps two or more live position records for the security at once. The holding sums them. |
 | Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Movements do not carry over between them. |
-| Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept. |
+| Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `zero:duplicate_dropped`. |
 | Holding | `zero:transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
 | Holding | `stale:quantity` | The balance quantity disagrees with the quantity replayed from movements. Prefer `quantity_derived`. |
 | Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity, with a caveat. |
