@@ -125,7 +125,7 @@ This case study solution ships a two-environment slice of that target: **DuckDB 
 All the orchestrator has to do is run two commands on timers:
 
 - `dbt build`, every few minutes: matches the arrival cadence of the raw feeds. The job is watermarked and idempotent, so a repeated or overlapping run leaves the same result as a single run.
-- `dbt source freshness`, on its own cadence: pages the on-call when a feed stalls. Staleness never blocks the build, so consumers keep reading correct data that is merely old.
+- `dbt source freshness`, on its own cadence: pages the on-call when a feed stalls. The thresholds live in `models/_sources.yml`: warn after one quiet hour, error after six, measured on `ingested_at`. Staleness never blocks the build, so consumers keep reading correct data that is merely old. On this static sample the command always reports stale; that is the signal working against week-old data, not a defect.
 
 In the Databricks target this is a two-task Workflows job. Airflow, Dagster, or cron can do the same work, because each command is self-contained: ordering, retries, and state all live in dbt and the watermark. This keeps the scheduler free of pipeline logic, so swapping it is a profile-sized change.
 

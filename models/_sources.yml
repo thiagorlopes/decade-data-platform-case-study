@@ -5,6 +5,15 @@ sources:
     description: Raw Open Finance Brasil payloads as delivered by upstream institutions.
     meta:
       external_location: "data/raw/raw_{name}.parquet"
+    # ingested_at is a varchar in the raw payload, so freshness casts it.
+    # The feeds land every few minutes across all institutions, so a quiet
+    # hour is unusual and a quiet six hours means ingestion stalled. On this
+    # static sample the check always reports stale; that is the signal
+    # working, not a defect.
+    loaded_at_field: CAST(ingested_at AS TIMESTAMP)
+    freshness:
+      warn_after: {count: 1, period: hour}
+      error_after: {count: 6, period: hour}
     tables:
       - name: positions
         description: One row per position record as delivered. Balance snapshots.
