@@ -10,7 +10,7 @@
 
 ## Layers
 
-- Top-level split: `canonical/` and `consumption/`. Inside `canonical/`: `staging/` (prefix `stg_`) and `intermediate/` (prefix `int_`). Consumption uses `fct_` and `dim_`.
+- Top-level split: `staging/` (prefix `stg_`), `canonical/` (prefix `int_`, in its `intermediate/` folder), and `consumption/` (`fct_` and `dim_`).
 - Staging is 1:1 with a source table. Rename and cast only, no joins.
 - Intermediate composes staging (or other intermediates) with business logic.
 - Consumption exposes contracted `fct_` and `dim_` for consumers.

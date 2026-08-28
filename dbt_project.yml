@@ -12,11 +12,11 @@ models:
     +persist_docs:
       relation: true
       columns: true
+    staging:
+      +materialized: view
     canonical:
       +materialized: incremental
       +unique_key: [snapshot_id, investment_id]
-      staging:
-        +materialized: view
       intermediate:
         holdings:
           # view, not incremental: zero:transient/investment_id:replaced lag over the full

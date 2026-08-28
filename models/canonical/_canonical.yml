@@ -22,7 +22,7 @@ version: 2
 # staging keep counting the provider's raw defects.
 #
 # Staging model contracts (grain, envelope integrity, payload defect ledger)
-# live in models/canonical/staging/_staging_quality.yml. Column doc blocks
+# live in models/staging/_staging_quality.yml. Column doc blocks
 # are shared and defined once in _docs.md.
 
 models:

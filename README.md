@@ -87,7 +87,7 @@ Contracts are dbt `schema.yml` files. `dbt_project.yml` declares [`contracts/`](
 
 - [`contracts/_consumption.yml`](contracts/_consumption.yml): the output contract for `fct_holdings` and `fct_movements`. Grain and enum tests run at error severity.
 - [`models/canonical/_canonical.yml`](models/canonical/_canonical.yml): per-family canonical contracts, kept next to their models.
-- [`models/canonical/staging/_staging_quality.yml`](models/canonical/staging/_staging_quality.yml): within-record quality rules. This is the DETECT tier, at warn severity.
+- [`models/staging/_staging_quality.yml`](models/staging/_staging_quality.yml): within-record quality rules. This is the DETECT tier, at warn severity.
 
 ### What `contract: enforced` guarantees
 
@@ -177,7 +177,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 **State today**: three stages, one folder each.
 
-**DETECT** lives in `models/canonical/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
+**DETECT** lives in `models/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
 
 **RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero:transient`, `investment_id:replaced`, `investment_id:multiple`, `zero:lot_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
 
