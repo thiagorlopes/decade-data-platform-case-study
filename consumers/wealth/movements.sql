@@ -1,7 +1,7 @@
--- The movements behind the current holdings. Each movement is tagged with
--- the current holding it belongs to via the shared holding_key; the tag is
--- NULL when the movement's lot is no longer in the portfolio (closed or
--- handed off).
+-- The movements behind the current holdings. Each movement is tied to the
+-- current holding it belongs to via the shared holding_key; movements on
+-- lots no longer in the portfolio belong to other consumers (cashflow,
+-- net worth over time), not this page.
 WITH current_holdings AS (
     SELECT account_id, product_family, holding_key
     FROM fct_holdings
@@ -27,11 +27,11 @@ SELECT
     mov.transaction_id,
     mov.data_quality_flags
 FROM fct_movements AS mov
-LEFT JOIN current_holdings AS cur
+INNER JOIN current_holdings AS cur
     ON cur.account_id = mov.account_id
     AND cur.product_family = mov.product_family
     AND cur.holding_key = mov.holding_key
-LEFT JOIN dim_holding AS dim
+INNER JOIN dim_holding AS dim
     ON dim.product_family = cur.product_family
     AND dim.holding_key = cur.holding_key
 ORDER BY mov.transaction_date, mov.transaction_id;

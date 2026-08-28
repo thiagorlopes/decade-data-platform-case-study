@@ -6,7 +6,14 @@ SELECT
     fct.product_family,
     dim.holding_name,
     fct.holding_key,
-    fct.quantity,
+    -- movements are the reliable record of quantity (stale:quantity in
+    -- data_quality_flags); fall back to the provider's number only when the
+    -- movements are incomplete and the replay cannot be trusted
+    CASE WHEN list_contains(fct.data_quality_flags, 'movements:incomplete')
+         THEN fct.quantity
+         ELSE coalesce(fct.quantity_derived, fct.quantity)
+    END AS quantity,
+    fct.quantity AS quantity_reported,
     fct.gross_amount,
     fct.currency,
     fct.snapshot_created_at AS valued_at,

@@ -18,10 +18,11 @@ SELECT
     '{{ family }}' AS product_family,
     holding_key,
     CAST(quantity AS DECIMAL(38, 10)) AS quantity,
+    CAST(quantity_derived AS DECIMAL(38, 10)) AS quantity_derived,
     CAST(gross_amount AS DECIMAL(38, 10)) AS gross_amount,
     CAST(net_amount AS DECIMAL(38, 10)) AS net_amount,
     currency,
-    n_lots,
+    n_investment_ids,
     investment_ids,
     data_quality_flags
 FROM {{ ref('int_' ~ family ~ '_holdings') }}

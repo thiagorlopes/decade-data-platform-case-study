@@ -38,6 +38,13 @@ pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
 make install     # build the docker image
 ```
 
+The `make` targets cover the whole pipeline. For scoped dbt commands, such as `dbt build --select <model>+`, install dbt on the host with the same pinned versions the image uses:
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
 ## Development cycle
 
 After `make install`, use these targets to iterate:
@@ -163,7 +170,7 @@ raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental
 
 How a consumer finds out which happened (§2.2's closing question):
 
-- **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero_flap']`). Empty list means clean.
+- **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero:transient']`). Empty list means clean.
 - **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_fossil` and `quarantine` stay in the positions table for audit.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
@@ -172,7 +179,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 **DETECT** lives in `models/canonical/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
 
-**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero_flap`, `id_handoff`, `merged_lots`, `zero_gross_lot`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
+**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero:transient`, `investment_id:replaced`, `investment_id:multiple`, `zero:lot_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
 
 **GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
@@ -182,7 +189,7 @@ How a consumer finds out which happened (§2.2's closing question):
 |---|---|---|
 | `admit` | Lot is clean or a resolved conflict winner. | Aggregated into holdings. |
 | `reject_duplicate` | Redundant copy of a hard duplicate (all measures agree under one natural key). | Ignored; kept in `int_*` for audit. |
-| `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero_conflict_resolved`). | Ignored; kept in `int_*` for audit. |
+| `reject_fossil` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero:duplicate_dropped`). | Ignored; kept in `int_*` for audit. |
 | `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
 The full `data_quality_flags` vocabulary is in the [`data_quality_flags` doc block](models/canonical/_docs.md). It groups flags by grain: per-lot (added in `int_*_positions`), per-holding (added in `int_*_holdings`), and per-movement (added in `fct_movements`). Browse the generated site with `make docs`.
@@ -219,9 +226,9 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 | Same `transaction_id`, conflicting `transaction_amount` | Transactions-side analogue of the redundant-copies defect |
 | Negative `transaction_amount` or `gross_amount` | Sign errors on values the domain treats as positive |
 | Transaction dated after its own snapshot | Envelope violation: the payload references a future the snapshot can't see |
-| Holding switching currency between syncs | Cross-sync contradiction not covered by zero-flap |
-| Holding dropout (present, absent one sync, present again) | Missing-row cousin of zero_flap; the provider drops the row instead of zeroing it |
-| Zero quantity with positive gross_amount | Mirror of the zero-flap defect at a single row |
+| Holding switching currency between syncs | Cross-sync contradiction not covered by `zero:transient` |
+| Holding dropout (present, absent one sync, present again) | Missing-row cousin of `zero:transient`; the provider drops the row instead of zeroing it |
+| Zero quantity with positive gross_amount | Mirror of the `zero:transient` defect at a single row |
 | Quantity change with no transaction behind it | Cross-feed reconciliation: positions and transactions disagreeing on a movement |
 
 The last probe is also a modeling finding. Quantities never move in the sample. Every seeded across-record defect keys on "quantity unchanged" because quantity is the only invariant the sample offers.

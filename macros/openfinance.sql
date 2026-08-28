@@ -106,7 +106,7 @@ with_group_stats AS (
 classified AS (
     SELECT
         *,
-        CASE WHEN natural_key IS NULL           THEN 'missing_key'  -- no key, cannot check for duplicates
+        CASE WHEN natural_key IS NULL           THEN 'missing:natural_key'  -- no key, cannot check for duplicates
              WHEN NOT is_in_duplicate_group     THEN 'sole_lot'
              WHEN NOT quantities_agree          THEN 'separate_lots'
              WHEN gross_amounts_agree           THEN 'redundant_copies'
@@ -141,19 +141,76 @@ SELECT
         ELSE 'admit'
     END AS admission,
     list_filter([
-        CASE WHEN natural_key IS NULL THEN 'missing_key' END,
+        CASE WHEN natural_key IS NULL THEN 'missing:natural_key' END,
         CASE WHEN is_resolvable_conflict AND gross_amount > 0
-             THEN 'zero_conflict_resolved' END{% for cond, label in extra_flags %},
+             THEN 'zero:duplicate_dropped' END{% for cond, label in extra_flags %},
         CASE WHEN {{ cond }} THEN '{{ label }}' END{% endfor %}
     ], f -> f IS NOT NULL) AS data_quality_flags
 FROM classified
+{%- endmacro %}
+
+{# --- receipts replay (shared by every int_*_holdings model).
+   The positions feed writes a lot's quantity at the first buy and never
+   updates it: zero in-place changes across all 10,002 lots in the sample,
+   in every family (notebook 05). The transactions feed keeps recording
+   every later buy and sell, so the movements are the reliable record of
+   quantity. `replay_quantity(transactions_ref)` derives each lot's quantity
+   from them: buys (ENTRADA) add, sells (SAIDA) subtract, receipts with no
+   quantity count zero. Receipts whose date the provider lost (staging nulls
+   the 1970-01-01 sentinel) get the benefit of the doubt: lost-date buys
+   sort first, lost-date sells last. When the day-by-day running total drops
+   below zero even under that most favorable ordering, receipts must be
+   missing and the lot cannot be replayed; the flags macro below turns that
+   into `movements:incomplete`. Emits three CTEs; models join on `replay`.
+   Funds pass their own column names. --- #}
+{% macro replay_quantity(transactions_ref, qty_col='transaction_quantity', date_col='transaction_date') -%}
+day_net AS (
+    SELECT
+        investment_id,
+        CASE
+            WHEN {{ date_col }} IS NULL AND movement_type = 'SAIDA'
+                THEN DATE '9999-12-31'
+            WHEN {{ date_col }} IS NULL
+                THEN DATE '1970-01-01'
+            ELSE {{ date_col }}
+        END AS eff_date,
+        sum(CASE
+            WHEN {{ qty_col }} IS NULL THEN 0
+            WHEN movement_type = 'ENTRADA' THEN {{ qty_col }}
+            ELSE -{{ qty_col }}
+        END) AS day_net,
+        count(*) FILTER ({{ qty_col }} IS NOT NULL) AS n_qty_receipts
+    FROM {{ transactions_ref }}
+    GROUP BY investment_id, eff_date
+),
+
+running AS (
+    SELECT
+        *,
+        sum(day_net) OVER (
+            PARTITION BY investment_id ORDER BY eff_date
+        ) AS running_total
+    FROM day_net
+),
+
+replay AS (
+    SELECT
+        investment_id,
+        sum(day_net)        AS replay_quantity,
+        min(running_total)  AS min_running_total,
+        sum(n_qty_receipts) AS n_qty_receipts
+    FROM running
+    GROUP BY investment_id
+)
 {%- endmacro %}
 
 {# --- holdings cross-sync flags (shared by every int_*_holdings model).
    `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
    over the holding-grain window). `holding_data_quality_flags()` emits the final
    data_quality_flags expression: per-lot flags unioned with the cross-sync
-   signals (merged_lots, zero_gross_lot, zero_flap, id_handoff). --- #}
+   signals (investment_id:multiple, zero:lot_kept, zero:transient, investment_id:replaced) and the
+   replay verdicts (movements:incomplete, stale:quantity); a holding with
+   neither replay flag has a quantity the movements confirm. --- #}
 {% macro holding_timeline() -%}
 timeline AS (
     SELECT
@@ -175,12 +232,14 @@ timeline AS (
 
 {% macro holding_data_quality_flags() -%}
 list_distinct(lot_flags || list_filter([
-    CASE WHEN n_lots > 1 THEN 'merged_lots' END,
-    CASE WHEN n_lots > 1 AND has_zero_lot THEN 'zero_gross_lot' END,
+    CASE WHEN n_investment_ids > 1 THEN 'investment_id:multiple' END,
+    CASE WHEN n_investment_ids > 1 AND has_zero_lot THEN 'zero:lot_kept' END,
     CASE WHEN gross_amount = 0 AND prev_gross > 0 AND next_gross > 0
               AND quantity = prev_qty AND quantity = next_qty
-         THEN 'zero_flap' END,
+         THEN 'zero:transient' END,
     -- The provider reissued investment_ids for the same holding.
-    CASE WHEN has_arrived_ids AND has_departed_ids THEN 'id_handoff' END
+    CASE WHEN has_arrived_ids AND has_departed_ids THEN 'investment_id:replaced' END,
+    CASE WHEN has_incomplete_replay THEN 'movements:incomplete' END,
+    CASE WHEN NOT has_incomplete_replay AND has_stale_lot THEN 'stale:quantity' END
 ], f -> f IS NOT NULL))
 {%- endmacro %}

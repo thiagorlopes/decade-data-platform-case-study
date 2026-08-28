@@ -19,7 +19,7 @@ models:
         +materialized: view
       intermediate:
         holdings:
-          # view, not incremental: zero_flap/id_handoff lag over the full
+          # view, not incremental: zero:transient/investment_id:replaced lag over the full
           # timeline of the incremental positions tables
           +materialized: view
     consumption:
