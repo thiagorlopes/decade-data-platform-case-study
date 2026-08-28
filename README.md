@@ -192,7 +192,24 @@ How a consumer finds out which happened (§2.2's closing question):
 | `reject_zero_duplicate` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero:duplicate_dropped`). | Ignored; kept in `int_*` for audit. |
 | `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
-The full `data_quality_flags` vocabulary is in the [`data_quality_flags` doc block](models/canonical/_docs.md). It groups flags by grain: per-lot (added in `int_*_positions`), per-holding (added in `int_*_holdings`), and per-movement (added in `fct_movements`). Browse the generated site with `make docs`.
+#### Flags at a glance
+
+Every flag follows the shape `family:detail`, so a consumer selects a whole class with one prefix filter (`WHERE flag LIKE 'missing:%'`). Lot flags are added in `int_*_positions`, holding flags in `int_*_holdings`, movement flags in `fct_movements`.
+
+| Grain | Flag | Meaning |
+|---|---|---|
+| Lot | `missing:<column>` | A spec-required column arrived empty and could not be repaired (`missing:indexer`, `missing:isin_code`, ...). |
+| Lot | `missing:natural_key` | The record has no identity to merge on. It becomes its own holding, keyed by its investment_id. |
+| Lot | `zero:duplicate_dropped` | The sync delivered two copies of the lot, one live and one zero. The live copy was kept; the zero copy was dropped. |
+| Holding | `investment_id:multiple` | The provider keeps two or more live position records for the security at once. The holding sums them. |
+| Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Movements do not carry over between them. |
+| Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept. |
+| Holding | `zero:transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
+| Holding | `stale:quantity` | The balance quantity disagrees with the quantity replayed from movements. Prefer `quantity_derived`. |
+| Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity, with a caveat. |
+| Movement | `missing:transaction_date` | No usable movement date. The movement counts in totals but has no place on a timeline. |
+
+The long-form version of each entry lives in the [`data_quality_flags` doc block](models/canonical/_docs.md) and renders on every column that carries it via `make docs`.
 
 #### Quarantine runbook
 
@@ -209,15 +226,15 @@ Quarantined lots live in `int_*_positions` with `admission = 'quarantine'`: the 
 
 The brief warns that "an institution respecting [the spec] is a hope, not a guarantee." So the §2.2 list is illustrative, not exhaustive. Two audits ran against the built warehouse.
 
-**Listed classes in new forms.** The case authors seeded the announced defect classes in forms the brief does not name. The intermediate layer's repair macros handle them. Raw counts stay visible in the staging warn tests.
+**Listed classes in new forms.** The case authors seeded the announced defect classes in forms the brief does not name. The intermediate layer's repair macros handle them. Raw counts stay visible in the staging warn tests. When the repair cannot recover the value, the row carries a flag in `data_quality_flags`; a fully repaired value carries no flag.
 
-| Form | Class it belongs to | Where handled | Raw count |
-|---|---|---|---|
-| `0001-01-01` placeholder dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | 1 951 |
-| Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | see warn tests |
-| `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | 2 |
-| `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` + `missing:transaction_date` flag on `fct_movements` | 3 001 |
-| CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | 1 370 |
+| Form | Class it belongs to | Where handled | Flag on the row | Raw count |
+|---|---|---|---|---|
+| `0001-01-01` placeholder dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | `missing:<column>` for the nulled date, e.g. `missing:purchase_date` | 1 951 |
+| Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | `missing:natural_key` when no identity survives | see warn tests |
+| `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | none, fully repaired | 2 |
+| `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` | `missing:transaction_date` on `fct_movements` | 3 001 |
+| CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | none, fully repaired | 1 370 |
 
 **Unlisted classes, all zero hits.** Nine defect classes the brief does not name and the sample does not contain. Zero hits shows the seeding stuck to the announced classes. It does not prove these defects are absent in production. In production, each would become a warn test in `_staging_quality.yml`. The sample does not justify permanent tests for data that is not there.
 
