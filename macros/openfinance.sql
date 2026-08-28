@@ -156,7 +156,7 @@ FROM classified
    so for 1,578 of 1,611 variable-income lots the balance equals the first
    trade, not the latest state (evidence in notebook 05).
    Receipts whose date the provider lost (staging nulls the 1970-01-01
-   sentinel) get the most favorable ordering: lost-date buys sort first,
+   placeholder) get the most favorable ordering: lost-date buys sort first,
    lost-date sells last. If the running total still drops below zero,
    receipts are missing and the flags macro below marks the lot
    `movements:incomplete`.
