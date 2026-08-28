@@ -9,9 +9,14 @@ version: 2
 #                  re-delivered, only the latest delivery survives.
 #                  Unions int_*_transactions.
 #   dim_holding:   one row per (product_family, holding_key). Static contract
-#                  of the security — maturity, indexer, rate, issuer, ticker,
-#                  fund_cnpj. Join to fct_holdings for balance + attributes in
-#                  a single wealth query without touching canonical.
+#                  of the security — name, isin, maturity, indexer, rate,
+#                  issuer, ticker, fund_cnpj. Descriptive attributes live here
+#                  only; the facts carry keys and measures. Join either fact
+#                  on (product_family, holding_key).
+#
+# institution_name stays denormalized on both facts on purpose: cardinality is
+# tiny and the value is stable, so the extra column is cheaper than a dim join
+# in every consumer query.
 #
 # Tax breakdowns and unit prices stay in canonical; if you need one, query the
 # family's canonical model directly.
@@ -88,20 +93,14 @@ models:
         data_type: varchar
         description: >-
           Holding identity within the account: the family natural key, or the
-          investment_id for lots flagged missing_key.
+          investment_id for lots flagged missing:natural_key.
         data_tests: [not_null]
-      - name: holding_name
-        data_type: varchar
-        description: >-
-          Display name of the holding; per family, the most descriptive
-          identity column (fund name, ticker, treasury product name, credit
-          debtor, bank product type).
-      - name: isin_code
-        data_type: varchar
-        description: '{{ doc("ofb_isin_code") }} NULL for funds: that family identifies the security by fund_cnpj, kept in canonical only.'
       - name: quantity
         data_type: decimal(38,10)
-        description: '{{ doc("ofb_position_quantity") }} Summed over the holding''s admitted lots.'
+        description: '{{ doc("ofb_position_quantity") }} Summed over the holding''s admitted lots. As delivered by the provider; see quantity_derived and the stale:quantity flag before trusting it.'
+      - name: quantity_derived
+        data_type: decimal(38,10)
+        description: '{{ doc("dq_quantity_derived") }}'
       - name: gross_amount
         data_type: decimal(38,10)
         description: '{{ doc("ofb_gross_amount") }} Summed over the holding''s admitted lots.'
@@ -111,9 +110,9 @@ models:
       - name: currency
         data_type: varchar
         description: '{{ doc("ofb_currency") }}'
-      - name: n_lots
+      - name: n_investment_ids
         data_type: bigint
-        description: Number of admitted lots aggregated under the holding.
+        description: Number of admitted position records (investment_ids) summed into the holding.
       - name: investment_ids
         data_type: varchar[]
         description: '{{ doc("ofb_investment_id") }} Every investment_id that fed this holding. To join movements to holdings, prefer holding_key on both sides; use this array only when you need the raw investment ids.'
@@ -148,8 +147,14 @@ models:
         data_type: varchar
         description: >-
           Holding identity within the family: the natural key, or the
-          investment_id for lots flagged missing_key. Same rule as fct_holdings.
+          investment_id for lots flagged missing:natural_key. Same rule as fct_holdings.
         data_tests: [not_null]
+      - name: holding_name
+        data_type: varchar
+        description: >-
+          Display name of the holding; per family, the most descriptive
+          identity column (fund name, ticker, treasury product name, credit
+          debtor, bank product type).
       - name: isin_code
         data_type: varchar
         description: '{{ doc("ofb_isin_code") }} NULL for funds and for holdings whose payload omitted it.'

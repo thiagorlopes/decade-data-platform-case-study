@@ -17,9 +17,9 @@ tables for audit.
   agree under one natural key). One row per group is kept as `admit`; the
   rest carry this label so consumers ignore them without losing the audit
   trail.
-- `reject_fossil`: same-sync conflict where exactly one side is a frozen
+- `reject_zero_duplicate`: same-sync conflict where exactly one side is a frozen
   zero-valued row. The zero side gets this label; the live side is
-  admitted and flagged `zero_conflict_resolved`.
+  admitted and flagged `zero:duplicate_dropped`.
 - `quarantine`: same-sync conflict with no single live row to pick.
   Neither side is safe to aggregate automatically. Rows stay in
   `int_*_positions` for audit; the holdings views drop them so consumers
@@ -34,29 +34,45 @@ needing to know the SQL that produced it.
 
 Lot-grain, added in int_*_positions:
 
-- `missing_key`: natural key could not be derived from the repaired
-  columns. The row travels alone at investment_id grain, never merged.
-- `zero_conflict_resolved`: the classifier kept this live row and rejected
-  a zero-valued sibling in the same sync (see `reject_fossil` in
-  admission). Presence of this flag means the holding's number is stable
-  even though the raw feed disagreed.
 - `missing:<column>` (e.g. `missing:indexer`, `missing:gross_amount`):
-  non-repairable NULL in a column the OFB spec marks required, when the
-  column is not already covered by `missing_key`. The per-family list is
-  the `extra_flags` argument of each int_*_positions model.
+  non-repairable NULL in a column the OFB spec marks required. The
+  per-family list is the `extra_flags` argument of each int_*_positions
+  model.
+- `missing:natural_key`: the record carries no identity to merge on (no ISIN,
+  ticker, or equivalent). It becomes its own holding, keyed by its
+  investment_id, and never merges with other records of the same security.
+  The identity columns it covers are not flagged again individually.
+- `zero:duplicate_dropped`: the provider sent two copies of this lot in
+  the same sync, one live and one zero-valued. The live row was kept and
+  carries this flag; the zero copy was dropped (see `reject_zero_duplicate` in
+  admission). The holding's number is stable even though the raw feed
+  disagreed.
 
 Holding-grain, added in int_*_holdings (cross-sync signals that only
 make sense once lots are aggregated by natural key):
 
-- `merged_lots`: two or more admitted lots aggregated under one holding.
-- `zero_gross_lot`: a merged holding contains at least one lot with
-  gross_amount = 0 alongside a live lot.
-- `zero_flap`: the holding's gross flipped 0 → nonzero across consecutive
-  syncs with quantity unchanged — a transient provider glitch, not a
-  real trade or valuation change.
-- `id_handoff`: the holding's contributing investment_ids changed across
-  syncs (a lot re-issued under a new provider id). The natural key is
-  stable; the id set is not.
+- `investment_id:multiple`: the provider keeps two or more position
+  records for this security at the same time. The holding sums them into
+  one line; n_investment_ids counts them and investment_ids lists them.
+- `zero:lot_kept`: one of the lots merged into this holding is worth zero
+  (gross_amount = 0) while its siblings are live. The empty lot was kept,
+  so n_investment_ids and investment_ids include it.
+- `zero:transient`: the holding's gross went to zero for a sync, then
+  came back, with quantity unchanged. A brief false zero from the
+  provider, not a real trade or valuation change.
+- `investment_id:replaced`: between two syncs, the provider retired one
+  of the holding's investment_ids and issued a new one for the same
+  security. The new id starts with its own reported quantity, and the old
+  id's movements do not carry over, so treat the two ids separately in
+  any time-based read.
+- `stale:quantity`: the provider's balance quantity disagrees with the
+  quantity replayed from the holding's movements. The balance feed writes
+  quantity at the first buy and does not maintain it, so the movements are
+  the reliable record. Prefer `quantity_derived`.
+- `movements:incomplete`: the movement replay for at least one lot dips
+  below zero even with lost-date sells placed last, so movements must be
+  missing and `quantity_derived` cannot be trusted for this holding. Keep
+  the provider's `quantity` and caveat it.
 
 Movement-grain, added in fct_movements:
 
@@ -64,6 +80,17 @@ Movement-grain, added in fct_movements:
   (NULL, or a placeholder: `0001-01-01` .NET MinValue, `1970-01-01` Unix
   epoch zero). The date is NULL; the movement still counts toward totals
   but cannot be placed on a timeline.
+{% enddocs %}
+
+{% docs dq_quantity_derived %}
+Quantity replayed from the holding's movements: buys add, sells subtract,
+movements with no quantity count zero; lost-date buys sort first and
+lost-date sells last. Computed over all delivered movements, so every
+snapshot row of a holding carries the same current-knowledge value; it is
+exact for the latest snapshot. When it disagrees with the provider's
+`quantity` the holding carries `stale:quantity`; when the replay is
+infeasible it carries `movements:incomplete` and this column should not be
+used. See the `replay_quantity` macro header for the defect narrative.
 {% enddocs %}
 
 {% docs stg_contract %}

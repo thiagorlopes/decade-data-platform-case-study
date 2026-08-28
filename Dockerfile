@@ -20,6 +20,10 @@ RUN pip install --no-cache-dir --no-compile --prefix=/install -r /tmp/requiremen
 
 FROM python:3.12-slim
 
+# socat bridges the DuckDB UI (loopback-only HTTP server) to the published port
+RUN apt-get update && apt-get install -y --no-install-recommends socat \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 COPY --from=builder /install /usr/local

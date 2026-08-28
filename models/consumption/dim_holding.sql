@@ -7,6 +7,7 @@ WITH bank AS (
     SELECT
         'bank_fixed_incomes'                                   AS product_family,
         coalesce(natural_key, investment_id)                   AS holding_key,
+        arg_max(investment_type, snapshot_created_at)          AS holding_name,
         arg_max(isin_code, snapshot_created_at)                AS isin_code,
         arg_max(issuer_cnpj, snapshot_created_at)              AS issuer_cnpj,
         CAST(NULL AS VARCHAR)                                  AS debtor_cnpj,
@@ -29,6 +30,7 @@ credit AS (
     SELECT
         'credit_fixed_incomes'                                 AS product_family,
         coalesce(natural_key, investment_id)                   AS holding_key,
+        arg_max(coalesce(debtor_name, investment_type), snapshot_created_at) AS holding_name,
         arg_max(isin_code, snapshot_created_at)                AS isin_code,
         arg_max(issuer_cnpj, snapshot_created_at)              AS issuer_cnpj,
         arg_max(debtor_cnpj, snapshot_created_at)              AS debtor_cnpj,
@@ -51,6 +53,7 @@ funds AS (
     SELECT
         'funds'                                                AS product_family,
         coalesce(natural_key, investment_id)                   AS holding_key,
+        arg_max(fund_name, snapshot_created_at)                AS holding_name,
         arg_max(isin_code, snapshot_created_at)                AS isin_code,
         CAST(NULL AS VARCHAR)                                  AS issuer_cnpj,
         CAST(NULL AS VARCHAR)                                  AS debtor_cnpj,
@@ -73,6 +76,7 @@ treasure AS (
     SELECT
         'treasure_titles'                                      AS product_family,
         coalesce(natural_key, investment_id)                   AS holding_key,
+        arg_max(product_name, snapshot_created_at)             AS holding_name,
         arg_max(isin_code, snapshot_created_at)                AS isin_code,
         CAST(NULL AS VARCHAR)                                  AS issuer_cnpj,
         CAST(NULL AS VARCHAR)                                  AS debtor_cnpj,
@@ -95,6 +99,7 @@ variable AS (
     SELECT
         'variable_incomes'                                     AS product_family,
         coalesce(natural_key, investment_id)                   AS holding_key,
+        arg_max(ticker, snapshot_created_at)                   AS holding_name,
         arg_max(isin_code, snapshot_created_at)                AS isin_code,
         arg_max(issuer_cnpj, snapshot_created_at)              AS issuer_cnpj,
         CAST(NULL AS VARCHAR)                                  AS debtor_cnpj,

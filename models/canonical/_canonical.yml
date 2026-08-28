@@ -22,7 +22,7 @@ version: 2
 # staging keep counting the provider's raw defects.
 #
 # Staging model contracts (grain, envelope integrity, payload defect ledger)
-# live in models/canonical/staging/_staging_quality.yml. Column doc blocks
+# live in models/staging/_staging_quality.yml. Column doc blocks
 # are shared and defined once in _docs.md.
 
 models:
@@ -96,15 +96,15 @@ models:
         description: >-
           Holding identity within an account, derived from the REPAIRED
           identity columns (key per family in the model SQL). NULL means the
-          row cannot be identified: it is admitted at lot grain with
-          data_quality_flags [missing_key] and never merged with anything.
+          row cannot be identified: it is admitted at lot grain, flagged
+          missing:natural_key, and never merged with anything.
       - &c_admission
         name: admission
         description: '{{ doc("dq_admission") }}'
         data_tests:
           - not_null
           - accepted_values:
-              values: [admit, reject_duplicate, reject_fossil, quarantine]
+              values: [admit, reject_duplicate, reject_zero_duplicate, quarantine]
       - &c_data_quality_flags
         name: data_quality_flags
         description: '{{ doc("data_quality_flags") }}'
@@ -603,7 +603,7 @@ models:
 
 # Holdings sub-layer: one row per (snapshot_id, account_id, holding_key),
 # admitted lots summed on the natural key. Views over the incremental
-# int_*_positions tables because the cross-sync flags (zero_flap, id_handoff)
+# int_*_positions tables because the cross-sync flags (zero:transient, investment_id:replaced)
 # need lag/lead over the full timeline. Missing-identity lots keep their
 # investment_id as holding_key and travel alone.
 
@@ -639,7 +639,7 @@ models:
     description: >
       Credit fixed income holdings per sync, keyed by
       (isin_code, debtor_cnpj, due_date). Rows missing identity fields keep
-      their investment_id as holding_key and carry the missing_key flag.
+      their investment_id as holding_key and carry the missing:natural_key flag.
     data_tests: *holding_grain
     columns: *holding_dq_columns
 

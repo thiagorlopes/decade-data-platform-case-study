@@ -1,12 +1,12 @@
-{%- set families = {
-    'bank_fixed_incomes':   'investment_type',
-    'credit_fixed_incomes': 'coalesce(debtor_name, investment_type)',
-    'funds':                'fund_name',
-    'treasure_titles':      'product_name',
-    'variable_incomes':     'ticker',
-} -%}
+{%- set families = [
+    'bank_fixed_incomes',
+    'credit_fixed_incomes',
+    'funds',
+    'treasure_titles',
+    'variable_incomes',
+] -%}
 
-{% for family, holding_name in families.items() %}
+{% for family in families %}
 SELECT
     reference_date,
     snapshot_created_at,
@@ -17,13 +17,12 @@ SELECT
     institution_name,
     '{{ family }}' AS product_family,
     holding_key,
-    {{ holding_name }} AS holding_name,
-    isin_code,
     CAST(quantity AS DECIMAL(38, 10)) AS quantity,
+    CAST(quantity_derived AS DECIMAL(38, 10)) AS quantity_derived,
     CAST(gross_amount AS DECIMAL(38, 10)) AS gross_amount,
     CAST(net_amount AS DECIMAL(38, 10)) AS net_amount,
     currency,
-    n_lots,
+    n_investment_ids,
     investment_ids,
     data_quality_flags
 FROM {{ ref('int_' ~ family ~ '_holdings') }}

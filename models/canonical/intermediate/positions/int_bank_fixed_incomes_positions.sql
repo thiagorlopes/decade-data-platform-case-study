@@ -61,7 +61,7 @@ repaired AS (
 
 -- Banks re-use ISINs across CDB issuances; (issuer, issue_date, due_date)
 -- pins one issuance (notebook 03 §1.2). Any NULL part means the row cannot
--- be identified and travels alone as missing_key.
+-- be identified and travels alone as missing:natural_key.
 with_natural_key AS (
     SELECT *,
         CASE WHEN isin_code IS NOT NULL AND issuer_cnpj IS NOT NULL
