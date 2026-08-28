@@ -185,23 +185,127 @@ SELECT
 FROM classified
 {%- endmacro %}
 
+{# One holding delivered under two investment_ids also gets its movements
+   delivered under both, with fresh transaction_ids on the copies, so the
+   per-id delivery dedup in int_*_transactions cannot see them. This macro
+   finds those copies and keeps one.
+   The test is content, never the id alone: movements of one holding that
+   read identically are one event delivered twice, unless the ids carrying
+   them were counted as money side by side in some sync. Those ids are real
+   lots (investment_id:multiple), and identical movements across real lots
+   are real repeats. A movement with no identical counterpart is never
+   dropped: under a replaced id, the only record of old history may live on
+   the retired id.
+   Copies agree on every business field, so the choice of survivor is
+   provenance only. The first-delivered copy wins (lowest id on a tie), so
+   a re-issue arriving later can never steal survivorship from a
+   transaction_id already published.
+   Emits a subquery: the deduped movement stream, with holding_key and a
+   had_cross_id_twin flag on the surviving copy. #}
+{% macro cross_id_movements(transactions_ref, positions_ref, date_col='transaction_date', qty_col='transaction_quantity', gross_col='transaction_gross_amount') -%}
+(
+    WITH
+    -- which holding does each investment_id belong to. max, not any_value:
+    -- order-independent if a provider ever re-keys an id.
+    holding_of AS (
+        SELECT investment_id, max(natural_key) AS natural_key
+        FROM {{ positions_ref }}
+        GROUP BY investment_id
+    ),
+
+    -- id pairs the provider counted as money at the same moment:
+    -- two real lots of one holding, never one record and its copy
+    ids_live_together AS (
+        SELECT DISTINCT lot_a.investment_id AS id_a, lot_b.investment_id AS id_b
+        FROM {{ positions_ref }} AS lot_a
+        JOIN {{ positions_ref }} AS lot_b
+            ON  lot_a.snapshot_id   = lot_b.snapshot_id
+            AND lot_a.account_id    = lot_b.account_id
+            AND lot_a.natural_key   = lot_b.natural_key
+            AND lot_a.investment_id < lot_b.investment_id
+        WHERE lot_a.admission = 'admit' AND lot_b.admission = 'admit'
+    ),
+
+    movements AS (
+        SELECT mov.*, coalesce(holding_of.natural_key, mov.investment_id) AS holding_key
+        FROM {{ transactions_ref }} AS mov
+        LEFT JOIN holding_of USING (investment_id)
+    ),
+
+    -- everything that identifies "the same event": the holding plus every
+    -- business field. Two movements sharing an event_key are either one
+    -- event delivered twice or a real repeat.
+    keyed AS (
+        SELECT *, struct_pack(
+            account  := account_id,
+            holding  := holding_key,
+            happened := {{ date_col }},
+            movement := movement_type,
+            kind     := transaction_type,
+            detail   := transaction_type_additional_info,
+            quantity := {{ qty_col }},
+            amount   := {{ gross_col }},
+            currency := currency
+        ) AS event_key
+        FROM movements
+    ),
+
+    -- one row per distinct event: how many ids delivered it, and which
+    -- id's copy survives if it turns out to be a duplicate
+    same_event AS (
+        SELECT
+            event_key,
+            count(DISTINCT investment_id) AS n_ids,
+            list(DISTINCT investment_id)  AS ids,
+            arg_min(investment_id, struct_pack(
+                arrived  := ingested_at,
+                tiebreak := investment_id
+            )) AS keep_id
+        FROM keyed
+        GROUP BY event_key
+    ),
+
+    -- delivered twice = several ids, and no two of them were real lots
+    decided AS (
+        SELECT
+            same_event.*,
+            n_ids > 1 AND NOT EXISTS (
+                SELECT 1 FROM ids_live_together
+                WHERE list_contains(ids, id_a) AND list_contains(ids, id_b)
+            ) AS delivered_twice
+        FROM same_event
+    )
+
+    SELECT
+        keyed.* EXCLUDE (event_key),
+        decided.delivered_twice AS had_cross_id_twin
+    FROM keyed
+    JOIN decided ON keyed.event_key IS NOT DISTINCT FROM decided.event_key
+    WHERE NOT decided.delivered_twice
+       OR keyed.investment_id = decided.keep_id
+)
+{%- endmacro %}
+
 {# --- receipts replay (shared by every int_*_holdings model).
-   Derives each lot's quantity from transaction movements: ENTRADA adds,
+   Derives each holding's quantity from transaction movements: ENTRADA adds,
    SAIDA subtracts, receipts with no quantity count zero. The positions
    feed cannot be trusted for this: it freezes quantity at the first buy,
    so for 1,578 of 1,611 variable-income lots the balance equals the first
    trade, not the latest state (evidence in notebook 05).
+   Replays the holding-grain stream from cross_id_movements, so an id
+   replacement carries its history over and re-issued twins count once.
    Receipts whose date the provider lost (staging nulls the 1970-01-01
    placeholder) get the most favorable ordering: lost-date buys sort first,
    lost-date sells last. If the running total still drops below zero,
-   receipts are missing and the flags macro below marks the lot
+   receipts are missing and the flags macro below marks the holding
    `movements:incomplete`.
-   Emits three CTEs; models join on `replay`. Funds pass their own
-   column names. --- #}
-{% macro replay_quantity(transactions_ref, qty_col='transaction_quantity', date_col='transaction_date') -%}
+   Emits three CTEs; models join `replay` on (account_id, holding_key).
+   Funds pass their own column names. --- #}
+{% macro replay_quantity(movements_rel, qty_col='transaction_quantity', date_col='transaction_date') -%}
 day_net AS (
     SELECT
-        investment_id,
+        account_id,
+        holding_key,
         CASE
             WHEN {{ date_col }} IS NULL AND movement_type = 'SAIDA'
                 THEN DATE '9999-12-31'
@@ -215,27 +319,28 @@ day_net AS (
             ELSE -{{ qty_col }}
         END) AS day_net,
         count(*) FILTER ({{ qty_col }} IS NOT NULL) AS n_qty_receipts
-    FROM {{ transactions_ref }}
-    GROUP BY investment_id, eff_date
+    FROM {{ movements_rel }}
+    GROUP BY account_id, holding_key, eff_date
 ),
 
 running AS (
     SELECT
         *,
         sum(day_net) OVER (
-            PARTITION BY investment_id ORDER BY eff_date
+            PARTITION BY account_id, holding_key ORDER BY eff_date
         ) AS running_total
     FROM day_net
 ),
 
 replay AS (
     SELECT
-        investment_id,
+        account_id,
+        holding_key,
         sum(day_net)        AS replay_quantity,
         min(running_total)  AS min_running_total,
         sum(n_qty_receipts) AS n_qty_receipts
     FROM running
-    GROUP BY investment_id
+    GROUP BY account_id, holding_key
 )
 {%- endmacro %}
 

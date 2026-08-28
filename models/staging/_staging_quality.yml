@@ -32,7 +32,7 @@ models:
       Contractual identity of bank-issued fixed income positions: CDB and RDB
       (bank deposit certificates) and LCI/LCA (real-estate/agribusiness
       letters, income-tax exempt for individuals). One row per
-      (snapshot_id, investment_id) from GET /investments/{investmentId} of
+      (snapshot_id, investment_id) per delivery from GET /investments/{investmentId} of
       the OFB bank-fixed-incomes API v1.1.0. Holding identity across
       snapshots is derived downstream from
       (isin_code, issuer_cnpj, issue_date, due_date).
@@ -217,7 +217,7 @@ models:
     description: >-
       Contractual identity of securitized credit positions: CRA/CRI
       (agribusiness/real-estate receivables certificates) and DEBENTURES
-      (corporate bonds). One row per (snapshot_id, investment_id) from
+      (corporate bonds). One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB credit-fixed-incomes API
       v1.1.0. Holding identity across snapshots is derived downstream from
       (isin_code, debtor_cnpj, due_date). {{ doc("stg_contract") }}
@@ -317,7 +317,7 @@ models:
   - name: stg_openfinance__funds_positions_detail
     description: >-
       Identity of investment fund positions: fund name, CNPJ and ANBIMA
-      classification. One row per (snapshot_id, investment_id) from
+      classification. One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB funds API v1.1.0. Holding
       identity across snapshots is derived downstream from (fund_cnpj).
       {{ doc("stg_contract") }}
@@ -364,7 +364,7 @@ models:
     description: >-
       Contractual identity of Tesouro Direto positions, Brazilian federal
       government bonds (e.g. Tesouro Selic, Tesouro IPCA+, Tesouro
-      Prefixado). One row per (snapshot_id, investment_id) from
+      Prefixado). One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB treasure-titles API v1.1.0.
       Holding identity across snapshots is derived downstream from
       (isin_code). {{ doc("stg_contract") }}
@@ -429,7 +429,7 @@ models:
   - name: stg_openfinance__variable_incomes_positions_detail
     description: >-
       Identity of exchange-traded equity positions: ISIN and trading ticker.
-      One row per (snapshot_id, investment_id) from
+      One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB variable-incomes API v1.3.0.
       Holding identity across snapshots is derived downstream from
       (isin_code, ticker). {{ doc("stg_contract") }}
@@ -475,7 +475,7 @@ models:
       LCA): quantity, marked prices, gross/net values, tax provisions and
       blocks, from GET /investments/{investmentId}/balances of the OFB
       bank-fixed-incomes API v1.1.0. One row per (snapshot_id,
-      investment_id); use the latest snapshot for current value.
+      investment_id) per delivery; use the latest snapshot for current value.
       {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
@@ -547,7 +547,7 @@ models:
       DEBENTURES), from GET /investments/{investmentId}/balances of the OFB
       credit-fixed-incomes API v1.1.0. Extends the common balance shape with
       debtor-default tracking: fine_amount (multa) and late_payment_amount
-      (mora). One row per (snapshot_id, investment_id); use the latest
+      (mora). One row per (snapshot_id, investment_id) per delivery; use the latest
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
@@ -594,7 +594,7 @@ models:
       Point-in-time valuation of fund positions, quota-based: quota quantity
       and gross quota price alongside gross/net values, tax provisions and
       blocks, from GET /investments/{investmentId}/balances of the OFB funds
-      API v1.1.0. One row per (snapshot_id, investment_id); use the latest
+      API v1.1.0. One row per (snapshot_id, investment_id) per delivery; use the latest
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
@@ -633,7 +633,7 @@ models:
     description: >-
       Point-in-time valuation of Tesouro Direto positions, from
       GET /investments/{investmentId}/balances of the OFB treasure-titles API
-      v1.1.0. One row per (snapshot_id, investment_id); use the latest
+      v1.1.0. One row per (snapshot_id, investment_id) per delivery; use the latest
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
@@ -671,7 +671,7 @@ models:
       quotation factor, from GET /investments/{investmentId}/balances of the
       OFB variable-incomes API v1.3.0. Financial value follows
       gross_amount = quantity x closing_price / price_factor. One row per
-      (snapshot_id, investment_id); use the latest snapshot for current
+      (snapshot_id, investment_id) per delivery; use the latest snapshot for current
       value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain

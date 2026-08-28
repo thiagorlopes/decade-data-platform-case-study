@@ -6,8 +6,11 @@ version: 2
 #                  Unions the int_*_holdings views. Admitted lots only;
 #                  quarantined and rejected lots stop at canonical.
 #   fct_movements: one row per transaction_id. When a transaction is
-#                  re-delivered, only the latest delivery survives.
-#                  Unions int_*_transactions.
+#                  re-delivered, only the latest delivery survives. A
+#                  movement the provider re-issued under another
+#                  investment_id of the same holding collapses to one copy
+#                  flagged duplicate:cross_id; dropped twins stay in
+#                  int_*_transactions. Unions int_*_transactions.
 #   dim_holding:   one row per (product_family, holding_key). Static contract
 #                  of the security — name, isin, maturity, indexer, rate,
 #                  issuer, ticker, fund_cnpj. Descriptive attributes live here
@@ -198,7 +201,10 @@ models:
   - name: fct_movements
     description: >
       One row per movement, across all five product families. When a
-      transaction is re-delivered, only the latest delivery survives.
+      transaction is re-delivered, only the latest delivery survives. A
+      movement re-issued under another investment_id of the same holding
+      collapses to one copy flagged duplicate:cross_id; the dropped twin's
+      transaction_id stays in int_*_transactions.
       Amounts and dates are conformed per family: funds carry the quota
       conversion date; variable incomes have no gross/net split, so
       gross_amount holds the transaction amount and net_amount is NULL.

@@ -62,17 +62,17 @@ make sense once lots are aggregated by natural key):
   provider, not a real trade or valuation change.
 - `investment_id:replaced`: between two syncs, the provider retired one
   of the holding's investment_ids and issued a new one for the same
-  security. The new id starts with its own reported quantity, and the old
-  id's movements do not carry over, so treat the two ids separately in
-  any time-based read.
+  security. Both ids resolve to the same holding_key, so the old id's
+  movements stay attached to the holding; history the provider re-issued
+  under the new id collapses to one copy (see `duplicate:cross_id`).
 - `stale:quantity`: the provider's balance quantity disagrees with the
   quantity replayed from the holding's movements. The balance feed writes
   quantity at the first buy and does not maintain it, so the movements are
   the reliable record. Prefer `quantity_derived`.
-- `movements:incomplete`: the movement replay for at least one lot dips
-  below zero even with lost-date sells placed last, so movements must be
-  missing and `quantity_derived` cannot be trusted for this holding. Keep
-  the provider's `quantity` and caveat it.
+- `movements:incomplete`: the holding's movement replay dips below zero
+  even with lost-date sells placed last, so movements must be missing and
+  `quantity_derived` cannot be trusted for this holding. Keep the
+  provider's `quantity` and caveat it.
 
 Movement-grain, added in fct_movements:
 
@@ -80,14 +80,22 @@ Movement-grain, added in fct_movements:
   (NULL, or a placeholder: `0001-01-01` .NET MinValue, `1970-01-01` Unix
   epoch zero). The date is NULL; the movement still counts toward totals
   but cannot be placed on a timeline.
+- `duplicate:cross_id`: the provider delivered this movement again under
+  another investment_id of the same holding, with a fresh transaction_id.
+  This surviving copy stands for the copies; dropped twins stay in
+  int_*_transactions. Ids that were admitted together in some sync are
+  distinct live lots (investment_id:multiple), and identical movements
+  across those are real repeats, never collapsed.
 {% enddocs %}
 
 {% docs dq_quantity_derived %}
 Quantity replayed from the holding's movements: buys add, sells subtract,
 movements with no quantity count zero; lost-date buys sort first and
-lost-date sells last. Computed over all delivered movements, so every
-snapshot row of a holding carries the same current-knowledge value; it is
-exact for the latest snapshot. When it disagrees with the provider's
+lost-date sells last. Replayed at holding grain over the deduplicated
+movement stream, so history follows the holding across an id replacement
+and a movement re-issued under another id counts once. Every snapshot row
+of a holding carries the same current-knowledge value; it is exact for
+the latest snapshot. When it disagrees with the provider's
 `quantity` the holding carries `stale:quantity`; when the replay is
 infeasible it carries `movements:incomplete` and this column should not be
 used. See the `replay_quantity` macro header for the defect narrative.
