@@ -2,7 +2,7 @@ COMPOSE := docker compose
 RUN := $(COMPOSE) run --rm -u $(shell id -u):$(shell id -g) dbt
 
 .DEFAULT_GOAL := help
-.PHONY: help install build run test docs refresh shell ui clean
+.PHONY: help install build run test docs refresh consumers shell ui clean
 
 help:  ## List targets
 	@awk 'BEGIN{FS=":.*##"} /^[a-z_-]+:.*##/ {printf "  \033[36m%-11s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -25,6 +25,9 @@ docs:  ## Regenerate docs catalog + serve at localhost:8080
 	  dbt docs serve --port 8080 --host 0.0.0.0 --no-browser
 
 refresh: build docs  ## Rebuild models + regenerate & serve docs
+
+consumers:  ## Regenerate the wealth output CSVs from the committed queries
+	$(RUN) python consumers/wealth/export_output.py
 
 shell:  ## Open duckdb CLI on the warehouse
 	$(RUN) duckdb warehouse.duckdb

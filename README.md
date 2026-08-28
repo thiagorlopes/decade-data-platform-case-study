@@ -56,6 +56,7 @@ After `make install`, use these targets to iterate:
 | `make test` | Run tests against the current warehouse. No rebuild. |
 | `make docs` | Regenerate the docs catalog and serve at http://localhost:8080. |
 | `make refresh` | `build` + `docs` in one shot. Use after changing SQL to see updated docs. |
+| `make consumers` | Regenerate the CSVs under `consumers/wealth/output/` from the committed queries. |
 | `make shell` | Open the DuckDB CLI on `warehouse.duckdb` inside the container. |
 | `make ui` | Browse the warehouse in the DuckDB UI. See [Querying the warehouse](#querying-the-warehouse). |
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
@@ -106,7 +107,7 @@ The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL
 - [`holdings.sql`](consumers/wealth/holdings.sql): what customers hold, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
 - [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each tagged with the current holding it belongs to by matching its `investment_id` against the holding's contributing ids.
 
-Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. A new consumer follows the same pattern: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
+Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. The committed output under [`output/`](consumers/wealth/output/) covers three sample customers. `make consumers` regenerates it from the committed queries, so the CSVs cannot drift from the SQL that claims to produce them. A new consumer follows the same pattern: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
 
 ## Target Architecture & Environments
 
