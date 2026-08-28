@@ -61,7 +61,7 @@ After `make install`, use these targets to iterate:
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
 | `make help` | List all targets. |
 
-`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process new arrivals. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
+`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots with new arrivals. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
 
 ## Querying the warehouse
 
@@ -257,7 +257,7 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | Layer | Materialization | Why |
 |-------|----------------|-----|
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
-| intermediate (positions) | incremental | Only records past the watermark (`ingested_at`, the arrival time) are processed each run; `unique_key (snapshot_id, investment_id)` makes re-deliveries an upsert and repeated runs idempotent. Late records still land because the watermark is on arrival, not event time. Replay after a transform fix: `dbt build --full-refresh`. |
+| intermediate (positions) | incremental | Each run reprocesses every snapshot that received an arrival past the watermark (`ingested_at`, the arrival time), whole, not row by row. Duplicate classification compares rows within one sync, so a late or re-delivered row must be re-judged with the siblings that already landed; `unique_key (snapshot_id, investment_id)` makes the re-touched rows an upsert, so repeated runs stay idempotent. Replay after a transform fix: `dbt build --full-refresh`. |
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; promote to table per the progression above if the timeline outgrows a view. |
 | consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
 
