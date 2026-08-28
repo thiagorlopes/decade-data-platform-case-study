@@ -29,9 +29,9 @@ SELECT
 FROM {{ ref('stg_openfinance__variable_incomes_transactions') }}
 {% if is_incremental() %}
 -- watermark rationale: README § Materializations
-WHERE ingested_at > (SELECT max(ingested_at) FROM {{ this }})
+WHERE ingested_at >= (SELECT max(ingested_at) FROM {{ this }})
 {% endif %}
 QUALIFY row_number() OVER (
     PARTITION BY transaction_id
-    ORDER BY ingested_at DESC, snapshot_id DESC
+    ORDER BY ingested_at DESC, snapshot_id DESC, payload_source DESC
 ) = 1
