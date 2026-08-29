@@ -1,6 +1,10 @@
 # Decade Data Platform Case Study
 
+[![build](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml/badge.svg)](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml)
+
 This repository contains Thiago Portugues's solution for the hiring process at Decade.
+
+Every push runs `make install` and `make build` on a clean runner, so the test tally quoted throughout this README is reproduced from scratch rather than asserted.
 
 ## Table of Contents
 
