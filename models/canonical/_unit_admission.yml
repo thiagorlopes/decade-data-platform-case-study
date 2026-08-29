@@ -90,12 +90,13 @@ unit_tests:
           - {snapshot_id: S2, investment_id: x2, account_id: A1, quota_quantity: 10, gross_amount: 100}
           - {snapshot_id: S1, investment_id: v1, account_id: A1, quota_quantity: 10, gross_amount: 100, ingested_at: 2026-01-01 10:00:00}
           - {snapshot_id: S1, investment_id: v1, account_id: A1, quota_quantity: 10, gross_amount: 150, ingested_at: 2026-01-02 10:00:00}
-    # SQL format because dict fixture values cannot express arrays portably:
-    # dbt casts them as strings, which only DuckDB accepts. The flags build
-    # through filter(split(...)), which both engines parse; an empty string
-    # becomes an empty array. A SQL expect is compared on every output
-    # column, so the padding SELECT spells out all of them; core carries
-    # only the values the test is about.
+    # SQL format because dict fixtures cannot express arrays portably:
+    # dbt casts their values as strings, and only DuckDB accepts that.
+    # The flags build through filter(split(...)), which both engines
+    # parse the same way; an empty string becomes an empty array.
+    # dbt compares a SQL expect on every output column, so the outer
+    # SELECT lists all of them. The core subquery carries only the
+    # values the test is about.
     expect:
       format: sql
       rows: |

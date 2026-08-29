@@ -42,10 +42,10 @@ unit_tests:
   - name: replay_semantics
     model: int_funds_holdings
     given:
-      # SQL format because dict fixture values cannot express arrays portably:
-      # dbt casts them as strings, which only DuckDB accepts. The flags build
-      # through filter(split(...)), which both engines parse; an empty string
-      # becomes an empty array.
+      # SQL format because dict fixtures cannot express arrays portably:
+      # dbt casts their values as strings, and only DuckDB accepts that.
+      # The flags build through filter(split(...)), which both engines
+      # parse the same way; an empty string becomes an empty array.
       - input: ref('int_funds_positions')
         format: sql
         rows: |
@@ -117,9 +117,9 @@ unit_tests:
           - {transaction_id: m_lq1, investment_id: lq1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
           - {transaction_id: m_rp1, investment_id: rp1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
           - {transaction_id: m_gr1, investment_id: gr1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
-    # A SQL expect is compared on every output column, so the padding
-    # SELECT spells out all of them; core carries only the values the
-    # test is about.
+    # dbt compares a SQL expect on every output column, so the outer
+    # SELECT lists all of them. The core subquery carries only the
+    # values the test is about.
     expect:
       format: sql
       rows: |

@@ -143,9 +143,10 @@ size({{ expr }})
 {# Providers serialize CNPJs through a numeric type and pick up a decimal
    tail ('92894922000108.00'). Strip the tail, then demand exactly 14 digits;
    anything else degrades to NULL (regexp_extract returns '' on no match). #}
-{# The dot is spelled [.] because Databricks string literals treat a lone
-   backslash as an escape while DuckDB keeps it, so '\.' means different
-   patterns on the two engines. A character class needs no escaping. #}
+{# The dot is written as [.] on purpose. Databricks reads a lone backslash
+   in a string literal as an escape and DuckDB keeps it, so '\.' compiles
+   to a different pattern on each engine. A character class needs no
+   escaping, so both engines read the same pattern. #}
 {% macro clean_cnpj(column) -%}
     nullif(regexp_extract(regexp_replace({{ column }}, '[.][0-9]+$', ''), '^[0-9]{14}$', 0), '')
 {%- endmacro %}
@@ -558,7 +559,8 @@ timeline AS (
               AND coalesce(gross_amount, 0) > 0
          THEN 'holding:matured' END
 {% endset -%}
-{#- array_sort because DuckDB's array_distinct scrambles element order and
-    Databricks' keeps it; sorting makes the flag order engine-independent. -#}
+{#- Sorted because array_distinct returns its elements in a different
+    order on DuckDB and Databricks. Sorting gives both engines the same
+    flag order. -#}
 array_sort(array_distinct(lot_flags || filter({{ decade.sql_array(holding_flag_items) }}, f -> f IS NOT NULL)))
 {%- endmacro %}

@@ -21,8 +21,8 @@ models:
       +schema: canonical
       intermediate:
         # file sizing rationale: README.md § Physical layout. A merge every few
-        # minutes writes small files all day; these keep them near target.
-        # Databricks-only; dbt-duckdb ignores tblproperties.
+        # minutes writes small files all day; these properties keep files near
+        # the target size. Databricks only: dbt-duckdb ignores tblproperties.
         positions:
           +tblproperties:
             delta.autoOptimize.optimizeWrite: true

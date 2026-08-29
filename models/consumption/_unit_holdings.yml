@@ -21,10 +21,10 @@ unit_tests:
   - name: quantity_resolution
     model: fct_holdings
     given:
-      # SQL format because dict fixture values cannot express arrays portably:
-      # dbt casts them as strings, which only DuckDB accepts. The flags build
-      # through filter(split(...)), which both engines parse; an empty string
-      # becomes an empty array.
+      # SQL format because dict fixtures cannot express arrays portably:
+      # dbt casts their values as strings, and only DuckDB accepts that.
+      # The flags build through filter(split(...)), which both engines
+      # parse the same way; an empty string becomes an empty array.
       - input: ref('int_funds_holdings')
         format: sql
         rows: |
