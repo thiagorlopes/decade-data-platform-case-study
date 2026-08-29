@@ -37,17 +37,7 @@ lots AS (
     GROUP BY snapshot_id, account_id, holding_key
 ),
 
--- holding-grain replay: rationale in the replay_quantity macro header
-holding AS (
-    SELECT
-        lots.*,
-        replay.replay_quantity AS quantity_derived,
-        (replay.min_running_total < -0.001
-            OR coalesce(replay.n_qty_receipts, 0) = 0)       AS has_incomplete_replay,
-        abs(lots.quantity - replay.replay_quantity) >= 0.001 AS has_stale_lot
-    FROM lots
-    LEFT JOIN replay USING (account_id, holding_key)
-),
+{{ holding_replay() }},
 
 {{ holding_timeline() }}
 

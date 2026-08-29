@@ -371,6 +371,21 @@ replay AS (
 )
 {%- endmacro %}
 
+{# Joins the replay verdicts onto the lots: rationale in the
+   replay_quantity macro header. #}
+{% macro holding_replay() -%}
+holding AS (
+    SELECT
+        lots.*,
+        replay.replay_quantity AS quantity_derived,
+        (replay.min_running_total < -0.001
+            OR coalesce(replay.n_qty_receipts, 0) = 0)       AS has_incomplete_replay,
+        abs(lots.quantity - replay.replay_quantity) >= 0.001 AS has_stale_lot
+    FROM lots
+    LEFT JOIN replay USING (account_id, holding_key)
+)
+{%- endmacro %}
+
 {# --- Holdings cross-sync flags, shared by every int_*_holdings model.
 
    `holding_timeline()` emits the `timeline` CTE: SELECT * plus lag and
