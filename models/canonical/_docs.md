@@ -90,10 +90,11 @@ Movement-grain, added in fct_movements:
   but cannot be placed on a timeline.
 - `duplicate:cross_id`: the provider delivered this movement again under
   another investment_id of the same holding, with a fresh transaction_id.
-  This surviving copy stands for the copies; dropped twins stay in
-  int_*_transactions. Ids that were admitted together in some sync are
-  distinct live lots (investment_id:multiple), and identical movements
-  across those are real repeats, never collapsed.
+  The first-delivered copy survives with this flag; the twin's
+  transaction_id stays in int_*_transactions. Movements that look
+  identical across ids admitted together in one sync are not collapsed:
+  those ids are distinct live lots (`investment_id:multiple`), so the
+  repeats are real.
 {% enddocs %}
 
 {% docs dq_quantity %}
@@ -104,34 +105,47 @@ provider's original claim is kept in `quantity_reported`.
 {% enddocs %}
 
 {% docs dq_gross_amount %}
-The row-consistent value: `quantity * unit_price`, the resolved quantity
-at the provider's own price. NULL when the provider sent no price. The
-provider's valuation, priced on its frozen quantity, is kept in
-`gross_amount_reported`; a product that must match the institution's
-displayed balance reads that column instead.
+The row-consistent value: `quantity * unit_price`, using the resolved
+quantity. NULL when the provider sent no price.
+
+To reconcile with the institution's displayed balance, read
+`gross_amount_reported` instead: that column is the provider's own
+valuation, which prices its frozen quantity.
 {% enddocs %}
 
 {% docs dq_unit_price %}
-The provider's price per unit at the sync, conformed per family
-(updatedUnitPrice for bank, credit and treasury records, the quota gross
-price for funds, closingPrice over the price factor for variable incomes)
-and quantity-weighted across the holding's admitted lots. Unlike the
-frozen quantity, prices update every sync and drive gross_amount, so this
-is the maintained half of the provider's valuation, and the price the
-plain gross_amount column uses.
+The provider's price per unit at the sync, quantity-weighted across the
+holding's admitted lots.
+
+Conformed per family:
+- bank, credit, treasury: `updatedUnitPrice`.
+- funds: the quota gross price.
+- variable incomes: `closingPrice` divided by the price factor.
+
+Prices update every sync (unlike the frozen quantity) and drive
+gross_amount, so unit_price is the maintained half of the provider's
+valuation and the price the plain `gross_amount` column uses.
 {% enddocs %}
 
 {% docs dq_quantity_derived %}
 Quantity replayed from the holding's movements: buys add, sells subtract,
-movements with no quantity count zero; lost-date buys sort first and
-lost-date sells last. Replayed at holding grain over the deduplicated
-movement stream, so history follows the holding across an id replacement
-and a movement re-issued under another id counts once. Every snapshot row
-of a holding carries the same current-knowledge value; it is exact for
-the latest snapshot. When it disagrees with the provider's
-`quantity` the holding carries `stale:quantity`; when the replay is
-infeasible it carries `movements:incomplete` and this column should not be
-used. See the `replay_quantity` macro header for the defect narrative.
+movements with no quantity count zero. Lost-date buys sort first,
+lost-date sells last.
+
+Replayed at holding grain over the deduplicated movement stream, so
+history follows the holding across an id replacement and a movement
+re-issued under another id counts once.
+
+Every snapshot row of a holding carries the same current-knowledge value.
+It is exact for the latest snapshot.
+
+Trust:
+- Disagrees with the provider's `quantity`: holding carries `stale:quantity`.
+  Prefer this column.
+- Replay infeasible: holding carries `movements:incomplete`. Do not use
+  this column.
+
+See the `replay_quantity` macro header for the defect narrative.
 {% enddocs %}
 
 {% docs stg_contract %}

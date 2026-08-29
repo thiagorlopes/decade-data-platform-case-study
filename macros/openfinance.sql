@@ -185,23 +185,27 @@ SELECT
 FROM classified
 {%- endmacro %}
 
-{# One holding delivered under two investment_ids also gets its movements
-   delivered under both, with fresh transaction_ids on the copies, so the
-   per-id delivery dedup in int_*_transactions cannot see them. This macro
-   finds those copies and keeps one.
-   The test is content, never the id alone: movements of one holding that
-   read identically are one event delivered twice, unless the ids carrying
-   them were counted as money side by side in some sync. Those ids are real
-   lots (investment_id:multiple), and identical movements across real lots
-   are real repeats. A movement with no identical counterpart is never
-   dropped: under a replaced id, the only record of old history may live on
-   the retired id.
-   Copies agree on every business field, so the choice of survivor is
-   provenance only. The first-delivered copy wins (lowest id on a tie), so
-   a re-issue arriving later can never steal survivorship from a
-   transaction_id already published.
+{# Collapses movement duplicates that per-id dedup cannot see.
+
+   When one holding is delivered under two investment_ids, its movements
+   arrive under both with fresh transaction_ids. int_*_transactions dedups
+   per id, so both copies pass through.
+
+   Rule (content, not id):
+     - Two movements are the same event if they agree on every business
+       field (holding, date, type, quantity, amount, currency).
+     - Same event, one id delivered twice: keep one.
+     - Same event, two ids ever admitted together in one sync (real lots,
+       flagged investment_id:multiple): keep both. Identical movements
+       across real lots are real repeats.
+     - A movement with no identical twin: always kept. Under a replaced
+       id, the retired id may hold the only record of old history.
+
+   Survivor: first-delivered copy; lowest investment_id breaks ties. A
+   late re-issue cannot displace a published transaction_id.
+
    Emits a subquery: the deduped movement stream, with holding_key and a
-   had_cross_id_twin flag on the surviving copy. #}
+   had_cross_id_twin flag on each surviving copy. #}
 {% macro cross_id_movements(transactions_ref, positions_ref, date_col='transaction_date', qty_col='transaction_quantity', gross_col='transaction_gross_amount') -%}
 (
     WITH
@@ -286,21 +290,28 @@ FROM classified
 )
 {%- endmacro %}
 
-{# --- receipts replay (shared by every int_*_holdings model).
-   Derives each holding's quantity from transaction movements: ENTRADA adds,
-   SAIDA subtracts, receipts with no quantity count zero. The positions
-   feed cannot be trusted for this: it freezes quantity at the first buy,
-   so for 1,578 of 1,611 variable-income lots the balance equals the first
-   trade, not the latest state (evidence in notebook 05).
-   Replays the holding-grain stream from cross_id_movements, so an id
-   replacement carries its history over and re-issued twins count once.
-   Receipts whose date the provider lost (staging nulls the 1970-01-01
-   placeholder) get the most favorable ordering: lost-date buys sort first,
-   lost-date sells last. If the running total still drops below zero,
-   receipts are missing and the flags macro below marks the holding
-   `movements:incomplete`.
+{# Derives each holding's quantity from its movements.
+   Shared by every int_*_holdings model.
+
+   Why not the positions feed: the provider freezes balance quantity at
+   the first buy. For 1,578 of 1,611 variable-income lots the balance
+   still equals the opening trade (notebook 05). Movements are the
+   reliable record.
+
+   Rule:
+     - ENTRADA adds, SAIDA subtracts. Movements with no quantity count zero.
+     - Runs at holding grain over the deduplicated stream from
+       cross_id_movements, so history follows an id replacement and
+       re-issued twins count once.
+     - Movements whose date the provider lost (staging nulls the
+       1970-01-01 placeholder) get the most favorable ordering: lost-date
+       buys sort first, lost-date sells last.
+     - If the running total still dips below zero, movements are missing.
+       The flags macro then marks the holding `movements:incomplete` and
+       the derived quantity should not be trusted.
+
    Emits three CTEs; models join `replay` on (account_id, holding_key).
-   Funds pass their own column names. --- #}
+   Funds pass their own column names. #}
 {% macro replay_quantity(movements_rel, qty_col='transaction_quantity', date_col='transaction_date') -%}
 day_net AS (
     SELECT
