@@ -4,8 +4,6 @@
 
 This repository contains Thiago Portugues's solution for the hiring process at Decade.
 
-Every push runs `make install` and `make build` on a clean runner, so the test tally quoted throughout this README is reproduced from scratch rather than asserted.
-
 ## Table of Contents
 
 **[General information](#general-information)**<br>
