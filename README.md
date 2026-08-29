@@ -23,27 +23,32 @@ For architecture and design rationale, see [Target Architecture & Environments](
 
 - Docker Engine with Docker Compose v2
 - `make` and `git`
-
-The docker image ships Python, dbt, and the DuckDB CLI. You don't need a host-side Python install to run the pipeline.
-
-Notebooks under `notebooks/` are dev-only and stay out of the image. To re-run them, install the deps into a local venv:
-
-```bash
-pip install jupyterlab==4.6.3 pandas==2.2.3 pyarrow==17.0.0
-```
+- Python 3.11+ (only if you want to run notebooks or scoped `dbt` commands on the host)
 
 ## Installation
 
+Build the docker image. This is all you need to run the pipeline end-to-end:
+
 ```bash
-make install     # build the docker image
+make install
 ```
 
-The `make` targets cover the whole pipeline. For scoped dbt commands, such as `dbt build --select <model>+`, install dbt on the host with the same pinned versions the image uses:
+The image ships Python, dbt, and the DuckDB CLI. The `make` targets drive the whole pipeline from inside the container.
+
+### Optional: host-side Python environment
+
+Set up a local venv if you want to:
+
+- run the notebooks under `notebooks/` (they are dev-only and stay out of the image), or
+- run scoped dbt commands on the host, for example `dbt build --select <model>+`.
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+`requirements.txt` pins the same `dbt` and `duckdb` versions the image uses, plus `notebook` and `pandas` for the notebooks. One venv covers both cases.
 
 ## Development cycle
 
