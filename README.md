@@ -98,34 +98,11 @@ Schema changes ship as versioned, replayable steps: a model change gated by its 
 
 ## Data quality: detect, resolve, guarantee
 
-Provider defects (§2.2 of the brief) split into two tiers. Within a record: a required field empty, a value in the wrong form, a legal value outside its enum, a cross-field contradiction. Across records: the same holding under two ids, holdings that freeze under a new id, a zero-then-nonzero valuation. The pipeline handles them in three layers so each layer has one job.
+Provider defects (§2.2 of the brief) split into two tiers. Within a record: a required field empty, a value in the wrong form, a legal value outside its enum, a cross-field contradiction. Across records: the same holding under two ids, holdings that freeze under a new id, a zero-then-nonzero valuation. Three layers handle them, one job each: staging detects, intermediate resolves, consumption guarantees.
 
-Two terms recur below. A **lot** is one delivered position row from a custodian sync (a row in `int_*_positions`). A **holding** aggregates lots by natural key (account + security), one row per account and security (rows in `int_*_holdings` and `fct_holdings`).
+Two terms recur. A **lot** is one delivered position row from a custodian sync (a row in `int_*_positions`). A **holding** aggregates lots by natural key (account + security), one row per account and security (rows in `int_*_holdings` and `fct_holdings`).
 
-```
-dbt build (every run)
-
-raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental) ─→ CANONICAL fct ─→ consumers/
-
-  ┌─ DETECT (staging) ─────────┐   ┌─ RESOLVE (intermediate) ───┐   ┌─ GUARANTEE (canonical) ────┐
-  │ envelope (ours) → ERROR    │   │ no payload tests here      │   │ output contract → ERROR    │
-  │   not_null snapshot_id     │   │ logic instead:             │   │   not_null natural key     │
-  │   not_null investment_id   │   │   normalize forms          │   │   not_null reference_dt    │
-  │   not_null ingested_at     │   │     (strip CNPJ tail,      │   │   grain uniqueness         │
-  │   unique grain             │   │      map IPC-A → IPCA)     │   │   enums clean post-map     │
-  │   build DIES: bug is ours  │   │ build data_quality_flags   │   │   build DIES: our          │
-  ├────────────────────────────┤   │     for what cannot be     │   │     resolution failed      │
-  │ payload (theirs) → WARN    │   │     repaired               │   ├────────────────────────────┤
-  │   not_null required        │   │   dedupe across records    │   │ data_quality_flags → WARN  │
-  │   format regex             │   └────────────────────────────┘   │   count stays visible      │
-  │   accepted_values          │                                    └────────────────────────────┘
-  │   cross-field rules        │
-  │   store_failures: true     │
-  └────────────────────────────┘
-                │
-                ▼
-   main_dbt_test__audit.*  ◀── provider defect ledger (row-level, queryable)
-```
+The three stages run inside every `dbt build`, one layer each: raw parquet → staging (detect) → intermediate (resolve) → fct (guarantee) → consumers. Ownership decides severity:
 
 | Owner                        | Layer | Severity              | On failure                                  |
 |------------------------------|-------|-----------------------|---------------------------------------------|
@@ -136,19 +113,13 @@ raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental
 
 How a consumer finds out which happened (§2.2's closing question):
 
-- **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['purchase_date:missing', 'gross:zero_transient']`). Empty list means clean.
-- **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_zero_duplicate` and `quarantine` stay in the positions table for audit.
-- **Row-level, dropped movement twins**: anti-join `int_*_transactions` to `fct_movements` on `transaction_id`; every missing row has a surviving copy flagged `transaction_id:reissued`. The `cross_id_dedup_semantics` unit test pins that rule.
+- **Row-level**: `data_quality_flags` on every fct and holdings row (e.g. `['purchase_date:missing', 'gross:zero_transient']`). Empty list means clean.
+- **Per-lot verdict**: the `admission` column on `int_*_positions`. `admit` flows to the holdings views; `reject_duplicate`, `reject_zero_duplicate` and `quarantine` stay in the positions table for audit.
+- **Dropped movement twins**: anti-join `int_*_transactions` to `fct_movements` on `transaction_id`; every missing row has a surviving copy flagged `transaction_id:reissued`.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
-- **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
+- **Contract-level**: `models/canonical/_canonical.yml`. The admission enum and flag vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and render on every column via `make docs`.
 
-The three stages live one folder each:
-
-- **DETECT**, in `models/staging/`. Rules sit in `_staging_quality.yml`; warned rows land in the `main_dbt_test__audit.*` ledger. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
-- **RESOLVE**, in `models/canonical/intermediate/`. The latest arrival wins when a record is re-delivered (`latest_lot_delivery`). Duplicates collapse across investment_ids (`resolve_duplicate_investments` for positions, `cross_id_movements` for movements). What cannot be repaired is admitted with a flag in `data_quality_flags`; what cannot be resolved at all is quarantined.
-- **GUARANTEE**, in `models/consumption/`. `fct_holdings` and `fct_movements` union the five families into one conformed shape under enforced contracts, with grain tests at error severity. Consumers read those models and nothing below them.
-
-The full reference lives in [`docs/data-quality-reference.md`](docs/data-quality-reference.md): the admission verdicts, the complete flag vocabulary, the quarantine runbook, which fields the platform recalculates versus quotes, and two audits of defects beyond the brief's list.
+The full reference lives in [`docs/data-quality-reference.md`](docs/data-quality-reference.md): the three stages folder by folder with the full stage diagram, the admission verdicts, the complete flag vocabulary, the quarantine runbook, which fields the platform recalculates versus quotes, and two audits of defects beyond the brief's list.
 
 ## Architecture and operations
 

@@ -4,6 +4,31 @@ Lookup material for the [detect, resolve, guarantee pipeline](../README.md#data-
 
 ## The three stages in detail
 
+```
+dbt build (every run)
+
+raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental) ─→ CANONICAL fct ─→ consumers/
+
+  ┌─ DETECT (staging) ─────────┐   ┌─ RESOLVE (intermediate) ───┐   ┌─ GUARANTEE (canonical) ────┐
+  │ envelope (ours) → ERROR    │   │ no payload tests here      │   │ output contract → ERROR    │
+  │   not_null snapshot_id     │   │ logic instead:             │   │   not_null natural key     │
+  │   not_null investment_id   │   │   normalize forms          │   │   not_null reference_dt    │
+  │   not_null ingested_at     │   │     (strip CNPJ tail,      │   │   grain uniqueness         │
+  │   unique grain             │   │      map IPC-A → IPCA)     │   │   enums clean post-map     │
+  │   build DIES: bug is ours  │   │ build data_quality_flags   │   │   build DIES: our          │
+  ├────────────────────────────┤   │     for what cannot be     │   │     resolution failed      │
+  │ payload (theirs) → WARN    │   │     repaired               │   ├────────────────────────────┤
+  │   not_null required        │   │   dedupe across records    │   │ data_quality_flags → WARN  │
+  │   format regex             │   └────────────────────────────┘   │   count stays visible      │
+  │   accepted_values          │                                    └────────────────────────────┘
+  │   cross-field rules        │
+  │   store_failures: true     │
+  └────────────────────────────┘
+                │
+                ▼
+   main_dbt_test__audit.*  ◀── provider defect ledger (row-level, queryable)
+```
+
 **DETECT** lives in `models/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](../notebooks/02_within_record_defects.ipynb).
 
 **RESOLVE** lives in `models/canonical/intermediate/`. Both feeds survive a record re-delivered with a different value: the latest arrival wins. Positions apply this through the `latest_lot_delivery` macro; transactions use the same rule inline. Superseded copies stay countable in the `lot_redelivery` warn ledger. Positions are then deduped across investment_ids by the `resolve_duplicate_investments` macro. Movements the provider re-issued under another investment_id of the same holding collapse to one copy, flagged `transaction_id:reissued`, through the `cross_id_movements` macro; the same deduplicated stream feeds the holding-grain quantity replay. The admission enum is contract-tested at error severity. The cross-sync flags (`gross:zero_transient`, `investment_id:replaced`, `investment_id:multiple`, `lot:zero_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
