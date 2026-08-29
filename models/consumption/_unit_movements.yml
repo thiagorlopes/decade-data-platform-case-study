@@ -91,16 +91,16 @@ unit_tests:
         rows: []
     expect:
       rows:
-        - {transaction_id: ta1, investment_id: ia1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: ta1, investment_id: ia1, data_quality_flags: "[transaction_id:reissued]"}
         - {transaction_id: tb1, investment_id: ib1, data_quality_flags: "[]"}
         - {transaction_id: tb2, investment_id: ib2, data_quality_flags: "[]"}
-        - {transaction_id: tc1, investment_id: ic1, data_quality_flags: "[duplicate:cross_id]"}
-        - {transaction_id: td1, investment_id: id1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: tc1, investment_id: ic1, data_quality_flags: "[transaction_id:reissued]"}
+        - {transaction_id: td1, investment_id: id1, data_quality_flags: "[transaction_id:reissued]"}
         - {transaction_id: te1, investment_id: ie1, data_quality_flags: "[]"}
-        - {transaction_id: tf1, investment_id: if1, data_quality_flags: "[missing:transaction_date, duplicate:cross_id]"}
+        - {transaction_id: tf1, investment_id: if1, data_quality_flags: "[transaction_date:missing, transaction_id:reissued]"}
         - {transaction_id: tg1, investment_id: ig1, data_quality_flags: "[]"}
         - {transaction_id: tg2, investment_id: ig2, data_quality_flags: "[]"}
         - {transaction_id: tg3, investment_id: ig3, data_quality_flags: "[]"}
-        - {transaction_id: th1, investment_id: ih1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: th1, investment_id: ih1, data_quality_flags: "[transaction_id:reissued]"}
         - {transaction_id: ti1, investment_id: ii1, data_quality_flags: "[]"}
         - {transaction_id: ti2, investment_id: ii2, data_quality_flags: "[]"}

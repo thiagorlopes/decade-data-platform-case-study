@@ -104,7 +104,7 @@ snapshot_id IN (
 
    With `extra_flags`, a family appends its own (condition, label)
    pairs to data_quality_flags. This carries the missing-field
-   signals, like ('indexer IS NULL', 'missing:indexer'). --- #}
+   signals, like ('indexer IS NULL', 'indexer:missing'). --- #}
 {% macro resolve_duplicate_investments(qty_col='quantity', extra_flags=[]) -%}
 -- Step 1: find the duplicate groups. A duplicate group is one natural key
 -- held by two or more investment_ids within the same sync.
@@ -144,7 +144,7 @@ with_group_stats AS (
 classified AS (
     SELECT
         *,
-        CASE WHEN natural_key IS NULL           THEN 'missing:natural_key'  -- no key, cannot check for duplicates
+        CASE WHEN natural_key IS NULL           THEN 'natural_key:missing'  -- no key, cannot check for duplicates
              WHEN NOT is_in_duplicate_group     THEN 'sole_lot'
              WHEN NOT quantities_agree          THEN 'separate_lots'
              WHEN gross_amounts_agree           THEN 'redundant_copies'
@@ -179,9 +179,9 @@ SELECT
         ELSE 'admit'
     END AS admission,
     list_filter([
-        CASE WHEN natural_key IS NULL THEN 'missing:natural_key' END,
+        CASE WHEN natural_key IS NULL THEN 'natural_key:missing' END,
         CASE WHEN is_resolvable_conflict AND gross_amount > 0
-             THEN 'zero:duplicate_dropped' END{% for cond, label in extra_flags %},
+             THEN 'lot:zero_copy_dropped' END{% for cond, label in extra_flags %},
         CASE WHEN {{ cond }} THEN '{{ label }}' END{% endfor %}
     ], f -> f IS NOT NULL) AS data_quality_flags
 FROM classified
@@ -393,9 +393,9 @@ holding AS (
 
    `holding_data_quality_flags()` emits the final data_quality_flags
    expression. It unions the per-lot flags with the cross-sync signals
-   (investment_id:multiple, zero:lot_kept, zero:transient,
+   (investment_id:multiple, lot:zero_kept, gross:zero_transient,
    investment_id:replaced) and the replay verdicts
-   (movements:incomplete, stale:quantity). A holding that carries
+   (movements:incomplete, quantity_reported:stale). A holding that carries
    neither replay verdict has a quantity the movements confirm. --- #}
 {% macro holding_timeline() -%}
 timeline AS (
@@ -419,13 +419,13 @@ timeline AS (
 {% macro holding_data_quality_flags() -%}
 list_distinct(lot_flags || list_filter([
     CASE WHEN n_investment_ids > 1 THEN 'investment_id:multiple' END,
-    CASE WHEN n_investment_ids > 1 AND has_zero_lot THEN 'zero:lot_kept' END,
+    CASE WHEN n_investment_ids > 1 AND has_zero_lot THEN 'lot:zero_kept' END,
     CASE WHEN gross_amount = 0 AND prev_gross > 0 AND next_gross > 0
               AND quantity = prev_qty AND quantity = next_qty
-         THEN 'zero:transient' END,
+         THEN 'gross:zero_transient' END,
     -- The provider reissued investment_ids for the same holding.
     CASE WHEN has_arrived_ids AND has_departed_ids THEN 'investment_id:replaced' END,
     CASE WHEN has_incomplete_replay THEN 'movements:incomplete' END,
-    CASE WHEN NOT has_incomplete_replay AND has_stale_lot THEN 'stale:quantity' END
+    CASE WHEN NOT has_incomplete_replay AND has_stale_lot THEN 'quantity_reported:stale' END
 ], f -> f IS NOT NULL))
 {%- endmacro %}

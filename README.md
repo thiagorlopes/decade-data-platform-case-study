@@ -173,9 +173,9 @@ raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental
 
 How a consumer finds out which happened (§2.2's closing question):
 
-- **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero:transient']`). Empty list means clean.
+- **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['purchase_date:missing', 'gross:zero_transient']`). Empty list means clean.
 - **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_zero_duplicate` and `quarantine` stay in the positions table for audit.
-- **Row-level, dropped movement twins**: anti-join `int_*_transactions` to `fct_movements` on `transaction_id`; every missing row has a surviving copy flagged `duplicate:cross_id`. The `cross_id_dedup_semantics` unit test pins that rule.
+- **Row-level, dropped movement twins**: anti-join `int_*_transactions` to `fct_movements` on `transaction_id`; every missing row has a surviving copy flagged `transaction_id:reissued`. The `cross_id_dedup_semantics` unit test pins that rule.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
 
@@ -183,7 +183,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 **DETECT** lives in `models/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
 
-**RESOLVE** lives in `models/canonical/intermediate/`. Both feeds survive a record re-delivered with a different value: the latest arrival wins. Positions apply this through the `latest_lot_delivery` macro; transactions use the same rule inline. Superseded copies stay countable in the `lot_redelivery` warn ledger. Positions are then deduped across investment_ids by the `resolve_duplicate_investments` macro. Movements the provider re-issued under another investment_id of the same holding collapse to one copy, flagged `duplicate:cross_id`, through the `cross_id_movements` macro; the same deduplicated stream feeds the holding-grain quantity replay. The admission enum is contract-tested at error severity. The cross-sync flags (`zero:transient`, `investment_id:replaced`, `investment_id:multiple`, `zero:lot_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
+**RESOLVE** lives in `models/canonical/intermediate/`. Both feeds survive a record re-delivered with a different value: the latest arrival wins. Positions apply this through the `latest_lot_delivery` macro; transactions use the same rule inline. Superseded copies stay countable in the `lot_redelivery` warn ledger. Positions are then deduped across investment_ids by the `resolve_duplicate_investments` macro. Movements the provider re-issued under another investment_id of the same holding collapse to one copy, flagged `transaction_id:reissued`, through the `cross_id_movements` macro; the same deduplicated stream feeds the holding-grain quantity replay. The admission enum is contract-tested at error severity. The cross-sync flags (`gross:zero_transient`, `investment_id:replaced`, `investment_id:multiple`, `lot:zero_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
 
 **GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
@@ -193,29 +193,29 @@ How a consumer finds out which happened (§2.2's closing question):
 |---|---|---|
 | `admit` | Lot is clean or a resolved conflict winner. | Aggregated into holdings. |
 | `reject_duplicate` | Redundant copy of a hard duplicate (all measures agree under one natural key). | Ignored; kept in `int_*` for audit. |
-| `reject_zero_duplicate` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `zero:duplicate_dropped`). | Ignored; kept in `int_*` for audit. |
+| `reject_zero_duplicate` | Frozen zero-valued side of a same-sync conflict (its live sibling is admitted with `lot:zero_copy_dropped`). | Ignored; kept in `int_*` for audit. |
 | `quarantine` | Same-sync conflict with no single live row to pick. | Excluded from holdings; kept in `int_*_positions` (query `WHERE admission = 'quarantine'`) for audit. |
 
 #### Flags at a glance
 
-Every flag follows the shape `family:detail`, so a consumer selects a whole class with one prefix filter (`WHERE flag LIKE 'missing:%'`). Lot flags are added in `int_*_positions`, holding flags in `int_*_holdings`, movement flags in `fct_movements`.
+Every flag follows the shape `subject:verdict`: the prefix names the column or entity to doubt, the suffix names the verdict on it. A consumer selects a whole class with one suffix filter (`WHERE flag LIKE '%:missing'`). Lot flags are added in `int_*_positions`, holding flags in `int_*_holdings`, movement flags in `fct_movements`.
 
 | Grain | Flag | Meaning |
 |---|---|---|
-| Lot | `missing:<column>` | A spec-required column arrived empty and could not be repaired (`missing:indexer`, `missing:isin_code`, ...). |
-| Lot | `missing:natural_key` | The record has no identity to merge on. It becomes its own holding, keyed by its investment_id. |
-| Lot | `zero:duplicate_dropped` | The sync delivered two copies of the lot, one live and one zero. The live copy was kept; the zero copy was dropped. |
+| Lot | `<column>:missing` | A spec-required column arrived empty and could not be repaired (`indexer:missing`, `isin_code:missing`, ...). |
+| Lot | `natural_key:missing` | The record has no identity to merge on. It becomes its own holding, keyed by its investment_id. |
+| Lot | `lot:zero_copy_dropped` | The sync delivered two copies of the lot, one live and one zero. The live copy was kept; the zero copy was dropped. |
 | Lot | `net:above_gross` | The payload's net exceeds its gross. One of the two is wrong; both are kept as delivered. Do not trust net on this row. |
-| Lot | `gross:price_mismatch` | The payload's gross disagrees with its own quantity times unit price. All three fields are kept as delivered. |
+| Lot | `gross:not_quantity_times_price` | The payload's gross disagrees with its own quantity times unit price. All three fields are kept as delivered. |
 | Lot | `financial_transaction_tax:placeholder` | The payload reports a transaction tax that does not exist for the row: net equals gross minus income tax to the cent. The amount is a placeholder, not a tax. |
 | Holding | `investment_id:multiple` | The provider keeps two or more live position records for the security at once. The holding sums them. |
 | Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Both ids resolve to the same holding, so its movements and replay follow it across the replacement. |
-| Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `zero:duplicate_dropped`. |
-| Holding | `zero:transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
-| Holding | `stale:quantity` | The balance quantity disagrees with the quantity replayed from movements. The plain quantity column already prefers the replay; the provider's number stays in `quantity_reported`. |
+| Holding | `lot:zero_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `lot:zero_copy_dropped`. |
+| Holding | `gross:zero_transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
+| Holding | `quantity_reported:stale` | The balance quantity disagrees with the quantity replayed from movements. The plain quantity column already prefers the replay; the provider's number stays in `quantity_reported`. |
 | Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity, with a caveat. |
-| Movement | `missing:transaction_date` | No usable movement date. The movement counts in totals but has no place on a timeline. |
-| Movement | `duplicate:cross_id` | The provider re-delivered this movement under another investment_id of the same holding, with a fresh transaction_id. This copy stands for the copies; its twins were dropped. |
+| Movement | `transaction_date:missing` | No usable movement date. The movement counts in totals but has no place on a timeline. |
+| Movement | `transaction_id:reissued` | The provider re-delivered this movement under another investment_id of the same holding, with a fresh transaction_id. This copy stands for the copies; its twins were dropped. |
 
 The long-form version of each entry lives in the [`data_quality_flags` doc block](models/canonical/_docs.md) and renders on every column that carries it via `make docs`.
 
@@ -230,7 +230,7 @@ the provider's valuation. Gross and net stay as the provider's marks, on
 the provider's own basis, with that basis disclosed in the contract; they
 cannot be recomputed without inventing data, but they can be cross-checked
 against the record itself, and the `net:above_gross` and
-`gross:price_mismatch` flags carry the verdicts. The naming carries the
+`gross:not_quantity_times_price` flags carry the verdicts. The naming carries the
 same rule: a plain column (`quantity`, `gross_amount`) is a number the
 platform stands behind, and the plain columns of a row agree with each
 other; a `_reported` column is the provider's original claim, kept for
@@ -258,12 +258,12 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 
 | Form | Class it belongs to | Where handled | Flag on the row | Raw count |
 |---|---|---|---|---|
-| `0001-01-01` placeholder dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | `missing:<column>` for the nulled date, e.g. `missing:purchase_date` | 1 951 |
-| Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | `missing:natural_key` when no identity survives | see warn tests |
+| `0001-01-01` placeholder dates (.NET `DateTime.MinValue`) | Required field arriving empty | `clean_missing_date` | `<column>:missing` for the nulled date, e.g. `purchase_date:missing` | 1 951 |
+| Blank strings on natural-key fields | Required field arriving empty | `blank_to_null` | `natural_key:missing` when no identity survives | see warn tests |
 | `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | none, fully repaired | 2 |
-| `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` | `missing:transaction_date` on `fct_movements` | 3 001 |
+| `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` | `transaction_date:missing` on `fct_movements` | 3 001 |
 | CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | none, fully repaired | 1 370 |
-| `9900` placeholder quantity on duplicated position records | Required field arriving empty | co-admission rule in `cross_id_movements` | `gross:price_mismatch` | 1 722 |
+| `9900` placeholder quantity on duplicated position records | Required field arriving empty | co-admission rule in `cross_id_movements` | `gross:not_quantity_times_price` | 1 722 |
 | `88.90` placeholder transaction tax, constant across position sizes and never subtracted from net | Required field arriving empty | flag only, amounts kept as delivered | `financial_transaction_tax:placeholder` | 1 877 |
 
 **Unlisted classes, all zero hits.** Nine defect classes the brief does not name and the sample does not contain. Zero hits shows the seeding stuck to the announced classes. It does not prove these defects are absent in production. In production, each would become a warn test in `_staging_quality.yml`. The sample does not justify permanent tests for data that is not there.
@@ -273,9 +273,9 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 | Same `transaction_id`, conflicting `transaction_amount` | Transactions-side analogue of the redundant-copies defect |
 | Negative `transaction_amount` or `gross_amount` | Sign errors on values the domain treats as positive |
 | Transaction dated after its own snapshot | Envelope violation: the payload references a future the snapshot can't see |
-| Holding switching currency between syncs | Cross-sync contradiction not covered by `zero:transient` |
-| Holding dropout (present, absent one sync, present again) | Missing-row cousin of `zero:transient`; the provider drops the row instead of zeroing it |
-| Zero quantity with positive gross_amount | Mirror of the `zero:transient` defect at a single row |
+| Holding switching currency between syncs | Cross-sync contradiction not covered by `gross:zero_transient` |
+| Holding dropout (present, absent one sync, present again) | Missing-row cousin of `gross:zero_transient`; the provider drops the row instead of zeroing it |
+| Zero quantity with positive gross_amount | Mirror of the `gross:zero_transient` defect at a single row |
 | Quantity change with no transaction behind it | Cross-feed reconciliation: positions and transactions disagreeing on a movement |
 
 The last probe is also a modeling finding. Quantities never move in the sample. Every seeded across-record defect keys on "quantity unchanged" because quantity is the only invariant the sample offers.

@@ -53,10 +53,10 @@ with_natural_key AS (
 ),
 
 {{ resolve_duplicate_investments(qty_col='quota_quantity', extra_flags=[
-    ('fund_cnpj IS NULL',      'missing:fund_cnpj'),
-    ('gross_amount IS NULL',   'missing:gross_amount'),
-    ('quota_quantity IS NULL', 'missing:quota_quantity'),
+    ('fund_cnpj IS NULL',      'fund_cnpj:missing'),
+    ('gross_amount IS NULL',   'gross_amount:missing'),
+    ('quota_quantity IS NULL', 'quota_quantity:missing'),
     ('net_amount > gross_amount + 0.01', 'net:above_gross'),
-    ('abs(gross_amount::DOUBLE - quota_quantity::DOUBLE * quota_gross_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
+    ('abs(gross_amount::DOUBLE - quota_quantity::DOUBLE * quota_gross_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:not_quantity_times_price'),
     ('financial_transaction_tax_amount <> 0 AND abs(gross_amount - net_amount - coalesce(income_tax_amount, 0)) <= 0.02', 'financial_transaction_tax:placeholder'),
 ]) }}

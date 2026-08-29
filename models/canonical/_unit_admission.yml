@@ -22,7 +22,7 @@ version: 2
 #   both admit.
 # - zero: two copies share a quantity; one gross is zero, one positive.
 #   The zero side rejects; the positive side admits and carries
-#   zero:duplicate_dropped.
+#   lot:zero_copy_dropped.
 # - trio: three ids conflict. A conflict of three never resolves, so
 #   all quarantine.
 # - twopos: a conflict pair carries two positive grosses. Both
@@ -95,20 +95,20 @@ unit_tests:
         - {investment_id: s1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: r1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: r2, admission: reject_duplicate, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: p1, admission: reject_duplicate, gross_amount: null, data_quality_flags: "[missing:gross_amount]"}
+        - {investment_id: p1, admission: reject_duplicate, gross_amount: null, data_quality_flags: "[gross_amount:missing]"}
         - {investment_id: p2, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: l1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: l2, admission: admit, gross_amount: 200, data_quality_flags: "[]"}
         - {investment_id: z1, admission: reject_zero_duplicate, gross_amount: 0, data_quality_flags: "[]"}
-        - {investment_id: z2, admission: admit, gross_amount: 100, data_quality_flags: "[zero:duplicate_dropped]"}
+        - {investment_id: z2, admission: admit, gross_amount: 100, data_quality_flags: "[lot:zero_copy_dropped]"}
         - {investment_id: t1, admission: quarantine, gross_amount: 0, data_quality_flags: "[]"}
         - {investment_id: t2, admission: quarantine, gross_amount: 0, data_quality_flags: "[]"}
         - {investment_id: t3, admission: quarantine, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: w1, admission: quarantine, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: w2, admission: quarantine, gross_amount: 200, data_quality_flags: "[]"}
-        - {investment_id: q1, admission: quarantine, gross_amount: 0, data_quality_flags: "[missing:quota_quantity]"}
-        - {investment_id: q2, admission: quarantine, gross_amount: 100, data_quality_flags: "[missing:quota_quantity]"}
-        - {investment_id: k1, admission: admit, gross_amount: 100, data_quality_flags: "[missing:natural_key, missing:fund_cnpj]"}
+        - {investment_id: q1, admission: quarantine, gross_amount: 0, data_quality_flags: "[quota_quantity:missing]"}
+        - {investment_id: q2, admission: quarantine, gross_amount: 100, data_quality_flags: "[quota_quantity:missing]"}
+        - {investment_id: k1, admission: admit, gross_amount: 100, data_quality_flags: "[natural_key:missing, fund_cnpj:missing]"}
         - {investment_id: d1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: d2, admission: reject_duplicate, gross_amount: 100, data_quality_flags: "[]"}
         - {investment_id: x1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}

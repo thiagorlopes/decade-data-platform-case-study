@@ -23,7 +23,7 @@ unit_tests:
     given:
       - input: ref('int_funds_holdings')
         rows:
-          - {snapshot_id: S1, account_id: A1, holding_key: Q_a, quantity: 10, quantity_derived: 4, unit_price: 2, data_quality_flags: "[stale:quantity]"}
+          - {snapshot_id: S1, account_id: A1, holding_key: Q_a, quantity: 10, quantity_derived: 4, unit_price: 2, data_quality_flags: "[quantity_reported:stale]"}
           - {snapshot_id: S1, account_id: A1, holding_key: Q_b, quantity: 10, quantity_derived: null, unit_price: 2, data_quality_flags: "[]"}
           - {snapshot_id: S1, account_id: A1, holding_key: Q_c, quantity: 10, quantity_derived: 7, unit_price: 2, data_quality_flags: "[movements:incomplete]"}
       - input: ref('int_bank_fixed_incomes_holdings')
