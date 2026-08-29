@@ -43,6 +43,7 @@ The `make` targets cover the whole pipeline. For scoped dbt commands, such as `d
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+dbt deps                       # dbt_packages/ is gitignored; a fresh clone has none
 ```
 
 ## Development cycle
@@ -52,6 +53,7 @@ After `make install`, use these targets to iterate:
 | Command | What it does |
 |---|---|
 | `make build` | Run models + tests. The safe default. |
+| `make deps` | Install dbt packages into `dbt_packages/`. Every target that compiles the project runs this first, so you rarely call it directly. |
 | `make run` | Run models only. Faster when you know tests will pass. |
 | `make test` | Run tests against the current warehouse. No rebuild. |
 | `make docs` | Regenerate the docs catalog and serve at http://localhost:8080. |
