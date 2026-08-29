@@ -1,0 +1,41 @@
+# Runs the documented install path, not a shortcut around it. `make install` and
+# `make build` are the two commands the README tells a reader to run, so this job
+# verifies those instructions rather than a CI-only variant of them.
+#
+# The 19 warns are the staging detect tier and are expected; `dbt build` exits 0
+# on a warn, so the job stays green while the warn counts stay visible.
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: models + tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: make install
+
+      - name: Run models and tests
+        run: |
+          set -o pipefail
+          make build 2>&1 | tee /tmp/build.log
+
+      - name: Report the test tally
+        if: always()
+        run: |
+          {
+            echo '### dbt build'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' /tmp/build.log \
+              | grep -E 'Done\.|Completed with' | tail -n 3
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true
