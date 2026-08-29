@@ -89,18 +89,46 @@ unit_tests:
         rows: []
       - input: ref('int_variable_incomes_transactions')
         rows: []
+    # SQL format because dict fixture values cannot express arrays portably:
+    # dbt casts them as strings, which only DuckDB accepts. The flags build
+    # through filter(split(...)), which both engines parse; an empty string
+    # becomes an empty array. A SQL expect is compared on every output
+    # column, so the padding SELECT spells out all of them; core carries
+    # only the values the test is about.
     expect:
-      rows:
-        - {transaction_id: ta1, investment_id: ia1, data_quality_flags: "[transaction_id:reissued]"}
-        - {transaction_id: tb1, investment_id: ib1, data_quality_flags: "[]"}
-        - {transaction_id: tb2, investment_id: ib2, data_quality_flags: "[]"}
-        - {transaction_id: tc1, investment_id: ic1, data_quality_flags: "[transaction_id:reissued]"}
-        - {transaction_id: td1, investment_id: id1, data_quality_flags: "[transaction_id:reissued]"}
-        - {transaction_id: te1, investment_id: ie1, data_quality_flags: "[]"}
-        - {transaction_id: tf1, investment_id: if1, data_quality_flags: "[transaction_date:missing, transaction_id:reissued]"}
-        - {transaction_id: tg1, investment_id: ig1, data_quality_flags: "[]"}
-        - {transaction_id: tg2, investment_id: ig2, data_quality_flags: "[]"}
-        - {transaction_id: tg3, investment_id: ig3, data_quality_flags: "[]"}
-        - {transaction_id: th1, investment_id: ih1, data_quality_flags: "[transaction_id:reissued]"}
-        - {transaction_id: ti1, investment_id: ii1, data_quality_flags: "[]"}
-        - {transaction_id: ti2, investment_id: ii2, data_quality_flags: "[]"}
+      format: sql
+      rows: |
+        SELECT
+            core.transaction_date,
+            core.ingested_at,
+            CAST(NULL AS STRING) AS party_id,
+            'A1' AS account_id,
+            CAST(NULL AS STRING) AS institution_id,
+            CAST(NULL AS STRING) AS institution_name,
+            'funds' AS product_family,
+            core.transaction_id,
+            core.holding_key,
+            core.investment_id,
+            'ENTRADA' AS movement_type,
+            'APORTE' AS transaction_type,
+            CAST(NULL AS STRING) AS transaction_type_additional_info,
+            CAST(10 AS DECIMAL(38, 10)) AS quantity,
+            CAST(core.gross_amount AS DECIMAL(38, 10)) AS gross_amount,
+            CAST(core.gross_amount AS DECIMAL(38, 10)) AS net_amount,
+            'BRL' AS currency,
+            filter(split(core.flags, ','), f -> f <> '') AS data_quality_flags
+        FROM (
+            SELECT DATE '2026-01-05' AS transaction_date, TIMESTAMP '2026-01-01 10:00:00' AS ingested_at, 'ta1' AS transaction_id, 'H_a' AS holding_key, 'ia1' AS investment_id, 100 AS gross_amount, 'transaction_id:reissued' AS flags
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-01 10:00:00', 'tb1', 'H_b', 'ib1', 100, ''
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-02 10:00:00', 'tb2', 'H_b', 'ib2', 100, ''
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-01 10:00:00', 'tc1', 'H_c', 'ic1', 100, 'transaction_id:reissued'
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-01 10:00:00', 'td1', 'H_d', 'id1', 100, 'transaction_id:reissued'
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-01 10:00:00', 'te1', 'H_e', 'ie1', 100, ''
+            UNION ALL SELECT NULL, TIMESTAMP '2026-01-01 10:00:00', 'tf1', 'H_f', 'if1', 100, 'transaction_date:missing,transaction_id:reissued'
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-01 10:00:00', 'tg1', 'H_g', 'ig1', 100, ''
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-02 10:00:00', 'tg2', 'H_g', 'ig2', 100, ''
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-03 10:00:00', 'tg3', 'H_g', 'ig3', 100, ''
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-01 10:00:00', 'th1', 'H_h', 'ih1', 100, 'transaction_id:reissued'
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-01 10:00:00', 'ti1', 'H_i', 'ii1', 100, ''
+            UNION ALL SELECT DATE '2026-01-05', TIMESTAMP '2026-01-02 10:00:00', 'ti2', 'H_i', 'ii2', 150, ''
+        ) AS core

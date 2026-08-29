@@ -21,11 +21,39 @@ unit_tests:
   - name: quantity_resolution
     model: fct_holdings
     given:
+      # SQL format because dict fixture values cannot express arrays portably:
+      # dbt casts them as strings, which only DuckDB accepts. The flags build
+      # through filter(split(...)), which both engines parse; an empty string
+      # becomes an empty array.
       - input: ref('int_funds_holdings')
-        rows:
-          - {snapshot_id: S1, account_id: A1, holding_key: Q_a, quantity: 10, quantity_derived: 4, unit_price: 2, data_quality_flags: "[quantity_reported:stale]"}
-          - {snapshot_id: S1, account_id: A1, holding_key: Q_b, quantity: 10, quantity_derived: null, unit_price: 2, data_quality_flags: "[]"}
-          - {snapshot_id: S1, account_id: A1, holding_key: Q_c, quantity: 10, quantity_derived: 7, unit_price: 2, data_quality_flags: "[movements:incomplete]"}
+        format: sql
+        rows: |
+          SELECT
+              CAST(NULL AS TIMESTAMP) AS snapshot_created_at,
+              CAST(NULL AS DATE) AS reference_date,
+              'S1' AS snapshot_id,
+              'A1' AS account_id,
+              CAST(NULL AS STRING) AS party_id,
+              CAST(NULL AS STRING) AS institution_id,
+              CAST(NULL AS STRING) AS institution_name,
+              core.holding_key,
+              CAST(NULL AS STRING) AS fund_name,
+              CAST(NULL AS STRING) AS fund_cnpj,
+              CAST(NULL AS STRING) AS isin_code,
+              CAST(10 AS DECIMAL(38, 10)) AS quantity,
+              CAST(core.quantity_derived AS DECIMAL(38, 10)) AS quantity_derived,
+              CAST(NULL AS DECIMAL(38, 10)) AS gross_amount,
+              CAST(NULL AS DECIMAL(38, 10)) AS net_amount,
+              CAST(NULL AS STRING) AS currency,
+              CAST(2 AS DECIMAL(38, 10)) AS unit_price,
+              CAST(NULL AS BIGINT) AS n_investment_ids,
+              filter(split('', ','), f -> f <> '') AS investment_ids,
+              filter(split(core.flags, ','), f -> f <> '') AS data_quality_flags
+          FROM (
+              SELECT 'Q_a' AS holding_key, 4 AS quantity_derived, 'quantity_reported:stale' AS flags
+              UNION ALL SELECT 'Q_b', NULL, ''
+              UNION ALL SELECT 'Q_c', 7, 'movements:incomplete'
+          ) AS core
       - input: ref('int_bank_fixed_incomes_holdings')
         rows: []
       - input: ref('int_credit_fixed_incomes_holdings')

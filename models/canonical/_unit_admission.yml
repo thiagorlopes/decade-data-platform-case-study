@@ -90,27 +90,64 @@ unit_tests:
           - {snapshot_id: S2, investment_id: x2, account_id: A1, quota_quantity: 10, gross_amount: 100}
           - {snapshot_id: S1, investment_id: v1, account_id: A1, quota_quantity: 10, gross_amount: 100, ingested_at: 2026-01-01 10:00:00}
           - {snapshot_id: S1, investment_id: v1, account_id: A1, quota_quantity: 10, gross_amount: 150, ingested_at: 2026-01-02 10:00:00}
+    # SQL format because dict fixture values cannot express arrays portably:
+    # dbt casts them as strings, which only DuckDB accepts. The flags build
+    # through filter(split(...)), which both engines parse; an empty string
+    # becomes an empty array. A SQL expect is compared on every output
+    # column, so the padding SELECT spells out all of them; core carries
+    # only the values the test is about.
     expect:
-      rows:
-        - {investment_id: s1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: r1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: r2, admission: reject_duplicate, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: p1, admission: reject_duplicate, gross_amount: null, data_quality_flags: "[gross_amount:missing]"}
-        - {investment_id: p2, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: l1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: l2, admission: admit, gross_amount: 200, data_quality_flags: "[]"}
-        - {investment_id: z1, admission: reject_zero_duplicate, gross_amount: 0, data_quality_flags: "[]"}
-        - {investment_id: z2, admission: admit, gross_amount: 100, data_quality_flags: "[lot:zero_copy_dropped]"}
-        - {investment_id: t1, admission: quarantine, gross_amount: 0, data_quality_flags: "[]"}
-        - {investment_id: t2, admission: quarantine, gross_amount: 0, data_quality_flags: "[]"}
-        - {investment_id: t3, admission: quarantine, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: w1, admission: quarantine, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: w2, admission: quarantine, gross_amount: 200, data_quality_flags: "[]"}
-        - {investment_id: q1, admission: quarantine, gross_amount: 0, data_quality_flags: "[quota_quantity:missing]"}
-        - {investment_id: q2, admission: quarantine, gross_amount: 100, data_quality_flags: "[quota_quantity:missing]"}
-        - {investment_id: k1, admission: admit, gross_amount: 100, data_quality_flags: "[natural_key:missing, fund_cnpj:missing]"}
-        - {investment_id: d1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: d2, admission: reject_duplicate, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: x1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: x2, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
-        - {investment_id: v1, admission: admit, gross_amount: 150, data_quality_flags: "[]"}
+      format: sql
+      rows: |
+        SELECT
+            core.snapshot_id,
+            core.investment_id,
+            CAST(NULL AS TIMESTAMP) AS snapshot_created_at,
+            CAST(NULL AS STRING) AS institution_id,
+            CAST(NULL AS STRING) AS institution_name,
+            CAST(NULL AS STRING) AS party_id,
+            'A1' AS account_id,
+            CAST(NULL AS STRING) AS connection_id,
+            core.ingested_at,
+            CAST(NULL AS STRING) AS fund_name,
+            core.natural_key AS fund_cnpj,
+            CAST(NULL AS STRING) AS isin_code,
+            CAST(NULL AS STRING) AS anbima_category,
+            CAST(NULL AS STRING) AS anbima_class,
+            CAST(NULL AS STRING) AS anbima_subclass,
+            CAST(NULL AS DATE) AS reference_date,
+            CAST(core.gross_amount AS DECIMAL(25, 10)) AS gross_amount,
+            CAST(NULL AS STRING) AS currency,
+            CAST(NULL AS DECIMAL(25, 10)) AS net_amount,
+            CAST(NULL AS DECIMAL(25, 10)) AS income_tax_amount,
+            CAST(NULL AS DECIMAL(25, 10)) AS financial_transaction_tax_amount,
+            CAST(NULL AS DECIMAL(25, 10)) AS blocked_amount,
+            CAST(core.quota_quantity AS DECIMAL(25, 10)) AS quota_quantity,
+            CAST(NULL AS DECIMAL(25, 10)) AS quota_gross_price,
+            core.natural_key,
+            core.admission,
+            filter(split(core.flags, ','), f -> f <> '') AS data_quality_flags
+        FROM (
+            SELECT 'S1' AS snapshot_id, 's1' AS investment_id, '11111111000101' AS natural_key, 10 AS quota_quantity, 100 AS gross_amount, CAST(NULL AS TIMESTAMP) AS ingested_at, 'admit' AS admission, '' AS flags
+            UNION ALL SELECT 'S1', 'r1', '11111111000102', 10, 100, NULL, 'admit', ''
+            UNION ALL SELECT 'S1', 'r2', '11111111000102', 10, 100, NULL, 'reject_duplicate', ''
+            UNION ALL SELECT 'S1', 'p1', '11111111000103', 10, NULL, NULL, 'reject_duplicate', 'gross_amount:missing'
+            UNION ALL SELECT 'S1', 'p2', '11111111000103', 10, 100, NULL, 'admit', ''
+            UNION ALL SELECT 'S1', 'l1', '11111111000104', 10, 100, NULL, 'admit', ''
+            UNION ALL SELECT 'S1', 'l2', '11111111000104', 20, 200, NULL, 'admit', ''
+            UNION ALL SELECT 'S1', 'z1', '11111111000105', 10, 0, NULL, 'reject_zero_duplicate', ''
+            UNION ALL SELECT 'S1', 'z2', '11111111000105', 10, 100, NULL, 'admit', 'lot:zero_copy_dropped'
+            UNION ALL SELECT 'S1', 't1', '11111111000106', 10, 0, NULL, 'quarantine', ''
+            UNION ALL SELECT 'S1', 't2', '11111111000106', 10, 0, NULL, 'quarantine', ''
+            UNION ALL SELECT 'S1', 't3', '11111111000106', 10, 100, NULL, 'quarantine', ''
+            UNION ALL SELECT 'S1', 'w1', '11111111000107', 10, 100, NULL, 'quarantine', ''
+            UNION ALL SELECT 'S1', 'w2', '11111111000107', 10, 200, NULL, 'quarantine', ''
+            UNION ALL SELECT 'S1', 'q1', '11111111000108', NULL, 0, NULL, 'quarantine', 'quota_quantity:missing'
+            UNION ALL SELECT 'S1', 'q2', '11111111000108', NULL, 100, NULL, 'quarantine', 'quota_quantity:missing'
+            UNION ALL SELECT 'S1', 'k1', NULL, 10, 100, NULL, 'admit', 'natural_key:missing,fund_cnpj:missing'
+            UNION ALL SELECT 'S1', 'd1', '22222222000122', 10, 100, NULL, 'admit', ''
+            UNION ALL SELECT 'S1', 'd2', '22222222000122', 10, 100, NULL, 'reject_duplicate', ''
+            UNION ALL SELECT 'S1', 'x1', '11111111000110', 10, 100, NULL, 'admit', ''
+            UNION ALL SELECT 'S2', 'x2', '11111111000110', 10, 100, NULL, 'admit', ''
+            UNION ALL SELECT 'S1', 'v1', '11111111000111', 10, 150, TIMESTAMP '2026-01-02 10:00:00', 'admit', ''
+        ) AS core
