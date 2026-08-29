@@ -14,9 +14,11 @@ models:
       columns: true
     staging:
       +materialized: view
+      +schema: staging
     canonical:
       +materialized: incremental
       +unique_key: [snapshot_id, investment_id]
+      +schema: canonical
       intermediate:
         holdings:
           # view, not incremental: gross:zero_transient/investment_id:replaced lag over the full
@@ -24,3 +26,9 @@ models:
           +materialized: view
     consumption:
       +materialized: table
+      +schema: consumption
+      # clustering rationale: README.md § Physical layout; dbt-duckdb ignores the key
+      fct_holdings:
+        +liquid_clustered_by: [party_id, snapshot_created_at]
+      fct_movements:
+        +liquid_clustered_by: [party_id, transaction_date]

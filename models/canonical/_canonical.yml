@@ -38,7 +38,7 @@ models:
           combination_of_columns: [snapshot_id, investment_id]
       - dbt_utils.expression_is_true:
           name: int_variable_issuer_cnpj_clean
-          expression: "issuer_cnpj IS NULL OR regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          expression: "issuer_cnpj IS NULL OR {{ decade.regex_matches('issuer_cnpj', '^[0-9]{14}$') }}"
     columns:
       - &c_snapshot_id
         name: snapshot_id
@@ -120,7 +120,7 @@ models:
       - *lot_grain
       - dbt_utils.expression_is_true:
           name: int_funds_cnpj_clean
-          expression: "fund_cnpj IS NULL OR regexp_matches(fund_cnpj, '^[0-9]{14}$')"
+          expression: "fund_cnpj IS NULL OR {{ decade.regex_matches('fund_cnpj', '^[0-9]{14}$') }}"
     columns:
       - *c_snapshot_id
       - *c_investment_id
@@ -175,7 +175,7 @@ models:
       - *lot_grain
       - dbt_utils.expression_is_true:
           name: int_bank_issuer_cnpj_clean
-          expression: "issuer_cnpj IS NULL OR regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          expression: "issuer_cnpj IS NULL OR {{ decade.regex_matches('issuer_cnpj', '^[0-9]{14}$') }}"
       - dbt_utils.expression_is_true:
           name: int_bank_no_placeholder_purchase_date
           expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"
@@ -279,10 +279,10 @@ models:
       - *lot_grain
       - dbt_utils.expression_is_true:
           name: int_credit_issuer_cnpj_clean
-          expression: "issuer_cnpj IS NULL OR regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          expression: "issuer_cnpj IS NULL OR {{ decade.regex_matches('issuer_cnpj', '^[0-9]{14}$') }}"
       - dbt_utils.expression_is_true:
           name: int_credit_debtor_cnpj_clean
-          expression: "debtor_cnpj IS NULL OR regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
+          expression: "debtor_cnpj IS NULL OR {{ decade.regex_matches('debtor_cnpj', '^[0-9]{14}$') }}"
       - dbt_utils.expression_is_true:
           name: int_credit_no_placeholder_purchase_date
           expression: "purchase_date IS DISTINCT FROM DATE '0001-01-01'"

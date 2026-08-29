@@ -33,7 +33,7 @@ FROM (
     -- unless it is untrustworthy, then the provider's number), and the plain
     -- columns agree with each other: gross_amount = quantity * unit_price.
     -- The provider's original claims keep the _reported suffix.
-    SELECT *, CASE WHEN list_contains(data_quality_flags, 'movements:incomplete')
+    SELECT *, CASE WHEN array_contains(data_quality_flags, 'movements:incomplete')
                    THEN quantity
                    ELSE coalesce(quantity_derived, quantity)
               END AS quantity_resolved

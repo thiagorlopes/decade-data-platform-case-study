@@ -50,10 +50,11 @@ SELECT
     CAST({{ cols.gross }} AS DECIMAL(38, 10)) AS gross_amount,
     CAST({{ cols.net }} AS DECIMAL(38, 10)) AS net_amount,
     currency,
-    list_filter([
+    {%- set movement_flag_items %}
         CASE WHEN {{ cols.date }} IS NULL THEN 'transaction_date:missing' END,
         CASE WHEN had_cross_id_twin THEN 'transaction_id:reissued' END
-    ], f -> f IS NOT NULL) AS data_quality_flags
+    {% endset %}
+    filter({{ decade.sql_array(movement_flag_items) }}, f -> f IS NOT NULL) AS data_quality_flags
 FROM {{ cross_id_movements(ref('int_' ~ family ~ '_transactions'),
                            ref('int_' ~ family ~ '_positions'),
                            date_col=cols.date,

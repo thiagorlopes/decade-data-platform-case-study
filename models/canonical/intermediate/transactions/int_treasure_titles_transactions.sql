@@ -30,7 +30,7 @@ SELECT
 FROM {{ ref('stg_openfinance__treasure_titles_transactions') }}
 {% if is_incremental() %}
 -- watermark rationale: README § Materializations
-WHERE ingested_at >= (SELECT max(ingested_at) FROM {{ this }})
+WHERE ingested_at >= {{ ingest_watermark() }}
 {% endif %}
 QUALIFY row_number() OVER (
     PARTITION BY transaction_id

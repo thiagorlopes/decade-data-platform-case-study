@@ -5,8 +5,115 @@
    values surface as NULL and are caught by the warn-severity not_null tests
    in _staging_quality.yml instead of crashing the view. `required` only
    documents what the OFB spec mandates. #}
+{% macro json_extract_text(column, path) -%}
+    {{ adapter.dispatch('json_extract_text', 'decade')(column, path) }}
+{%- endmacro %}
+
+{% macro default__json_extract_text(column, path) -%}
+json_extract_string({{ column }}, '{{ path }}')
+{%- endmacro %}
+
+{% macro databricks__json_extract_text(column, path) -%}
+get_json_object({{ column }}, '{{ path }}')
+{%- endmacro %}
+
+{% macro regex_matches(column, pattern) -%}
+    {{ adapter.dispatch('regex_matches', 'decade')(column, pattern) }}
+{%- endmacro %}
+
+{% macro default__regex_matches(column, pattern) -%}
+regexp_matches({{ column }}, '{{ pattern }}')
+{%- endmacro %}
+
+{% macro databricks__regex_matches(column, pattern) -%}
+{{ column }} RLIKE '{{ pattern }}'
+{%- endmacro %}
+
+{# --- Dialect bridges. The project writes spellings DuckDB and Databricks
+   share (max_by, filter, array_contains, array_distinct). The constructs
+   below have no shared spelling, so they dispatch per adapter. #}
+
+{# Star with recomputed columns. Databricks has no REPLACE modifier, so it
+   removes the columns and appends the recomputed ones at the end; every
+   downstream reference is by name, so the order shift is harmless. #}
+{% macro star_replace(replacements) -%}
+    {{ adapter.dispatch('star_replace', 'decade')(replacements) }}
+{%- endmacro %}
+
+{% macro default__star_replace(replacements) -%}
+* REPLACE (
+        {%- for col, expr in replacements.items() %}
+        {{ expr }} AS {{ col }}{{ ',' if not loop.last }}
+        {%- endfor %}
+    )
+{%- endmacro %}
+
+{% macro databricks__star_replace(replacements) -%}
+* EXCEPT ({{ replacements.keys() | join(', ') }}),
+        {%- for col, expr in replacements.items() %}
+        {{ expr }} AS {{ col }}{{ ',' if not loop.last }}
+        {%- endfor %}
+{%- endmacro %}
+
+{% macro star_exclude(columns) -%}
+    {{ adapter.dispatch('star_exclude', 'decade')(columns) }}
+{%- endmacro %}
+
+{% macro default__star_exclude(columns) -%}
+* EXCLUDE ({{ columns | join(', ') }})
+{%- endmacro %}
+
+{% macro databricks__star_exclude(columns) -%}
+* EXCEPT ({{ columns | join(', ') }})
+{%- endmacro %}
+
+{% macro sql_struct(fields) -%}
+    {{ adapter.dispatch('sql_struct', 'decade')(fields) }}
+{%- endmacro %}
+
+{% macro default__sql_struct(fields) -%}
+struct_pack(
+            {%- for key, expr in fields.items() %}
+            {{ key }} := {{ expr }}{{ ',' if not loop.last }}
+            {%- endfor %}
+        )
+{%- endmacro %}
+
+{% macro databricks__sql_struct(fields) -%}
+named_struct(
+            {%- for key, expr in fields.items() %}
+            '{{ key }}', {{ expr }}{{ ',' if not loop.last }}
+            {%- endfor %}
+        )
+{%- endmacro %}
+
+{# items is one string of comma-separated element expressions. #}
+{% macro sql_array(items) -%}
+    {{ adapter.dispatch('sql_array', 'decade')(items) }}
+{%- endmacro %}
+
+{% macro default__sql_array(items) -%}
+[{{ items }}]
+{%- endmacro %}
+
+{% macro databricks__sql_array(items) -%}
+array({{ items }})
+{%- endmacro %}
+
+{% macro array_length(expr) -%}
+    {{ adapter.dispatch('array_length', 'decade')(expr) }}
+{%- endmacro %}
+
+{% macro default__array_length(expr) -%}
+len({{ expr }})
+{%- endmacro %}
+
+{% macro databricks__array_length(expr) -%}
+size({{ expr }})
+{%- endmacro %}
+
 {% macro json_field(column, prefix, path, type, required) -%}
-    {%- set expr = "json_extract_string(" ~ column ~ ", '" ~ prefix ~ path ~ "')" -%}
+    {%- set expr = decade.json_extract_text(column, prefix ~ path) -%}
     {%- if type == 'VARCHAR' -%}
         {{ expr }}
     {%- else -%}
@@ -37,7 +144,7 @@
    tail ('92894922000108.00'). Strip the tail, then demand exactly 14 digits;
    anything else degrades to NULL (regexp_extract returns '' on no match). #}
 {% macro clean_cnpj(column) -%}
-    nullif(regexp_extract(regexp_replace({{ column }}, '\.[0-9]+$', ''), '^[0-9]{14}$'), '')
+    nullif(regexp_extract(regexp_replace({{ column }}, '\.[0-9]+$', ''), '^[0-9]{14}$', 0), '')
 {%- endmacro %}
 
 {# 'IPC-A' is the market's spelling of the OFB enum value 'IPCA'. #}
@@ -57,6 +164,21 @@
    siblings that already landed; a row-level watermark would classify it
    alone and admit both copies. The (snapshot_id, investment_id) unique_key
    turns the re-touched rows into an upsert, keeping reruns idempotent. #}
+{# The incremental boundary shared by every watermark. Normally the newest
+   ingested_at already in the target. The backfill_from var reopens it to a
+   fixed point, so every delivery ingested since then is re-admitted and
+   re-judged after a transform fix. The upsert absorbs the re-touched rows,
+   so the gear is idempotent and needs no full refresh:
+   dbt build --vars '{"backfill_from": "2024-01-01"}' #}
+{% macro ingest_watermark() -%}
+{%- set backfill_from = var('backfill_from', none) -%}
+{%- if backfill_from -%}
+TIMESTAMP '{{ backfill_from }}'
+{%- else -%}
+(SELECT max(ingested_at) FROM {{ this }})
+{%- endif -%}
+{%- endmacro %}
+
 {% macro snapshot_watermark(staging_refs) -%}
 snapshot_id IN (
     {%- for staging_ref in staging_refs %}
@@ -65,7 +187,7 @@ snapshot_id IN (
     -- run that reads it while it is still landing must read that stamp
     -- again next run, or the rest of the batch never reaches downstream.
     -- Reruns re-touch the boundary snapshots; the upsert keeps that idempotent.
-    WHERE ingested_at >= (SELECT max(ingested_at) FROM {{ this }})
+    WHERE ingested_at >= {{ ingest_watermark() }}
     {{ 'UNION' if not loop.last }}
     {%- endfor %}
 )
@@ -167,9 +289,9 @@ classified AS (
 
 -- Step 4: the admission verdict, plus the defect flags.
 SELECT
-    * EXCLUDE (is_in_duplicate_group, is_pair, quantities_agree,
-               gross_amounts_agree, n_positive_gross_amounts, dup_class,
-               is_resolvable_conflict, dedup_rank),
+    {{ decade.star_exclude(['is_in_duplicate_group', 'is_pair', 'quantities_agree',
+                            'gross_amounts_agree', 'n_positive_gross_amounts', 'dup_class',
+                            'is_resolvable_conflict', 'dedup_rank']) }},
     CASE
         WHEN dup_class = 'redundant_copies' AND dedup_rank > 1 THEN 'reject_duplicate'
         WHEN is_resolvable_conflict
@@ -178,12 +300,13 @@ SELECT
              AND NOT is_resolvable_conflict            THEN 'quarantine'
         ELSE 'admit'
     END AS admission,
-    list_filter([
+    {%- set lot_flag_items %}
         CASE WHEN natural_key IS NULL THEN 'natural_key:missing' END,
         CASE WHEN is_resolvable_conflict AND gross_amount > 0
              THEN 'lot:zero_copy_dropped' END{% for cond, label in extra_flags %},
         CASE WHEN {{ cond }} THEN '{{ label }}' END{% endfor %}
-    ], f -> f IS NOT NULL) AS data_quality_flags
+    {% endset %}
+    filter({{ decade.sql_array(lot_flag_items) }}, f -> f IS NOT NULL) AS data_quality_flags
 FROM classified
 {%- endmacro %}
 
@@ -256,17 +379,17 @@ FROM classified
     -- business field. Two movements sharing an event_key are either one
     -- event delivered twice or a real repeat.
     keyed AS (
-        SELECT *, struct_pack(
-            account  := account_id,
-            holding  := holding_key,
-            happened := {{ date_col }},
-            movement := movement_type,
-            kind     := transaction_type,
-            detail   := transaction_type_additional_info,
-            quantity := {{ qty_col }},
-            amount   := {{ gross_col }},
-            currency := currency
-        ) AS event_key
+        SELECT *, {{ decade.sql_struct({
+            'account':  'account_id',
+            'holding':  'holding_key',
+            'happened': date_col,
+            'movement': 'movement_type',
+            'kind':     'transaction_type',
+            'detail':   'transaction_type_additional_info',
+            'quantity': qty_col,
+            'amount':   gross_col,
+            'currency': 'currency'
+        }) }} AS event_key
         FROM movements
     ),
 
@@ -276,11 +399,11 @@ FROM classified
         SELECT
             event_key,
             count(DISTINCT investment_id) AS n_ids,
-            list(DISTINCT investment_id)  AS ids,
-            arg_min(investment_id, struct_pack(
-                arrived  := ingested_at,
-                tiebreak := investment_id
-            )) AS keep_id
+            array_agg(DISTINCT investment_id)  AS ids,
+            min_by(investment_id, {{ decade.sql_struct({
+                'arrived':  'ingested_at',
+                'tiebreak': 'investment_id'
+            }) }}) AS keep_id
         FROM keyed
         GROUP BY event_key
     ),
@@ -291,13 +414,13 @@ FROM classified
             same_event.*,
             n_ids > 1 AND NOT EXISTS (
                 SELECT 1 FROM ids_live_together
-                WHERE list_contains(ids, id_a) AND list_contains(ids, id_b)
+                WHERE array_contains(ids, id_a) AND array_contains(ids, id_b)
             ) AS delivered_twice
         FROM same_event
     )
 
     SELECT
-        keyed.* EXCLUDE (event_key),
+        keyed.{{ decade.star_exclude(['event_key']) }},
         decided.delivered_twice AS had_cross_id_twin
     FROM keyed
     JOIN decided ON keyed.event_key IS NOT DISTINCT FROM decided.event_key
@@ -345,7 +468,7 @@ day_net AS (
             WHEN movement_type = 'ENTRADA' THEN {{ qty_col }}
             ELSE -{{ qty_col }}
         END) AS day_net,
-        count(*) FILTER ({{ qty_col }} IS NOT NULL) AS n_qty_receipts
+        count(*) FILTER (WHERE {{ qty_col }} IS NOT NULL) AS n_qty_receipts
     FROM {{ movements_rel }}
     GROUP BY account_id, holding_key, eff_date
 ),
@@ -407,8 +530,8 @@ timeline AS (
         lag(quantity)       OVER win AS prev_qty,
         lead(quantity)      OVER win AS next_qty,
         lag(investment_ids) OVER win AS prev_ids,
-        len(list_filter(investment_ids, id -> NOT list_contains(prev_ids, id))) > 0 AS has_arrived_ids,
-        len(list_filter(prev_ids, id -> NOT list_contains(investment_ids, id))) > 0 AS has_departed_ids
+        {{ decade.array_length('filter(investment_ids, id -> NOT array_contains(prev_ids, id))') }} > 0 AS has_arrived_ids,
+        {{ decade.array_length('filter(prev_ids, id -> NOT array_contains(investment_ids, id))') }} > 0 AS has_departed_ids
     FROM holding
     WINDOW win AS (
         PARTITION BY account_id, holding_key
@@ -418,7 +541,7 @@ timeline AS (
 {%- endmacro %}
 
 {% macro holding_data_quality_flags() -%}
-list_distinct(lot_flags || list_filter([
+{%- set holding_flag_items %}
     CASE WHEN n_investment_ids > 1 THEN 'investment_id:multiple' END,
     CASE WHEN n_investment_ids > 1 AND has_zero_lot THEN 'lot:zero_kept' END,
     CASE WHEN gross_amount = 0 AND prev_gross > 0 AND next_gross > 0
@@ -431,5 +554,6 @@ list_distinct(lot_flags || list_filter([
     CASE WHEN due_date IS NOT NULL AND due_date < reference_date
               AND coalesce(gross_amount, 0) > 0
          THEN 'holding:matured' END
-], f -> f IS NOT NULL))
+{% endset -%}
+array_distinct(lot_flags || filter({{ decade.sql_array(holding_flag_items) }}, f -> f IS NOT NULL))
 {%- endmacro %}
