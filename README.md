@@ -69,7 +69,7 @@ Run `make install` once, then `make build`. Everything else works from the built
 
 Run `make help` for the full list, including partial variants like `make run` (models only), `make test` (tests only), and `make deps` (install dbt packages; every compiling target runs it first).
 
-`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots at or past the newest arrival. To reprocess everything after a transform change, run `make clean && make build`. This equals `dbt build --full-refresh` on a fresh warehouse.
+`make build` is idempotent. Canonical models are incremental with an `ingested_at` watermark, so reruns only process rows at or past the newest arrival. Positions and holdings dedupe on `(snapshot_id, investment_id)`; transactions dedupe on `transaction_id`. To reprocess everything after a transform change, run `make clean && make build`. This equals `dbt build --full-refresh` on a fresh warehouse.
 
 ## Querying the warehouse
 
