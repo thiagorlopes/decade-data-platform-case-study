@@ -98,9 +98,11 @@ Movement-grain, added in fct_movements:
   another investment_id of the same holding, with a fresh transaction_id.
   The first-delivered copy survives with this flag; the twin's
   transaction_id stays in int_*_transactions. Movements that look
-  identical across ids admitted together in one sync are not collapsed:
-  those ids are distinct live lots (`investment_id:multiple`), so the
-  repeats are real.
+  identical across ids are kept apart only when the ids were both
+  admitted in one sync with different gross amounts: differing gross
+  proves two real lots of the holding, so the repeats are real. A
+  co-admitted pair with identical gross is a duplicated record, and its
+  movements collapse like any other twin.
 {% enddocs %}
 
 {% docs dq_quantity %}
