@@ -80,29 +80,21 @@ Run `make docs` and open http://localhost:8080. The site lets you browse the DAG
 The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL queries over the consumption layer, never raw or staging.
 
 - [`holdings.sql`](consumers/wealth/holdings.sql): what customers hold, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
-- [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each joined to the current holding it belongs to on the shared `holding_key`.
+- [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, joined to their current holding on the shared `holding_key`.
 
-Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. The committed output under [`output/`](consumers/wealth/output/) covers three sample customers. `make consumers` regenerates it from the committed queries, so the CSVs cannot drift from the SQL that claims to produce them. A new consumer follows the same pattern: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
+Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. `make consumers` regenerates the committed CSVs under [`output/`](consumers/wealth/output/) (three sample customers) from these same queries, so the output cannot drift from its SQL. A new consumer follows the same pattern: query `fct_holdings` and `fct_movements` under the contract.
 
 ## Contracts
 
-Contracts are dbt `schema.yml` files. `dbt_project.yml` declares [`contracts/`](contracts/) as a model path, so dbt parses and enforces the files there like anything under `models/`.
+Contracts are dbt `schema.yml` files. `dbt_project.yml` declares [`contracts/`](contracts/) as a model path, so dbt enforces them like anything under `models/`.
 
 - [`contracts/_consumption.yml`](contracts/_consumption.yml): the output contract for `fct_holdings` and `fct_movements`. Grain and enum tests run at error severity.
 - [`models/canonical/_canonical.yml`](models/canonical/_canonical.yml): per-family canonical contracts, kept next to their models.
 - [`models/staging/_staging_quality.yml`](models/staging/_staging_quality.yml): within-record quality rules. This is the DETECT tier, at warn severity.
 
-### What `contract: enforced` guarantees
+On every `dbt build`, dbt compares the compiled output of both facts against the declared columns before writing the table. Any drift fails the build: a renamed or dropped column, a changed type, an undeclared new column. The output of `make build` therefore always matches the contract file, and consumers develop against the declared columns and types without talking to the platform team. A refactor either preserves the contract or updates the file in the same PR; that file change is the review signal.
 
-On every `dbt build`, dbt compares the compiled output of `fct_holdings` and `fct_movements` against the columns declared in `contracts/_consumption.yml`. It does this before writing the table. The build fails on any drift, so a broken table never reaches a consumer:
-
-- a column is **renamed or dropped**
-- a column's **type changes** (for example, an amount silently becomes `varchar`)
-- a **new column appears** without being declared
-
-What this means for consumers: the output of `make build` always matches the contract file. Teams can develop against the declared columns and types without talking to the platform team. A platform-side refactor cannot break a consumer silently. It either preserves the contract, or it must update the contract file in the same PR. That file change is the review signal.
-
-Schema changes therefore ship as versioned, replayable steps: a model change in git, gated by its contract change in the same PR, replayed over history with `make clean && make build`.
+Schema changes ship as versioned, replayable steps: a model change gated by its contract change in the same PR, replayed over history with `make clean && make build`.
 
 ## Data quality: detect, resolve, guarantee
 
