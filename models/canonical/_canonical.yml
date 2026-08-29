@@ -97,7 +97,7 @@ models:
           Holding identity within an account, derived from the REPAIRED
           identity columns (key per family in the model SQL). NULL means the
           row cannot be identified: it is admitted at lot grain, flagged
-          missing:natural_key, and never merged with anything.
+          natural_key:missing, and never merged with anything.
       - &c_admission
         name: admission
         description: '{{ doc("dq_admission") }}'
@@ -407,7 +407,7 @@ models:
 # re-delivery with a changed value supersedes the older copy through the same
 # rule and replaying a window is a no-op. There is no admission verdict here:
 # no conflicting copies exist to arbitrate, so the only defect signals are
-# the missing: field flags. Tests error because grain and flag integrity are
+# the :missing field flags. Tests error because grain and flag integrity are
 # our own guarantees, not the provider's.
 #
 # Per-amount currency siblings are dropped; a single `currency` column
@@ -603,7 +603,7 @@ models:
 
 # Holdings sub-layer: one row per (snapshot_id, account_id, holding_key),
 # admitted lots summed on the natural key. Views over the incremental
-# int_*_positions tables because the cross-sync flags (zero:transient, investment_id:replaced)
+# int_*_positions tables because the cross-sync flags (gross:zero_transient, investment_id:replaced)
 # need lag/lead over the full timeline. Missing-identity lots keep their
 # investment_id as holding_key and travel alone.
 
@@ -639,7 +639,7 @@ models:
     description: >
       Credit fixed income holdings per sync, keyed by
       (isin_code, debtor_cnpj, due_date). Rows missing identity fields keep
-      their investment_id as holding_key and carry the missing:natural_key flag.
+      their investment_id as holding_key and carry the natural_key:missing flag.
     data_tests: *holding_grain
     columns: *holding_dq_columns
 

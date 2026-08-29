@@ -19,7 +19,7 @@ models:
       +unique_key: [snapshot_id, investment_id]
       intermediate:
         holdings:
-          # view, not incremental: zero:transient/investment_id:replaced lag over the full
+          # view, not incremental: gross:zero_transient/investment_id:replaced lag over the full
           # timeline of the incremental positions tables
           +materialized: view
     consumption:

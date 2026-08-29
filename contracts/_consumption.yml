@@ -9,7 +9,7 @@ version: 2
 #                  re-delivered, only the latest delivery survives. A
 #                  movement the provider re-issued under another
 #                  investment_id of the same holding collapses to one copy
-#                  flagged duplicate:cross_id; dropped twins stay in
+#                  flagged transaction_id:reissued; dropped twins stay in
 #                  int_*_transactions. Unions int_*_transactions.
 #   dim_holding:   one row per (product_family, holding_key). Static contract
 #                  of the security — name, isin, maturity, indexer, rate,
@@ -100,7 +100,7 @@ models:
         data_type: varchar
         description: >-
           Holding identity within the account: the family natural key, or the
-          investment_id for lots flagged missing:natural_key.
+          investment_id for lots flagged natural_key:missing.
         data_tests: [not_null]
       - name: unit_price
         data_type: decimal(38,10)
@@ -119,7 +119,7 @@ models:
         description: '{{ doc("ofb_position_quantity") }} Summed over the holding''s admitted lots. As the provider delivered it: a write-once field in this feed, kept for reconciliation against the institution. The plain quantity column carries the resolved number.'
       - name: gross_amount_reported
         data_type: decimal(38,10)
-        description: '{{ doc("ofb_gross_amount") }} Summed over the holding''s admitted lots. The provider''s valuation on its own basis, which for stale:quantity holdings prices its frozen quantity. Kept for reconciliation against the institution; the plain gross_amount column carries the row-consistent value.'
+        description: '{{ doc("ofb_gross_amount") }} Summed over the holding''s admitted lots. The provider''s valuation on its own basis, which for quantity_reported:stale holdings prices its frozen quantity. Kept for reconciliation against the institution; the plain gross_amount column carries the row-consistent value.'
       - name: net_amount_reported
         data_type: decimal(38,10)
         description: '{{ doc("ofb_net_amount") }} Summed over the holding''s admitted lots. NULL for variable incomes: the position payload for that family carries no net_amount. There is no plain net column: net cannot be recomputed or corroborated, so only the provider''s claim exists, on the same basis as gross_amount_reported. A payload where net contradicts gross carries net:above_gross.'
@@ -163,7 +163,7 @@ models:
         data_type: varchar
         description: >-
           Holding identity within the family: the natural key, or the
-          investment_id for lots flagged missing:natural_key. Same rule as fct_holdings.
+          investment_id for lots flagged natural_key:missing. Same rule as fct_holdings.
         data_tests: [not_null]
       - name: holding_name
         data_type: varchar
@@ -216,7 +216,7 @@ models:
       One row per movement, across all five product families. When a
       transaction is re-delivered, only the latest delivery survives. A
       movement re-issued under another investment_id of the same holding
-      collapses to one copy flagged duplicate:cross_id; the dropped twin's
+      collapses to one copy flagged transaction_id:reissued; the dropped twin's
       transaction_id stays in int_*_transactions.
       Amounts and dates are conformed per family: funds carry the quota
       conversion date; variable incomes have no gross/net split, so

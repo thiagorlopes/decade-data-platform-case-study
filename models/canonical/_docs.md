@@ -19,7 +19,7 @@ tables for audit.
   trail.
 - `reject_zero_duplicate`: same-sync conflict where exactly one side is a frozen
   zero-valued row. The zero side gets this label; the live side is
-  admitted and flagged `zero:duplicate_dropped`.
+  admitted and flagged `lot:zero_copy_dropped`.
 - `quarantine`: same-sync conflict with no single live row to pick.
   Neither side is safe to aggregate automatically. Rows stay in
   `int_*_positions` for audit; the holdings views drop them so consumers
@@ -34,15 +34,15 @@ needing to know the SQL that produced it.
 
 Lot-grain, added in int_*_positions:
 
-- `missing:<column>` (e.g. `missing:indexer`, `missing:gross_amount`):
+- `<column>:missing` (e.g. `indexer:missing`, `gross_amount:missing`):
   non-repairable NULL in a column the OFB spec marks required. The
   per-family list is the `extra_flags` argument of each int_*_positions
   model.
-- `missing:natural_key`: the record carries no identity to merge on (no ISIN,
+- `natural_key:missing`: the record carries no identity to merge on (no ISIN,
   ticker, or equivalent). It becomes its own holding, keyed by its
   investment_id, and never merges with other records of the same security.
   The identity columns it covers are not flagged again individually.
-- `zero:duplicate_dropped`: the provider sent two copies of this lot in
+- `lot:zero_copy_dropped`: the provider sent two copies of this lot in
   the same sync, one live and one zero-valued. The live row was kept and
   carries this flag; the zero copy was dropped (see `reject_zero_duplicate` in
   admission). The holding's number is stable even though the raw feed
@@ -51,7 +51,7 @@ Lot-grain, added in int_*_positions:
   Net of taxes and fees can never exceed gross, so one of the two is
   wrong and there is no way to tell which. Both are kept as delivered;
   do not trust net on this row.
-- `gross:price_mismatch`: the payload's gross_amount disagrees with its
+- `gross:not_quantity_times_price`: the payload's gross_amount disagrees with its
   own quantity times unit price beyond a 0.5% tolerance. One of the
   three fields is wrong and there is no way to tell which. All are kept
   as delivered.
@@ -68,18 +68,18 @@ make sense once lots are aggregated by natural key):
 - `investment_id:multiple`: the provider keeps two or more position
   records for this security at the same time. The holding sums them into
   one line; n_investment_ids counts them and investment_ids lists them.
-- `zero:lot_kept`: one of the lots merged into this holding is worth zero
+- `lot:zero_kept`: one of the lots merged into this holding is worth zero
   (gross_amount = 0) while its siblings are live. The empty lot was kept,
   so n_investment_ids and investment_ids include it.
-- `zero:transient`: the holding's gross went to zero for a sync, then
+- `gross:zero_transient`: the holding's gross went to zero for a sync, then
   came back, with quantity unchanged. A brief false zero from the
   provider, not a real trade or valuation change.
 - `investment_id:replaced`: between two syncs, the provider retired one
   of the holding's investment_ids and issued a new one for the same
   security. Both ids resolve to the same holding_key, so the old id's
   movements stay attached to the holding; history the provider re-issued
-  under the new id collapses to one copy (see `duplicate:cross_id`).
-- `stale:quantity`: the provider's balance quantity disagrees with the
+  under the new id collapses to one copy (see `transaction_id:reissued`).
+- `quantity_reported:stale`: the provider's balance quantity disagrees with the
   quantity replayed from the holding's movements. The balance feed writes
   quantity at the first buy and does not maintain it, so the movements are
   the reliable record. Prefer `quantity_derived`.
@@ -90,11 +90,11 @@ make sense once lots are aggregated by natural key):
 
 Movement-grain, added in fct_movements:
 
-- `missing:transaction_date`: the provider sent no usable movement date
+- `transaction_date:missing`: the provider sent no usable movement date
   (NULL, or a placeholder: `0001-01-01` .NET MinValue, `1970-01-01` Unix
   epoch zero). The date is NULL; the movement still counts toward totals
   but cannot be placed on a timeline.
-- `duplicate:cross_id`: the provider delivered this movement again under
+- `transaction_id:reissued`: the provider delivered this movement again under
   another investment_id of the same holding, with a fresh transaction_id.
   The first-delivered copy survives with this flag; the twin's
   transaction_id stays in int_*_transactions. Movements that look
@@ -148,7 +148,7 @@ Every snapshot row of a holding carries the same current-knowledge value.
 It is exact for the latest snapshot.
 
 Trust:
-- Disagrees with the provider's `quantity`: holding carries `stale:quantity`.
+- Disagrees with the provider's `quantity`: holding carries `quantity_reported:stale`.
   Prefer this column.
 - Replay infeasible: holding carries `movements:incomplete`. Do not use
   this column.

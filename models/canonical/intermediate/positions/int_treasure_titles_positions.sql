@@ -64,11 +64,11 @@ with_natural_key AS (
 ),
 
 {{ resolve_duplicate_investments(extra_flags=[
-    ('product_name IS NULL',  'missing:product_name'),
-    ('isin_code IS NULL',     'missing:isin_code'),
-    ('indexer IS NULL',       'missing:indexer'),
-    ('purchase_date IS NULL', 'missing:purchase_date'),
+    ('product_name IS NULL',  'product_name:missing'),
+    ('isin_code IS NULL',     'isin_code:missing'),
+    ('indexer IS NULL',       'indexer:missing'),
+    ('purchase_date IS NULL', 'purchase_date:missing'),
     ('net_amount > gross_amount + 0.01', 'net:above_gross'),
-    ('abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
+    ('abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:not_quantity_times_price'),
     ('financial_transaction_tax_amount <> 0 AND abs(gross_amount - net_amount - coalesce(income_tax_amount, 0)) <= 0.02', 'financial_transaction_tax:placeholder'),
 ]) }}

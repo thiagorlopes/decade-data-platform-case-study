@@ -51,8 +51,8 @@ SELECT
     CAST({{ cols.net }} AS DECIMAL(38, 10)) AS net_amount,
     currency,
     list_filter([
-        CASE WHEN {{ cols.date }} IS NULL THEN 'missing:transaction_date' END,
-        CASE WHEN had_cross_id_twin THEN 'duplicate:cross_id' END
+        CASE WHEN {{ cols.date }} IS NULL THEN 'transaction_date:missing' END,
+        CASE WHEN had_cross_id_twin THEN 'transaction_id:reissued' END
     ], f -> f IS NOT NULL) AS data_quality_flags
 FROM {{ cross_id_movements(ref('int_' ~ family ~ '_transactions'),
                            ref('int_' ~ family ~ '_positions'),
