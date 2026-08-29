@@ -190,9 +190,11 @@ The brief asks what was left out and why. Three entries.
 
 ### A test on the watermark boundary
 
-The `>=` in `snapshot_watermark` carries a correctness guarantee. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read it whole on the next run. No automated test pins this: dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
+Each incremental run processes only new rows: rows whose `ingested_at` is at or after the last stamp already processed. That "at or after" is the `>=` in `snapshot_watermark`, and it guards against a specific failure. All rows of one arrival batch share one `ingested_at` value. If a run starts while a batch is still landing, it sees only part of that batch. With `>=`, the next run takes the whole batch again and the late rows arrive. With `>`, the next run would skip the batch and silently drop them.
 
-The check is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check is a two-run CI job that builds, lands a late row on the boundary stamp, rebuilds, and asserts the row arrived. It is the first test to add when the loader goes live.
+No automated test covers this line. dbt unit tests run with `is_incremental` off, so they never execute the filter. A mutation pass confirmed the blind spot: change `>=` to `>` and every test in the project still passes, while nineteen other rule mutations each fail a unit test.
+
+Today the check is manual: build twice over the same raw files and confirm the warehouse is byte-identical. The missing test is a two-run CI job: build, add a late row stamped with the boundary `ingested_at`, rebuild, assert the row arrived. It is the first test to add when the loader goes live.
 
 ### A Claude skill for the quality vocabulary
 
