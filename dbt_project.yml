@@ -20,6 +20,17 @@ models:
       +unique_key: [snapshot_id, investment_id]
       +schema: canonical
       intermediate:
+        # file sizing rationale: README.md § Physical layout. A merge every few
+        # minutes writes small files all day; these keep them near target.
+        # Databricks-only; dbt-duckdb ignores tblproperties.
+        positions:
+          +tblproperties:
+            delta.autoOptimize.optimizeWrite: true
+            delta.autoOptimize.autoCompact: true
+        transactions:
+          +tblproperties:
+            delta.autoOptimize.optimizeWrite: true
+            delta.autoOptimize.autoCompact: true
         holdings:
           # view, not incremental: gross:zero_transient/investment_id:replaced lag over the full
           # timeline of the incremental positions tables
@@ -27,6 +38,8 @@ models:
     consumption:
       +materialized: table
       +schema: consumption
+      +tblproperties:
+        delta.autoOptimize.optimizeWrite: true
       # clustering rationale: README.md § Physical layout; dbt-duckdb ignores the key
       fct_holdings:
         +liquid_clustered_by: [party_id, snapshot_created_at]
