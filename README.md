@@ -209,7 +209,7 @@ Every flag follows the shape `family:detail`, so a consumer selects a whole clas
 | Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Both ids resolve to the same holding, so its movements and replay follow it across the replacement. |
 | Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `zero:duplicate_dropped`. |
 | Holding | `zero:transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
-| Holding | `stale:quantity` | The balance quantity disagrees with the quantity replayed from movements. Prefer `quantity_derived`. |
+| Holding | `stale:quantity` | The balance quantity disagrees with the quantity replayed from movements. The plain quantity column already prefers the replay; the provider's number stays in `quantity_reported`. |
 | Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity, with a caveat. |
 | Movement | `missing:transaction_date` | No usable movement date. The movement counts in totals but has no place on a timeline. |
 | Movement | `duplicate:cross_id` | The provider re-delivered this movement under another investment_id of the same holding, with a fresh transaction_id. This copy stands for the copies; its twins were dropped. |
@@ -221,16 +221,20 @@ The long-form version of each entry lives in the [`data_quality_flags` doc block
 Every field earns its treatment from evidence, not hope. Quantity is a
 write-once field in this feed (zero of ten thousand raw position records
 ever update it), so the platform recalculates it from the movements ledger
-and publishes the resolved number as `quantity_best`. Prices update every
+and publishes the resolved number as the plain `quantity` column. Prices update every
 sync and drive gross, so `unit_price` is exposed as the maintained half of
 the provider's valuation. Gross and net stay as the provider's marks, on
 the provider's own basis, with that basis disclosed in the contract; they
 cannot be recomputed without inventing data, but they can be cross-checked
 against the record itself, and the `net:above_gross` and
-`gross:price_mismatch` flags carry the verdicts. The rule behind the
-table: recalculate what an independent source can prove, quote and
-disclose what only the provider knows, and contradiction-check everything
-inside the record.
+`gross:price_mismatch` flags carry the verdicts. The naming carries the
+same rule: a plain column (`quantity`, `gross_amount`) is a number the
+platform stands behind, and the plain columns of a row agree with each
+other; a `_reported` column is the provider's original claim, kept for
+reconciliation; net exists only as `net_amount_reported` because nothing
+can vouch for it. In one line: recalculate what an independent source can
+prove, quote and disclose what only the provider knows, and
+contradiction-check everything inside the record.
 
 #### Quarantine runbook
 

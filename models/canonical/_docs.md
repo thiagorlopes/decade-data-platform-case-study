@@ -96,11 +96,19 @@ Movement-grain, added in fct_movements:
   across those are real repeats, never collapsed.
 {% enddocs %}
 
-{% docs dq_quantity_best %}
-The resolved quantity, one rule for every consumer: `quantity_derived`
-unless the replay is untrustworthy (`movements:incomplete`), then the
-provider's `quantity`. Read this column unless you need a specific basis;
-it is the number the wealth page shows.
+{% docs dq_quantity %}
+The resolved quantity, one rule for every consumer: the movement replay
+unless it is untrustworthy (`movements:incomplete`), then the provider's
+number. A plain column name is a promise the row stands behind; the
+provider's original claim is kept in `quantity_reported`.
+{% enddocs %}
+
+{% docs dq_gross_amount %}
+The row-consistent value: `quantity * unit_price`, the resolved quantity
+at the provider's own price. NULL when the provider sent no price. The
+provider's valuation, priced on its frozen quantity, is kept in
+`gross_amount_reported`; a product that must match the institution's
+displayed balance reads that column instead.
 {% enddocs %}
 
 {% docs dq_unit_price %}
@@ -109,8 +117,8 @@ The provider's price per unit at the sync, conformed per family
 price for funds, closingPrice over the price factor for variable incomes)
 and quantity-weighted across the holding's admitted lots. Unlike the
 frozen quantity, prices update every sync and drive gross_amount, so this
-is the maintained half of the provider's valuation. `quantity_best *
-unit_price` is a movements-consistent value on the provider's own prices.
+is the maintained half of the provider's valuation, and the price the
+plain gross_amount column uses.
 {% enddocs %}
 
 {% docs dq_quantity_derived %}

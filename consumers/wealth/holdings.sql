@@ -6,12 +6,13 @@ SELECT
     fct.product_family,
     dim.holding_name,
     fct.holding_key,
-    -- the stale-quantity defect is resolved once in the platform;
-    -- quantity_best is the contracted read (see contracts/_consumption.yml)
-    fct.quantity_best AS quantity,
-    fct.quantity AS quantity_reported,
-    fct.gross_amount,
+    -- plain columns are the platform's resolved, row-consistent numbers;
+    -- _reported columns are the provider's claims, for reconciliation
     fct.unit_price,
+    fct.quantity,
+    fct.gross_amount,
+    fct.quantity_reported,
+    fct.gross_amount_reported,
     fct.currency,
     fct.snapshot_created_at AS valued_at,
     fct.data_quality_flags
@@ -23,4 +24,4 @@ QUALIFY dense_rank() OVER (
     PARTITION BY fct.account_id, fct.product_family
     ORDER BY fct.snapshot_created_at DESC, fct.snapshot_id DESC
 ) = 1
-ORDER BY fct.gross_amount DESC, fct.holding_key;
+ORDER BY fct.gross_amount DESC NULLS LAST, fct.holding_key;
