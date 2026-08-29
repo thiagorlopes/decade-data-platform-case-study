@@ -1,6 +1,10 @@
 # Decade Data Platform Case Study
 
+[![build](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml/badge.svg)](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml)
+
 This repository contains Thiago Portugues's solution for the hiring process at Decade.
+
+Every push runs `make install` and `make build` on a clean runner, so the test tally quoted throughout this README is reproduced from scratch rather than asserted.
 
 ## Table of Contents
 
@@ -46,6 +50,7 @@ Set up a local venv if you want to:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+dbt deps                       # dbt_packages/ is gitignored; a fresh clone has none
 ```
 
 `requirements.txt` pins the same `dbt` and `duckdb` versions the image uses, plus `notebook` and `pandas` for the notebooks. One venv covers both cases.
@@ -57,6 +62,7 @@ After `make install`, use these targets to iterate:
 | Command | What it does |
 |---|---|
 | `make build` | Run models + tests. The safe default. |
+| `make deps` | Install dbt packages into `dbt_packages/`. Every target that compiles the project runs this first, so you rarely call it directly. |
 | `make run` | Run models only. Faster when you know tests will pass. |
 | `make test` | Run tests against the current warehouse. No rebuild. |
 | `make docs` | Regenerate the docs catalog and serve at http://localhost:8080. |

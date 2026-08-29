@@ -2,7 +2,7 @@ COMPOSE := docker compose
 RUN := $(COMPOSE) run --rm -u $(shell id -u):$(shell id -g) dbt
 
 .DEFAULT_GOAL := help
-.PHONY: help install build run test docs refresh consumers shell ui clean
+.PHONY: help install deps build run test docs refresh consumers shell ui clean
 
 help:  ## List targets
 	@awk 'BEGIN{FS=":.*##"} /^[a-z_-]+:.*##/ {printf "  \033[36m%-11s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
@@ -10,16 +10,21 @@ help:  ## List targets
 install:  ## Build the docker image (Python + dbt + duckdb CLI)
 	$(COMPOSE) build
 
-build:  ## Run models + tests
+# dbt_packages/ is gitignored, so a fresh clone has none. Every target that
+# compiles the project depends on this one. Versions come from package-lock.yml.
+deps:  ## Install dbt packages into dbt_packages/
+	$(RUN) dbt deps
+
+build: deps  ## Run models + tests
 	$(RUN) dbt build
 
-run:  ## Run models only (no tests)
+run: deps  ## Run models only (no tests)
 	$(RUN) dbt run
 
-test:  ## Run tests only
+test: deps  ## Run tests only
 	$(RUN) dbt test
 
-docs:  ## Regenerate docs catalog + serve at localhost:8080 (safe to run with `make ui`)
+docs: deps  ## Regenerate docs catalog + serve at localhost:8080 (safe to run with `make ui`)
 	$(RUN) dbt docs generate --target read_only
 	$(COMPOSE) run --rm -u $(shell id -u):$(shell id -g) --service-ports dbt \
 	  dbt docs serve --port 8080 --host 0.0.0.0 --no-browser
