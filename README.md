@@ -186,13 +186,17 @@ These five boundaries are the platform's technical measures. The organizational 
 
 ## Deliberately left out
 
-The brief asks what was left out and why. Two entries.
+The brief asks what was left out and why. Three entries.
 
 ### A test on the watermark boundary
 
 The `>=` in `snapshot_watermark` carries a correctness guarantee. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read it whole on the next run. No automated test pins this: dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
 
 The check is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check is a two-run CI job that builds, lands a late row on the boundary stamp, rebuilds, and asserts the row arrived. It is the first test to add when the loader goes live.
+
+### A Claude skill for the quality vocabulary
+
+The [data quality reference](docs/data-quality-reference.md) is nearly an agent skill already. Point Claude at the doc, add the triage queries, and an analyst gets fast answers: what a flag means, why a replay went negative, whether to trust a field, how to work a quarantined lot up to escalation. It is left out because good answers need more than the doc. They need the business domain: how each institution reports in practice, which defects matter to which consumers, and how escalation with an institution works. That knowledge comes from operating the platform, so the domain comes first and the skill after.
 
 ### Three descriptive-field defects
 
