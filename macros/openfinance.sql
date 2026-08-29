@@ -71,11 +71,12 @@ snapshot_id IN (
 )
 {%- endmacro %}
 
-{# A provider may re-deliver the same lot (snapshot_id, investment_id)
-   with a changed value. The latest arrival wins. Superseded copies stay
-   visible in staging and in the lot_redelivery warn ledger. The sort
-   cannot tie: the staging grain test errors when two rows share
-   (snapshot_id, investment_id, ingested_at). #}
+{# The provider can deliver the same lot twice with different values.
+   This macro keeps the newest copy of each (snapshot_id,
+   investment_id), by ingested_at. The older copies are not lost: they
+   stay in staging, and the lot_redelivery warn ledger counts them.
+   "Newest" always picks exactly one row, because the staging grain
+   test fails the build when two copies share the same ingested_at. #}
 {% macro latest_lot_delivery(staging_ref) -%}
 (
     SELECT * FROM {{ staging_ref }}
