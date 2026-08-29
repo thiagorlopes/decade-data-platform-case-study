@@ -52,30 +52,29 @@ pip install -r requirements.txt
 
 ## Development cycle
 
-After `make install`, use these targets to iterate:
+Run `make install` once, then `make build`. Everything else works from the built warehouse.
 
 | Command | What it does |
 |---|---|
 | `make build` | Run models + tests. The safe default. |
-| `make run` | Run models only. Faster when you know tests will pass. |
-| `make test` | Run tests against the current warehouse. No rebuild. |
-| `make docs` | Regenerate the docs catalog and serve at http://localhost:8080. |
-| `make refresh` | `build` + `docs` in one shot. Use after changing SQL to see updated docs. |
-| `make consumers` | Regenerate the CSVs under `consumers/wealth/output/` from the committed queries. |
-| `make shell` | Open the DuckDB CLI on `warehouse.duckdb` inside the container. |
-| `make ui` | Browse the warehouse in the DuckDB UI. See [Querying the warehouse](#querying-the-warehouse). |
+| `make docs` | Serve the docs catalog at http://localhost:8080. |
+| `make consumers` | Regenerate the CSVs under `consumers/wealth/output/`. |
+| `make ui` / `make shell` | Query the warehouse. Both need a built warehouse. See [Querying the warehouse](#querying-the-warehouse). |
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
-| `make help` | List all targets. |
 
-`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots at or past the newest arrival. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
+Run `make help` for the full list, including partial variants like `make run` (models only) and `make test` (tests only).
+
+`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots at or past the newest arrival. To reprocess everything after a transform change, run `make clean && make build`. This equals `dbt build --full-refresh` on a fresh warehouse.
 
 ## Querying the warehouse
 
-The typical loop: edit a model, `make build`, then check the numbers with one of these.
+The typical loop: edit a model, rebuild, then check the numbers.
+
+**`make build`** runs models + tests and writes `warehouse.duckdb`. Run it after every model edit, and before the first `make ui` or `make shell` on a fresh clone.
 
 **`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. It needs the [duckdb CLI](https://duckdb.org/install) on the host and opens the warehouse read-only. Close it before running `make build`. DuckDB is single-writer, so an open connection blocks the build.
 
-**`make shell`** opens the DuckDB CLI inside the container. Use it for quick raw SQL, or when you can't install duckdb on the host. Same rule: close it before a build.
+**`make shell`** opens the DuckDB CLI inside the container. Use it for quick raw SQL, or when you can't install duckdb on the host. Same rule: close it before a build. To leave the shell, type `.quit` or press Ctrl-D.
 
 ## Browsing the data model
 
