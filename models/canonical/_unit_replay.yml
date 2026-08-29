@@ -1,0 +1,99 @@
+version: 2
+
+# Unit test for the movement replay and the holding flags. It feeds fixed
+# position and movement rows to int_funds_holdings and checks the exact
+# output. The expected rows state the rules replay_quantity,
+# holding_replay, holding_timeline, and holding_data_quality_flags must
+# follow, so the test fails when the behavior changes, no matter how the
+# macros are written.
+#
+# The macros treat every family the same way. Funds carries the fixtures.
+# Every fixture lot is admitted and no movement has a cross-id twin; the
+# cross-id dedup is pinned by its own test.
+#
+# Eleven holdings, one natural key each. Each line states the
+# situation, then the flags the holding must carry:
+# - NK_ok: buys and sells replay to the reported quantity. No flags.
+# - NK_st: the replay disagrees with the reported quantity. The holding
+#   carries stale:quantity and the derived quantity.
+# - NK_lb: the provider lost the date of a buy. The buy sorts before
+#   everything, so the sell it funds does not dip the running total.
+#   No flags.
+# - NK_ls: the provider lost the date of a sell. The sell sorts after
+#   everything. No flags.
+# - NK_dp: the running total dips below zero, so movements are missing.
+#   The holding carries movements:incomplete. The stale flag stays off
+#   even though replay and reported disagree.
+# - NK_nq: no movement carries a quantity, so nothing can replay. The
+#   holding carries movements:incomplete.
+# - NK_nm: no movements at all. movements:incomplete, derived NULL.
+# - NK_tr: gross drops to zero between two positive snapshots and the
+#   quantity holds still. The middle snapshot carries zero:transient.
+# - NK_lq: the same dip, but the quantity moved too. That is a real
+#   liquidation: no zero:transient. The replay is all-time, so the
+#   empty middle snapshot disagrees with the final derived quantity
+#   and reads stale:quantity.
+# - NK_rp: one id departs and another arrives between snapshots. The
+#   later snapshot carries investment_id:replaced.
+# - NK_gr: a second id arrives and none departs. Not a replacement:
+#   two admitted ids, one a zero lot. The holding carries
+#   investment_id:multiple and zero:lot_kept.
+unit_tests:
+  - name: replay_semantics
+    model: int_funds_holdings
+    given:
+      - input: ref('int_funds_positions')
+        rows:
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: ok1, natural_key: NK_ok, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100, quota_gross_price: 10}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: st1, natural_key: NK_st, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: lb1, natural_key: NK_lb, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: ls1, natural_key: NK_ls, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: dp1, natural_key: NK_dp, admission: admit, data_quality_flags: "[]", quota_quantity: 5, gross_amount: 50}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: nq1, natural_key: NK_nq, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: nm1, natural_key: NK_nm, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: tr1, natural_key: NK_tr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: tr1, natural_key: NK_tr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 0}
+          - {snapshot_id: S3, snapshot_created_at: 2026-02-03 09:00:00, account_id: A1, investment_id: tr1, natural_key: NK_tr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: lq1, natural_key: NK_lq, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: lq1, natural_key: NK_lq, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
+          - {snapshot_id: S3, snapshot_created_at: 2026-02-03 09:00:00, account_id: A1, investment_id: lq1, natural_key: NK_lq, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: rp1, natural_key: NK_rp, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: rp2, natural_key: NK_rp, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: gr1, natural_key: NK_gr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: gr1, natural_key: NK_gr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: gr2, natural_key: NK_gr, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
+      - input: ref('int_funds_transactions')
+        rows:
+          - {transaction_id: m_ok1, investment_id: ok1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 15}
+          - {transaction_id: m_ok2, investment_id: ok1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-20, movement_type: SAIDA, transaction_quota_quantity: 5}
+          - {transaction_id: m_st1, investment_id: st1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 4}
+          - {transaction_id: m_lb1, investment_id: lb1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: SAIDA, transaction_quota_quantity: 10}
+          - {transaction_id: m_lb2, investment_id: lb1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: null, movement_type: ENTRADA, transaction_quota_quantity: 10}
+          - {transaction_id: m_ls1, investment_id: ls1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
+          - {transaction_id: m_ls2, investment_id: ls1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: null, movement_type: SAIDA, transaction_quota_quantity: 10}
+          - {transaction_id: m_dp1, investment_id: dp1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: SAIDA, transaction_quota_quantity: 10}
+          - {transaction_id: m_dp2, investment_id: dp1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-20, movement_type: ENTRADA, transaction_quota_quantity: 10}
+          - {transaction_id: m_nq1, investment_id: nq1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: null}
+          - {transaction_id: m_tr1, investment_id: tr1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
+          - {transaction_id: m_lq1, investment_id: lq1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
+          - {transaction_id: m_rp1, investment_id: rp1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
+          - {transaction_id: m_gr1, investment_id: gr1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
+    expect:
+      rows:
+        - {snapshot_id: S1, holding_key: NK_ok, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_st, quantity: 10, quantity_derived: 4, data_quality_flags: "[stale:quantity]"}
+        - {snapshot_id: S1, holding_key: NK_lb, quantity: 0, quantity_derived: 0, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_ls, quantity: 0, quantity_derived: 0, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_dp, quantity: 5, quantity_derived: 0, data_quality_flags: "[movements:incomplete]"}
+        - {snapshot_id: S1, holding_key: NK_nq, quantity: 10, quantity_derived: 0, data_quality_flags: "[movements:incomplete]"}
+        - {snapshot_id: S1, holding_key: NK_nm, quantity: 10, quantity_derived: null, data_quality_flags: "[movements:incomplete]"}
+        - {snapshot_id: S1, holding_key: NK_tr, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
+        - {snapshot_id: S2, holding_key: NK_tr, quantity: 10, quantity_derived: 10, data_quality_flags: "[zero:transient]"}
+        - {snapshot_id: S3, holding_key: NK_tr, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_lq, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
+        - {snapshot_id: S2, holding_key: NK_lq, quantity: 0, quantity_derived: 10, data_quality_flags: "[stale:quantity]"}
+        - {snapshot_id: S3, holding_key: NK_lq, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_rp, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
+        - {snapshot_id: S2, holding_key: NK_rp, quantity: 10, quantity_derived: 10, data_quality_flags: "[investment_id:replaced]"}
+        - {snapshot_id: S1, holding_key: NK_gr, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
+        - {snapshot_id: S2, holding_key: NK_gr, quantity: 10, quantity_derived: 10, data_quality_flags: "[zero:lot_kept, investment_id:multiple]"}

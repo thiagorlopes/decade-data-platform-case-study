@@ -3,9 +3,13 @@ WITH admitted AS (
     WHERE admission = 'admit'
 ),
 
-{{ replay_quantity(ref('int_credit_fixed_incomes_transactions')) }},
+movements_clean AS
+    {{ cross_id_movements(ref('int_credit_fixed_incomes_transactions'),
+                          ref('int_credit_fixed_incomes_positions')) }},
 
-holding AS (
+{{ replay_quantity('movements_clean') }},
+
+lots AS (
     SELECT
         snapshot_id,
         account_id,
@@ -19,21 +23,22 @@ holding AS (
         any_value(isin_code)                            AS isin_code,
         any_value(debtor_name)                          AS debtor_name,
         sum(quantity)                                   AS quantity,
-        sum(replay.replay_quantity)                     AS quantity_derived,
         sum(gross_amount)                               AS gross_amount,
         sum(net_amount)                                 AS net_amount,
         any_value(currency)                AS currency,
+        coalesce(
+            CAST(sum(quantity::DOUBLE * updated_unit_price::DOUBLE) / nullif(sum(quantity::DOUBLE), 0) AS DECIMAL(38, 10)),
+            CAST(avg(updated_unit_price::DOUBLE) AS DECIMAL(38, 10))
+        )                                               AS unit_price,
         count(*)                                        AS n_investment_ids,
         array_agg(admitted.investment_id ORDER BY admitted.investment_id) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,
-        bool_or(replay.min_running_total < -0.001
-                OR coalesce(replay.n_qty_receipts, 0) = 0)          AS has_incomplete_replay,
-        bool_or(abs(quantity - replay.replay_quantity) >= 0.001)    AS has_stale_lot,
         flatten(array_agg(data_quality_flags))                    AS lot_flags
     FROM admitted
-    LEFT JOIN replay ON admitted.investment_id = replay.investment_id
     GROUP BY snapshot_id, account_id, holding_key
 ),
+
+{{ holding_replay() }},
 
 {{ holding_timeline() }}
 
@@ -54,6 +59,7 @@ SELECT
     gross_amount,
     net_amount,
     currency,
+    unit_price,
     n_investment_ids,
     investment_ids,
     {{ holding_data_quality_flags() }} AS data_quality_flags

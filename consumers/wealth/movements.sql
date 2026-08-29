@@ -21,8 +21,8 @@ SELECT
     mov.movement_type,
     mov.transaction_type,
     mov.transaction_type_additional_info,
-    mov.gross_amount,
-    mov.net_amount,
+    round(mov.gross_amount::DOUBLE, 2) AS gross_amount,
+    round(mov.net_amount::DOUBLE, 2) AS net_amount,
     mov.currency,
     mov.transaction_id,
     mov.data_quality_flags

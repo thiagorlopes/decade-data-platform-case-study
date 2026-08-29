@@ -47,6 +47,20 @@ Lot-grain, added in int_*_positions:
   carries this flag; the zero copy was dropped (see `reject_zero_duplicate` in
   admission). The holding's number is stable even though the raw feed
   disagreed.
+- `net:above_gross`: the payload's net_amount exceeds its gross_amount.
+  Net of taxes and fees can never exceed gross, so one of the two is
+  wrong and there is no way to tell which. Both are kept as delivered;
+  do not trust net on this row.
+- `gross:price_mismatch`: the payload's gross_amount disagrees with its
+  own quantity times unit price beyond a 0.5% tolerance. One of the
+  three fields is wrong and there is no way to tell which. All are kept
+  as delivered.
+- `financial_transaction_tax:placeholder`: the payload reports a
+  financial transaction tax that does not exist for this row. Its net
+  equals gross minus income tax to the cent, so no such tax was ever
+  charged; the reported amount is a placeholder, not a tax. Amounts
+  are kept as delivered; ignore financial_transaction_tax_amount on
+  this row.
 
 Holding-grain, added in int_*_holdings (cross-sync signals that only
 make sense once lots are aggregated by natural key):
@@ -62,17 +76,17 @@ make sense once lots are aggregated by natural key):
   provider, not a real trade or valuation change.
 - `investment_id:replaced`: between two syncs, the provider retired one
   of the holding's investment_ids and issued a new one for the same
-  security. The new id starts with its own reported quantity, and the old
-  id's movements do not carry over, so treat the two ids separately in
-  any time-based read.
+  security. Both ids resolve to the same holding_key, so the old id's
+  movements stay attached to the holding; history the provider re-issued
+  under the new id collapses to one copy (see `duplicate:cross_id`).
 - `stale:quantity`: the provider's balance quantity disagrees with the
   quantity replayed from the holding's movements. The balance feed writes
   quantity at the first buy and does not maintain it, so the movements are
   the reliable record. Prefer `quantity_derived`.
-- `movements:incomplete`: the movement replay for at least one lot dips
-  below zero even with lost-date sells placed last, so movements must be
-  missing and `quantity_derived` cannot be trusted for this holding. Keep
-  the provider's `quantity` and caveat it.
+- `movements:incomplete`: the holding's movement replay dips below zero
+  even with lost-date sells placed last, so movements must be missing and
+  `quantity_derived` cannot be trusted for this holding. Keep the
+  provider's `quantity` and caveat it.
 
 Movement-grain, added in fct_movements:
 
@@ -80,17 +94,66 @@ Movement-grain, added in fct_movements:
   (NULL, or a placeholder: `0001-01-01` .NET MinValue, `1970-01-01` Unix
   epoch zero). The date is NULL; the movement still counts toward totals
   but cannot be placed on a timeline.
+- `duplicate:cross_id`: the provider delivered this movement again under
+  another investment_id of the same holding, with a fresh transaction_id.
+  The first-delivered copy survives with this flag; the twin's
+  transaction_id stays in int_*_transactions. Movements that look
+  identical across ids are kept apart only when the ids were both
+  admitted in one sync with different gross amounts: differing gross
+  proves two real lots of the holding, so the repeats are real. A
+  co-admitted pair with identical gross is a duplicated record, and its
+  movements collapse like any other twin.
+{% enddocs %}
+
+{% docs dq_quantity %}
+The resolved quantity, one rule for every consumer: the movement replay
+unless it is untrustworthy (`movements:incomplete`), then the provider's
+number. A plain column name is a promise the row stands behind; the
+provider's original claim is kept in `quantity_reported`.
+{% enddocs %}
+
+{% docs dq_gross_amount %}
+The row-consistent value: `quantity * unit_price`, using the resolved
+quantity. NULL when the provider sent no price.
+
+To reconcile with the institution's displayed balance, read
+`gross_amount_reported` instead: that column is the provider's own
+valuation, which prices its frozen quantity.
+{% enddocs %}
+
+{% docs dq_unit_price %}
+The provider's price per unit at the sync, quantity-weighted across the
+holding's admitted lots.
+
+Conformed per family:
+- bank, credit, treasury: `updatedUnitPrice`.
+- funds: the quota gross price.
+- variable incomes: `closingPrice` divided by the price factor.
+
+Prices update every sync (unlike the frozen quantity) and drive
+gross_amount, so unit_price is the maintained half of the provider's
+valuation and the price the plain `gross_amount` column uses.
 {% enddocs %}
 
 {% docs dq_quantity_derived %}
 Quantity replayed from the holding's movements: buys add, sells subtract,
-movements with no quantity count zero; lost-date buys sort first and
-lost-date sells last. Computed over all delivered movements, so every
-snapshot row of a holding carries the same current-knowledge value; it is
-exact for the latest snapshot. When it disagrees with the provider's
-`quantity` the holding carries `stale:quantity`; when the replay is
-infeasible it carries `movements:incomplete` and this column should not be
-used. See the `replay_quantity` macro header for the defect narrative.
+movements with no quantity count zero. Lost-date buys sort first,
+lost-date sells last.
+
+Replayed at holding grain over the deduplicated movement stream, so
+history follows the holding across an id replacement and a movement
+re-issued under another id counts once.
+
+Every snapshot row of a holding carries the same current-knowledge value.
+It is exact for the latest snapshot.
+
+Trust:
+- Disagrees with the provider's `quantity`: holding carries `stale:quantity`.
+  Prefer this column.
+- Replay infeasible: holding carries `movements:incomplete`. Do not use
+  this column.
+
+See the `replay_quantity` macro header for the defect narrative.
 {% enddocs %}
 
 {% docs stg_contract %}

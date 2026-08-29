@@ -32,15 +32,19 @@ models:
       Contractual identity of bank-issued fixed income positions: CDB and RDB
       (bank deposit certificates) and LCI/LCA (real-estate/agribusiness
       letters, income-tax exempt for individuals). One row per
-      (snapshot_id, investment_id) from GET /investments/{investmentId} of
+      (snapshot_id, investment_id) per delivery from GET /investments/{investmentId} of
       the OFB bank-fixed-incomes API v1.1.0. Holding identity across
       snapshots is derived downstream from
       (isin_code, issuer_cnpj, issue_date, due_date).
       {{ doc("stg_contract") }}
     data_tests:
+      # Grain within one delivery. The same key twice in one arrival batch
+      # is an ingestion bug on our side, so the build halts here. The same
+      # key in a later batch is a provider re-delivery: allowed, warned by
+      # the lot_redelivery test below, and resolved in the intermediate layer.
       - &lot_grain
         dbt_utils.unique_combination_of_columns:
-          combination_of_columns: [snapshot_id, investment_id]
+          combination_of_columns: [snapshot_id, investment_id, ingested_at]
       # CNPJ must be exactly 14 digits, providers send decimal tails
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_cnpj_form
@@ -48,6 +52,11 @@ models:
           config: &dq_warn_stored
             severity: warn
             store_failures: true
+      # Warn ledger for provider re-deliveries: one row per superseded copy.
+      - &lot_redelivery
+        dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [snapshot_id, investment_id]
+          config: *dq_warn_stored
       # 0001-01-01 is .NET DateTime.MinValue: a missing purchase date in
       # a real-looking date costume. Named explicitly so it doesn't leak
       # into the cross-field rules below as a false positive.
@@ -208,12 +217,13 @@ models:
     description: >-
       Contractual identity of securitized credit positions: CRA/CRI
       (agribusiness/real-estate receivables certificates) and DEBENTURES
-      (corporate bonds). One row per (snapshot_id, investment_id) from
+      (corporate bonds). One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB credit-fixed-incomes API
       v1.1.0. Holding identity across snapshots is derived downstream from
       (isin_code, debtor_cnpj, due_date). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_credit_detail_debtor_cnpj_form
           expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
@@ -307,12 +317,13 @@ models:
   - name: stg_openfinance__funds_positions_detail
     description: >-
       Identity of investment fund positions: fund name, CNPJ and ANBIMA
-      classification. One row per (snapshot_id, investment_id) from
+      classification. One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB funds API v1.1.0. Holding
       identity across snapshots is derived downstream from (fund_cnpj).
       {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_funds_detail_cnpj_form
           expression: "regexp_matches(fund_cnpj, '^[0-9]{14}$')"
@@ -353,12 +364,13 @@ models:
     description: >-
       Contractual identity of Tesouro Direto positions, Brazilian federal
       government bonds (e.g. Tesouro Selic, Tesouro IPCA+, Tesouro
-      Prefixado). One row per (snapshot_id, investment_id) from
+      Prefixado). One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB treasure-titles API v1.1.0.
       Holding identity across snapshots is derived downstream from
       (isin_code). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_treasure_detail_purchase_date_not_placeholder
           expression: "purchase_date <> DATE '0001-01-01'"
@@ -417,12 +429,13 @@ models:
   - name: stg_openfinance__variable_incomes_positions_detail
     description: >-
       Identity of exchange-traded equity positions: ISIN and trading ticker.
-      One row per (snapshot_id, investment_id) from
+      One row per (snapshot_id, investment_id) per delivery from
       GET /investments/{investmentId} of the OFB variable-incomes API v1.3.0.
       Holding identity across snapshots is derived downstream from
       (isin_code, ticker). {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_variable_detail_issuer_cnpj_form
           expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
@@ -462,10 +475,21 @@ models:
       LCA): quantity, marked prices, gross/net values, tax provisions and
       blocks, from GET /investments/{investmentId}/balances of the OFB
       bank-fixed-incomes API v1.1.0. One row per (snapshot_id,
-      investment_id); use the latest snapshot for current value.
+      investment_id) per delivery; use the latest snapshot for current value.
       {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_bank_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_bank_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -533,10 +557,21 @@ models:
       DEBENTURES), from GET /investments/{investmentId}/balances of the OFB
       credit-fixed-incomes API v1.1.0. Extends the common balance shape with
       debtor-default tracking: fine_amount (multa) and late_payment_amount
-      (mora). One row per (snapshot_id, investment_id); use the latest
+      (mora). One row per (snapshot_id, investment_id) per delivery; use the latest
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_credit_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_credit_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -579,10 +614,21 @@ models:
       Point-in-time valuation of fund positions, quota-based: quota quantity
       and gross quota price alongside gross/net values, tax provisions and
       blocks, from GET /investments/{investmentId}/balances of the OFB funds
-      API v1.1.0. One row per (snapshot_id, investment_id); use the latest
+      API v1.1.0. One row per (snapshot_id, investment_id) per delivery; use the latest
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_funds_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_funds_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quota_quantity::DOUBLE * quota_gross_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -617,10 +663,21 @@ models:
     description: >-
       Point-in-time valuation of Tesouro Direto positions, from
       GET /investments/{investmentId}/balances of the OFB treasure-titles API
-      v1.1.0. One row per (snapshot_id, investment_id); use the latest
+      v1.1.0. One row per (snapshot_id, investment_id) per delivery; use the latest
       snapshot for current value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -654,10 +711,16 @@ models:
       quotation factor, from GET /investments/{investmentId}/balances of the
       OFB variable-incomes API v1.3.0. Financial value follows
       gross_amount = quantity x closing_price / price_factor. One row per
-      (snapshot_id, investment_id); use the latest snapshot for current
+      (snapshot_id, investment_id) per delivery; use the latest snapshot for current
       value. {{ doc("stg_contract") }}
     data_tests:
       - *lot_grain
+      - *lot_redelivery
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_variable_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * closing_price::DOUBLE / coalesce(price_factor::DOUBLE, 1)) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id

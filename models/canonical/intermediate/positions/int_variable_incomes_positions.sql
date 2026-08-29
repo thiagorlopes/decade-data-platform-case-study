@@ -22,8 +22,8 @@ WITH joined AS (
         bal.blocked_amount,
         bal.quantity,
         bal.closing_price
-    FROM {{ ref('stg_openfinance__variable_incomes_positions_detail') }} AS det
-    FULL JOIN {{ ref('stg_openfinance__variable_incomes_positions_balances') }} AS bal
+    FROM {{ latest_lot_delivery(ref('stg_openfinance__variable_incomes_positions_detail')) }} AS det
+    FULL JOIN {{ latest_lot_delivery(ref('stg_openfinance__variable_incomes_positions_balances')) }} AS bal
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations
@@ -52,4 +52,5 @@ with_natural_key AS (
 {{ resolve_duplicate_investments(extra_flags=[
     ('ticker IS NULL',    'missing:ticker'),
     ('isin_code IS NULL', 'missing:isin_code'),
+    ('abs(gross_amount::DOUBLE - quantity::DOUBLE * closing_price::DOUBLE / coalesce(price_factor::DOUBLE, 1)) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
 ]) }}

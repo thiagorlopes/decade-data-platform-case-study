@@ -19,8 +19,8 @@ run:  ## Run models only (no tests)
 test:  ## Run tests only
 	$(RUN) dbt test
 
-docs:  ## Regenerate docs catalog + serve at localhost:8080
-	$(RUN) dbt docs generate
+docs:  ## Regenerate docs catalog + serve at localhost:8080 (safe to run with `make ui`)
+	$(RUN) dbt docs generate --target read_only
 	$(COMPOSE) run --rm -u $(shell id -u):$(shell id -g) --service-ports dbt \
 	  dbt docs serve --port 8080 --host 0.0.0.0 --no-browser
 

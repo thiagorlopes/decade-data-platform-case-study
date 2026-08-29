@@ -61,28 +61,50 @@
 snapshot_id IN (
     {%- for staging_ref in staging_refs %}
     SELECT snapshot_id FROM {{ staging_ref }}
-    WHERE ingested_at > (SELECT max(ingested_at) FROM {{ this }})
+    -- Use >= not >. One arrival batch shares one ingested_at stamp, so a
+    -- run that reads it while it is still landing must read that stamp
+    -- again next run, or the rest of the batch never reaches downstream.
+    -- Reruns re-touch the boundary snapshots; the upsert keeps that idempotent.
+    WHERE ingested_at >= (SELECT max(ingested_at) FROM {{ this }})
     {{ 'UNION' if not loop.last }}
     {%- endfor %}
 )
 {%- endmacro %}
 
-{# --- Classify duplicate investment_ids per natural key and stamp each row
-   with an admission verdict (notebook 03). Shared by every int_*_positions
-   model so the five families agree on what counts as a duplicate and how
-   to resolve one.
+{# The provider can deliver the same lot twice with different values.
+   This macro keeps the newest copy of each (snapshot_id,
+   investment_id), by ingested_at. The older copies are not lost: they
+   stay in staging, and the lot_redelivery warn ledger counts them.
+   "Newest" always picks exactly one row, because the staging grain
+   test fails the build when two copies share the same ingested_at. #}
+{% macro latest_lot_delivery(staging_ref) -%}
+(
+    SELECT * FROM {{ staging_ref }}
+    QUALIFY row_number() OVER (
+        PARTITION BY snapshot_id, investment_id
+        ORDER BY ingested_at DESC
+    ) = 1
+)
+{%- endmacro %}
 
-   Caller contract:
-     - Provides a CTE named `with_natural_key` with columns `snapshot_id`, `account_id`,
-       `natural_key`, `investment_id`, `gross_amount`, and the quantity column
-       named by `qty_col` (default `quantity`; funds pass `quota_quantity`).
-     - Gets back the final SELECT of the model, with every input column plus
-       `admission` (admit / reject_duplicate / reject_zero_duplicate / quarantine) and
-       `data_quality_flags` (array of defect labels).
+{# --- Classifies duplicate investment_ids per natural key and stamps
+   each row with an admission verdict (notebook 03). Shared by every
+   int_*_positions model, so the five families agree on what counts as
+   a duplicate and how to resolve one.
 
-   `extra_flags` lets a family append its own (condition, label) pairs to
-   data_quality_flags — used for missing-field signals like ('indexer IS NULL',
-   'missing:indexer'). --- #}
+   The caller provides a CTE named `with_natural_key` with the columns
+   `snapshot_id`, `account_id`, `natural_key`, `investment_id`,
+   `gross_amount`, and the quantity column named by `qty_col` (default
+   `quantity`; funds pass `quota_quantity`).
+
+   The caller gets back the final SELECT of the model: every input
+   column plus `admission` (admit / reject_duplicate /
+   reject_zero_duplicate / quarantine) and `data_quality_flags` (an
+   array of defect labels).
+
+   With `extra_flags`, a family appends its own (condition, label)
+   pairs to data_quality_flags. This carries the missing-field
+   signals, like ('indexer IS NULL', 'missing:indexer'). --- #}
 {% macro resolve_duplicate_investments(qty_col='quantity', extra_flags=[]) -%}
 -- Step 1: find the duplicate groups. A duplicate group is one natural key
 -- held by two or more investment_ids within the same sync.
@@ -165,23 +187,152 @@ SELECT
 FROM classified
 {%- endmacro %}
 
-{# --- receipts replay (shared by every int_*_holdings model).
-   Derives each lot's quantity from transaction movements: ENTRADA adds,
-   SAIDA subtracts, receipts with no quantity count zero. The positions
-   feed cannot be trusted for this: it freezes quantity at the first buy,
-   so for 1,578 of 1,611 variable-income lots the balance equals the first
-   trade, not the latest state (evidence in notebook 05).
-   Receipts whose date the provider lost (staging nulls the 1970-01-01
-   placeholder) get the most favorable ordering: lost-date buys sort first,
-   lost-date sells last. If the running total still drops below zero,
-   receipts are missing and the flags macro below marks the lot
-   `movements:incomplete`.
-   Emits three CTEs; models join on `replay`. Funds pass their own
-   column names. --- #}
-{% macro replay_quantity(transactions_ref, qty_col='transaction_quantity', date_col='transaction_date') -%}
+{# Collapses duplicate movements that hide under different
+   investment_ids of the same holding.
+
+   The provider sometimes delivers a movement again under another of
+   the holding's investment_ids, and gives the copy a new
+   transaction_id. int_*_transactions dedups within each id, so both
+   copies pass through to this macro.
+
+   The macro compares content, not ids:
+   - Two movements are the same event if they agree on every business
+     field: holding, date, type, quantity, amount, currency.
+   - If the same event appears twice under one id, keep one copy.
+   - If the same event appears under two ids that were ever admitted
+     together in one sync with different gross amounts, keep both.
+     Such ids are real lots (flagged investment_id:multiple), and the
+     same movement on two real lots is two real events. The
+     different-gross requirement stops placeholder-quantity copies
+     from passing as real lots.
+   - A movement with no identical twin is always kept. After an id
+     replacement, the retired id may hold the only record of old
+     history.
+
+   Of the copies, the first-delivered one survives; on a tie, the
+   lowest investment_id does. So a copy that arrives later can never
+   take over from a transaction_id that earlier builds already
+   published to consumers.
+
+   Emits a subquery: the deduped movement stream, with holding_key and
+   a had_cross_id_twin flag on each surviving copy. #}
+{% macro cross_id_movements(transactions_ref, positions_ref, date_col='transaction_date', qty_col='transaction_quantity', gross_col='transaction_gross_amount') -%}
+(
+    WITH
+    -- which holding does each investment_id belong to. max, not any_value:
+    -- order-independent if a provider ever re-keys an id.
+    holding_of AS (
+        SELECT investment_id, max(natural_key) AS natural_key
+        FROM {{ positions_ref }}
+        GROUP BY investment_id
+    ),
+
+    -- Pairs of ids that were both admitted in one sync: the provider
+    -- valued both as live money at once, so they are two real lots of
+    -- the holding, not a record and its copy. The differing-gross
+    -- condition filters out fakes: lots share one price per sync, so
+    -- two real lots with different quantities cannot show the same
+    -- gross. A pair with identical gross is a duplicated record whose
+    -- quantity is a placeholder (README, placeholder quantity defect).
+    ids_live_together AS (
+        SELECT DISTINCT lot_a.investment_id AS id_a, lot_b.investment_id AS id_b
+        FROM {{ positions_ref }} AS lot_a
+        JOIN {{ positions_ref }} AS lot_b
+            ON  lot_a.snapshot_id   = lot_b.snapshot_id
+            AND lot_a.account_id    = lot_b.account_id
+            AND lot_a.natural_key   = lot_b.natural_key
+            AND lot_a.investment_id < lot_b.investment_id
+        WHERE lot_a.admission = 'admit' AND lot_b.admission = 'admit'
+          AND lot_a.gross_amount IS DISTINCT FROM lot_b.gross_amount
+    ),
+
+    movements AS (
+        SELECT mov.*, coalesce(holding_of.natural_key, mov.investment_id) AS holding_key
+        FROM {{ transactions_ref }} AS mov
+        LEFT JOIN holding_of USING (investment_id)
+    ),
+
+    -- everything that identifies "the same event": the holding plus every
+    -- business field. Two movements sharing an event_key are either one
+    -- event delivered twice or a real repeat.
+    keyed AS (
+        SELECT *, struct_pack(
+            account  := account_id,
+            holding  := holding_key,
+            happened := {{ date_col }},
+            movement := movement_type,
+            kind     := transaction_type,
+            detail   := transaction_type_additional_info,
+            quantity := {{ qty_col }},
+            amount   := {{ gross_col }},
+            currency := currency
+        ) AS event_key
+        FROM movements
+    ),
+
+    -- one row per distinct event: how many ids delivered it, and which
+    -- id's copy survives if it turns out to be a duplicate
+    same_event AS (
+        SELECT
+            event_key,
+            count(DISTINCT investment_id) AS n_ids,
+            list(DISTINCT investment_id)  AS ids,
+            arg_min(investment_id, struct_pack(
+                arrived  := ingested_at,
+                tiebreak := investment_id
+            )) AS keep_id
+        FROM keyed
+        GROUP BY event_key
+    ),
+
+    -- delivered twice = several ids, and no two of them were real lots
+    decided AS (
+        SELECT
+            same_event.*,
+            n_ids > 1 AND NOT EXISTS (
+                SELECT 1 FROM ids_live_together
+                WHERE list_contains(ids, id_a) AND list_contains(ids, id_b)
+            ) AS delivered_twice
+        FROM same_event
+    )
+
+    SELECT
+        keyed.* EXCLUDE (event_key),
+        decided.delivered_twice AS had_cross_id_twin
+    FROM keyed
+    JOIN decided ON keyed.event_key IS NOT DISTINCT FROM decided.event_key
+    WHERE NOT decided.delivered_twice
+       OR keyed.investment_id = decided.keep_id
+)
+{%- endmacro %}
+
+{# Derives each holding's quantity from its movements.
+   Shared by every int_*_holdings model.
+
+   Why not the positions feed: the provider freezes balance quantity at
+   the first buy. For 1,578 of 1,611 variable-income lots the balance
+   still equals the opening trade (notebook 05). Movements are the
+   reliable record.
+
+   Rule:
+     - ENTRADA adds, SAIDA subtracts. Movements with no quantity count zero.
+     - Runs at holding grain over the deduplicated stream from
+       cross_id_movements, so history follows an id replacement and
+       re-issued twins count once.
+     - Movements whose date the provider lost (staging nulls the
+       1970-01-01 placeholder) get the most favorable ordering: lost-date
+       buys sort first, lost-date sells last.
+     - If the running total still dips below zero, movements are missing.
+       The flags macro then marks the holding `movements:incomplete` and
+       the derived quantity should not be trusted.
+
+   Emits three CTEs; models join `replay` on (account_id, holding_key).
+   Funds pass their own column names. #}
+{% macro replay_quantity(movements_rel, qty_col='transaction_quantity', date_col='transaction_date') -%}
 day_net AS (
     SELECT
-        investment_id,
+        account_id,
+        holding_key,
         CASE
             WHEN {{ date_col }} IS NULL AND movement_type = 'SAIDA'
                 THEN DATE '9999-12-31'
@@ -195,37 +346,57 @@ day_net AS (
             ELSE -{{ qty_col }}
         END) AS day_net,
         count(*) FILTER ({{ qty_col }} IS NOT NULL) AS n_qty_receipts
-    FROM {{ transactions_ref }}
-    GROUP BY investment_id, eff_date
+    FROM {{ movements_rel }}
+    GROUP BY account_id, holding_key, eff_date
 ),
 
 running AS (
     SELECT
         *,
         sum(day_net) OVER (
-            PARTITION BY investment_id ORDER BY eff_date
+            PARTITION BY account_id, holding_key ORDER BY eff_date
         ) AS running_total
     FROM day_net
 ),
 
 replay AS (
     SELECT
-        investment_id,
+        account_id,
+        holding_key,
         sum(day_net)        AS replay_quantity,
         min(running_total)  AS min_running_total,
         sum(n_qty_receipts) AS n_qty_receipts
     FROM running
-    GROUP BY investment_id
+    GROUP BY account_id, holding_key
 )
 {%- endmacro %}
 
-{# --- holdings cross-sync flags (shared by every int_*_holdings model).
-   `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
-   over the holding-grain window). `holding_data_quality_flags()` emits the final
-   data_quality_flags expression: per-lot flags unioned with the cross-sync
-   signals (investment_id:multiple, zero:lot_kept, zero:transient, investment_id:replaced) and the
-   replay verdicts (movements:incomplete, stale:quantity); a holding with
-   neither replay flag has a quantity the movements confirm. --- #}
+{# Joins the replay verdicts onto the lots: rationale in the
+   replay_quantity macro header. #}
+{% macro holding_replay() -%}
+holding AS (
+    SELECT
+        lots.*,
+        replay.replay_quantity AS quantity_derived,
+        (replay.min_running_total < -0.001
+            OR coalesce(replay.n_qty_receipts, 0) = 0)       AS has_incomplete_replay,
+        abs(lots.quantity - replay.replay_quantity) >= 0.001 AS has_stale_lot
+    FROM lots
+    LEFT JOIN replay USING (account_id, holding_key)
+)
+{%- endmacro %}
+
+{# --- Holdings cross-sync flags, shared by every int_*_holdings model.
+
+   `holding_timeline()` emits the `timeline` CTE: SELECT * plus lag and
+   lead columns over the holding-grain window.
+
+   `holding_data_quality_flags()` emits the final data_quality_flags
+   expression. It unions the per-lot flags with the cross-sync signals
+   (investment_id:multiple, zero:lot_kept, zero:transient,
+   investment_id:replaced) and the replay verdicts
+   (movements:incomplete, stale:quantity). A holding that carries
+   neither replay verdict has a quantity the movements confirm. --- #}
 {% macro holding_timeline() -%}
 timeline AS (
     SELECT

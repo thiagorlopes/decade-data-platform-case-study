@@ -40,8 +40,8 @@ WITH joined AS (
         bal.financial_transaction_tax_amount,
         bal.blocked_amount,
         bal.purchase_unit_price
-    FROM {{ ref('stg_openfinance__bank_fixed_incomes_positions_detail') }} AS det
-    FULL JOIN {{ ref('stg_openfinance__bank_fixed_incomes_positions_balances') }} AS bal
+    FROM {{ latest_lot_delivery(ref('stg_openfinance__bank_fixed_incomes_positions_detail')) }} AS det
+    FULL JOIN {{ latest_lot_delivery(ref('stg_openfinance__bank_fixed_incomes_positions_balances')) }} AS bal
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations
@@ -79,4 +79,7 @@ with_natural_key AS (
     ('due_date IS NULL',      'missing:due_date'),
     ('indexer IS NULL',       'missing:indexer'),
     ('purchase_date IS NULL', 'missing:purchase_date'),
+    ('net_amount > gross_amount + 0.01', 'net:above_gross'),
+    ('abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
+    ('financial_transaction_tax_amount <> 0 AND abs(gross_amount - net_amount - coalesce(income_tax_amount, 0)) <= 0.02', 'financial_transaction_tax:placeholder'),
 ]) }}

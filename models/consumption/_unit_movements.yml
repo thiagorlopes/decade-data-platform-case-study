@@ -1,0 +1,106 @@
+version: 2
+
+# Unit test for the cross-id dedup. It feeds fixed input rows to
+# fct_movements and checks the exact output. The expected rows state the
+# rules the cross_id_movements macro must follow, so the test fails when
+# the behavior changes, no matter how the macro is written.
+#
+# The macro treats every family the same way. One family (funds) carries
+# the fixture rows; the inputs of the other families stay empty.
+#
+# Nine cases, one holding each. Each line states the situation, then
+# the outcome the macro must produce:
+# - H_a: the same movement arrives again under a second id, in a later
+#   sync. The first copy survives and carries the flag.
+# - H_b: two ids admitted in one sync with different gross amounts are
+#   two real lots. Both copies stay, with no flag.
+# - H_c: two ids admitted in one sync with the same gross amount are a
+#   record and its copy. The movements collapse to one.
+# - H_d: both copies arrived at the same instant. The lowest
+#   investment_id survives.
+# - H_e: a movement delivered once. It passes through unchanged.
+# - H_f: the twin case of H_a, but the provider lost the movement date.
+#   The copies still collapse, and the survivor carries both flags.
+# - H_g: three ids share the same movements, and two of them are a
+#   certified pair. The pair exempts the whole group; every copy stays.
+# - H_h: the twin arrives under an id outside the holding's certified
+#   pair. One certified id alone protects nothing: the exemption needs
+#   both ids of a certified pair inside the group. The copies collapse.
+# - H_i: the copies agree on everything except the gross amount. A
+#   different gross is a different event. Both stay, with no flag.
+unit_tests:
+  - name: cross_id_dedup_semantics
+    model: fct_movements
+    given:
+      - input: ref('int_funds_positions')
+        rows:
+          - {snapshot_id: S1, account_id: A1, investment_id: ia1, natural_key: H_a, admission: admit, gross_amount: 100}
+          - {snapshot_id: S2, account_id: A1, investment_id: ia2, natural_key: H_a, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ib1, natural_key: H_b, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ib2, natural_key: H_b, admission: admit, gross_amount: 200}
+          - {snapshot_id: S1, account_id: A1, investment_id: ic1, natural_key: H_c, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ic2, natural_key: H_c, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: id1, natural_key: H_d, admission: admit, gross_amount: 100}
+          - {snapshot_id: S2, account_id: A1, investment_id: id2, natural_key: H_d, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ie1, natural_key: H_e, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: if1, natural_key: H_f, admission: admit, gross_amount: 100}
+          - {snapshot_id: S2, account_id: A1, investment_id: if2, natural_key: H_f, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ig1, natural_key: H_g, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ig2, natural_key: H_g, admission: admit, gross_amount: 200}
+          - {snapshot_id: S2, account_id: A1, investment_id: ig3, natural_key: H_g, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ih1, natural_key: H_h, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ih2, natural_key: H_h, admission: admit, gross_amount: 200}
+          - {snapshot_id: S2, account_id: A1, investment_id: ih3, natural_key: H_h, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ii1, natural_key: H_i, admission: admit, gross_amount: 100}
+          - {snapshot_id: S2, account_id: A1, investment_id: ii2, natural_key: H_i, admission: admit, gross_amount: 100}
+      - input: ref('int_funds_transactions')
+        rows:
+          - {transaction_id: ta1, investment_id: ia1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: ta2, investment_id: ia2, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tb1, investment_id: ib1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tb2, investment_id: ib2, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tc1, investment_id: ic1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tc2, investment_id: ic2, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: td1, investment_id: id1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: td2, investment_id: id2, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: te1, investment_id: ie1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tf1, investment_id: if1, account_id: A1, ingested_at: 2026-01-01 10:00:00, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tf2, investment_id: if2, account_id: A1, ingested_at: 2026-01-02 10:00:00, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tg1, investment_id: ig1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tg2, investment_id: ig2, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tg3, investment_id: ig3, account_id: A1, ingested_at: 2026-01-03 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: th1, investment_id: ih1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: th3, investment_id: ih3, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: ti1, investment_id: ii1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: ti2, investment_id: ii2, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 150, transaction_net_amount: 150, currency: BRL}
+      - input: ref('int_bank_fixed_incomes_positions')
+        rows: []
+      - input: ref('int_bank_fixed_incomes_transactions')
+        rows: []
+      - input: ref('int_credit_fixed_incomes_positions')
+        rows: []
+      - input: ref('int_credit_fixed_incomes_transactions')
+        rows: []
+      - input: ref('int_treasure_titles_positions')
+        rows: []
+      - input: ref('int_treasure_titles_transactions')
+        rows: []
+      - input: ref('int_variable_incomes_positions')
+        rows: []
+      - input: ref('int_variable_incomes_transactions')
+        rows: []
+    expect:
+      rows:
+        - {transaction_id: ta1, investment_id: ia1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: tb1, investment_id: ib1, data_quality_flags: "[]"}
+        - {transaction_id: tb2, investment_id: ib2, data_quality_flags: "[]"}
+        - {transaction_id: tc1, investment_id: ic1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: td1, investment_id: id1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: te1, investment_id: ie1, data_quality_flags: "[]"}
+        - {transaction_id: tf1, investment_id: if1, data_quality_flags: "[missing:transaction_date, duplicate:cross_id]"}
+        - {transaction_id: tg1, investment_id: ig1, data_quality_flags: "[]"}
+        - {transaction_id: tg2, investment_id: ig2, data_quality_flags: "[]"}
+        - {transaction_id: tg3, investment_id: ig3, data_quality_flags: "[]"}
+        - {transaction_id: th1, investment_id: ih1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: ti1, investment_id: ii1, data_quality_flags: "[]"}
+        - {transaction_id: ti2, investment_id: ii2, data_quality_flags: "[]"}

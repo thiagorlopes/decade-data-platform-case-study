@@ -41,7 +41,7 @@ SELECT
     institution_name,
     '{{ family }}' AS product_family,
     transaction_id,
-    coalesce(key_map.natural_key, investment_id) AS holding_key,
+    holding_key,
     investment_id,
     movement_type,
     transaction_type,
@@ -51,14 +51,13 @@ SELECT
     CAST({{ cols.net }} AS DECIMAL(38, 10)) AS net_amount,
     currency,
     list_filter([
-        CASE WHEN {{ cols.date }} IS NULL THEN 'missing:transaction_date' END
+        CASE WHEN {{ cols.date }} IS NULL THEN 'missing:transaction_date' END,
+        CASE WHEN had_cross_id_twin THEN 'duplicate:cross_id' END
     ], f -> f IS NOT NULL) AS data_quality_flags
-FROM {{ ref('int_' ~ family ~ '_transactions') }}
-LEFT JOIN (
-    -- natural_key is a property of the security, so any snapshot resolves it.
-    SELECT investment_id, any_value(natural_key) AS natural_key
-    FROM {{ ref('int_' ~ family ~ '_positions') }}
-    GROUP BY investment_id
-) AS key_map USING (investment_id)
+FROM {{ cross_id_movements(ref('int_' ~ family ~ '_transactions'),
+                           ref('int_' ~ family ~ '_positions'),
+                           date_col=cols.date,
+                           qty_col=cols.quantity,
+                           gross_col=cols.gross) }} AS mov
 {{ 'UNION ALL' if not loop.last }}
 {% endfor %}

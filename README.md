@@ -62,7 +62,7 @@ After `make install`, use these targets to iterate:
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
 | `make help` | List all targets. |
 
-`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots with new arrivals. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
+`make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots at or past the newest arrival. To reprocess everything after a transform change: `make clean && make build` (equivalent to `dbt build --full-refresh` on a fresh warehouse).
 
 ## Querying the warehouse
 
@@ -105,7 +105,7 @@ What this means for consumers: the output of `make build` always matches the con
 The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL queries over the consumption layer, never raw or staging.
 
 - [`holdings.sql`](consumers/wealth/holdings.sql): what customers hold, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
-- [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each tagged with the current holding it belongs to by matching its `investment_id` against the holding's contributing ids.
+- [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, each joined to the current holding it belongs to on the shared `holding_key`.
 
 Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. The committed output under [`output/`](consumers/wealth/output/) covers three sample customers. `make consumers` regenerates it from the committed queries, so the CSVs cannot drift from the SQL that claims to produce them. A new consumer follows the same pattern: query `fct_holdings` / `fct_movements`, whose columns, types and flag vocabulary are contract-enforced in [`contracts/_consumption.yml`](contracts/_consumption.yml).
 
@@ -175,6 +175,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 - **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['missing:purchase_date', 'zero:transient']`). Empty list means clean.
 - **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_zero_duplicate` and `quarantine` stay in the positions table for audit.
+- **Row-level, dropped movement twins**: anti-join `int_*_transactions` to `fct_movements` on `transaction_id`; every missing row has a surviving copy flagged `duplicate:cross_id`. The `cross_id_dedup_semantics` unit test pins that rule.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
 
@@ -182,7 +183,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 **DETECT** lives in `models/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](notebooks/02_within_record_defects.ipynb).
 
-**RESOLVE** lives in `models/canonical/intermediate/`. Positions are deduped by the `resolve_duplicate_investments` macro. Transactions use latest-delivery dedup. The admission enum is contract-tested at error severity. The cross-sync flags (`zero:transient`, `investment_id:replaced`, `investment_id:multiple`, `zero:lot_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
+**RESOLVE** lives in `models/canonical/intermediate/`. Both feeds survive a record re-delivered with a different value: the latest arrival wins. Positions apply this through the `latest_lot_delivery` macro; transactions use the same rule inline. Superseded copies stay countable in the `lot_redelivery` warn ledger. Positions are then deduped across investment_ids by the `resolve_duplicate_investments` macro. Movements the provider re-issued under another investment_id of the same holding collapse to one copy, flagged `duplicate:cross_id`, through the `cross_id_movements` macro; the same deduplicated stream feeds the holding-grain quantity replay. The admission enum is contract-tested at error severity. The cross-sync flags (`zero:transient`, `investment_id:replaced`, `investment_id:multiple`, `zero:lot_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
 
 **GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
@@ -204,15 +205,39 @@ Every flag follows the shape `family:detail`, so a consumer selects a whole clas
 | Lot | `missing:<column>` | A spec-required column arrived empty and could not be repaired (`missing:indexer`, `missing:isin_code`, ...). |
 | Lot | `missing:natural_key` | The record has no identity to merge on. It becomes its own holding, keyed by its investment_id. |
 | Lot | `zero:duplicate_dropped` | The sync delivered two copies of the lot, one live and one zero. The live copy was kept; the zero copy was dropped. |
+| Lot | `net:above_gross` | The payload's net exceeds its gross. One of the two is wrong; both are kept as delivered. Do not trust net on this row. |
+| Lot | `gross:price_mismatch` | The payload's gross disagrees with its own quantity times unit price. All three fields are kept as delivered. |
+| Lot | `financial_transaction_tax:placeholder` | The payload reports a transaction tax that does not exist for the row: net equals gross minus income tax to the cent. The amount is a placeholder, not a tax. |
 | Holding | `investment_id:multiple` | The provider keeps two or more live position records for the security at once. The holding sums them. |
-| Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Movements do not carry over between them. |
+| Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Both ids resolve to the same holding, so its movements and replay follow it across the replacement. |
 | Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `zero:duplicate_dropped`. |
 | Holding | `zero:transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
-| Holding | `stale:quantity` | The balance quantity disagrees with the quantity replayed from movements. Prefer `quantity_derived`. |
+| Holding | `stale:quantity` | The balance quantity disagrees with the quantity replayed from movements. The plain quantity column already prefers the replay; the provider's number stays in `quantity_reported`. |
 | Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity, with a caveat. |
 | Movement | `missing:transaction_date` | No usable movement date. The movement counts in totals but has no place on a timeline. |
+| Movement | `duplicate:cross_id` | The provider re-delivered this movement under another investment_id of the same holding, with a fresh transaction_id. This copy stands for the copies; its twins were dropped. |
 
 The long-form version of each entry lives in the [`data_quality_flags` doc block](models/canonical/_docs.md) and renders on every column that carries it via `make docs`.
+
+#### Field trust at a glance
+
+Every field earns its treatment from evidence, not hope. Quantity is a
+write-once field in this feed (zero of ten thousand raw position records
+ever update it), so the platform recalculates it from the movements ledger
+and publishes the resolved number as the plain `quantity` column. Prices update every
+sync and drive gross, so `unit_price` is exposed as the maintained half of
+the provider's valuation. Gross and net stay as the provider's marks, on
+the provider's own basis, with that basis disclosed in the contract; they
+cannot be recomputed without inventing data, but they can be cross-checked
+against the record itself, and the `net:above_gross` and
+`gross:price_mismatch` flags carry the verdicts. The naming carries the
+same rule: a plain column (`quantity`, `gross_amount`) is a number the
+platform stands behind, and the plain columns of a row agree with each
+other; a `_reported` column is the provider's original claim, kept for
+reconciliation; net exists only as `net_amount_reported` because nothing
+can vouch for it. In one line: recalculate what an independent source can
+prove, quote and disclose what only the provider knows, and
+contradiction-check everything inside the record.
 
 #### Quarantine runbook
 
@@ -238,6 +263,8 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 | `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | none, fully repaired | 2 |
 | `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` | `missing:transaction_date` on `fct_movements` | 3 001 |
 | CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | none, fully repaired | 1 370 |
+| `9900` placeholder quantity on duplicated position records | Required field arriving empty | co-admission rule in `cross_id_movements` | `gross:price_mismatch` | 1 722 |
+| `88.90` placeholder transaction tax, constant across position sizes and never subtracted from net | Required field arriving empty | flag only, amounts kept as delivered | `financial_transaction_tax:placeholder` | 1 877 |
 
 **Unlisted classes, all zero hits.** Nine defect classes the brief does not name and the sample does not contain. Zero hits shows the seeding stuck to the announced classes. It does not prove these defects are absent in production. In production, each would become a warn test in `_staging_quality.yml`. The sample does not justify permanent tests for data that is not there.
 
@@ -260,8 +287,8 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | Layer | Materialization | Why |
 |-------|----------------|-----|
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
-| intermediate (positions) | incremental | Each run reprocesses every snapshot that received an arrival past the watermark (`ingested_at`, the arrival time), whole, not row by row. Duplicate classification compares rows within one sync, so a late or re-delivered row must be re-judged with the siblings that already landed; `unique_key (snapshot_id, investment_id)` makes the re-touched rows an upsert, so repeated runs stay idempotent. Replay after a transform fix: `dbt build --full-refresh`. |
-| intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; promote to table per the progression above if the timeline outgrows a view. |
+| intermediate (positions) | incremental | Each run reprocesses every snapshot that received an arrival at or past the watermark (`ingested_at`, the arrival time), whole, not row by row. Duplicate classification compares rows within one sync, so a late or re-delivered row must be re-judged with the siblings that already landed; `unique_key (snapshot_id, investment_id)` makes the re-touched rows an upsert, so repeated runs stay idempotent. When a lot is re-delivered with a changed value, the `latest_lot_delivery` macro keeps only the newest arrival of each lot before the join. Replay after a transform fix: `dbt build --full-refresh`. |
+| intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; each reader also recomputes the deduplicated movement stream (about twenty macro runs per build). When volume outgrows the views, persist that stream and the holdings as intermediate tables per the progression above. |
 | consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
 
 ### Physical layout
@@ -275,7 +302,7 @@ The layout serves four query patterns:
 | Wealth page | one customer, latest snapshot | product, point lookup |
 | Net worth over time | one customer, full history | product, timeline scan |
 | Portfolio analytics | many customers, bounded dates | analysts and services |
-| The build itself | whole snapshots past the watermark | the incremental job |
+| The build itself | whole snapshots at or past the watermark | the incremental job |
 
 Three decisions serve them:
 
@@ -300,6 +327,12 @@ These five boundaries are the platform's technical measures. The organizational 
 Incremental means two different things in this pipeline.
 
 - **Loading raw**: picking up only the new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen before. Not implemented here: raw was handed to us as two static parquet files, so there are no "new arrivals". This is what the Databricks target ([Architecture](#architecture)) turns on.
-- **Building canonical from raw**: reprocessing only the raw rows newer than the last canonical build (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
+- **Building canonical from raw**: reprocessing only the snapshots with arrivals at or past the newest one already built (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
 
 
+
+### Deliberately left out: a test on the watermark boundary
+
+The `>=` in `snapshot_watermark` is load-bearing. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read that batch whole on the next run. No automated test pins this. dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
+
+The verification is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check would be a two-run CI job that builds, lands a late row carrying the boundary stamp, rebuilds, and asserts the row arrived. At this repo's scale the manual check earns its keep; that CI job is the first test to add when the loader goes live.

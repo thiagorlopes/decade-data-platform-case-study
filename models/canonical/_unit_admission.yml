@@ -1,0 +1,116 @@
+version: 2
+
+# Unit test for the admission verdicts. It feeds fixed staging rows to
+# int_funds_positions and checks the exact output. The expected rows state
+# the rules resolve_duplicate_investments, latest_lot_delivery, and the
+# clean_cnpj guard must follow, so the test fails when the behavior
+# changes, no matter how the macros are written.
+#
+# The macros treat every family the same way. Funds carries the fixtures.
+# The test runs with is_incremental off, so the snapshot watermark is out
+# of scope here.
+#
+# Twelve cases, one CNPJ each. Each line states the situation, then
+# the verdict the macros must produce:
+# - sole: one id holds the natural key. It admits with no flags.
+# - redundant: two copies agree on quantity and gross. The lowest
+#   investment_id admits; the other rejects as a duplicate.
+# - priced: two redundant copies, one with a NULL gross. The priced
+#   copy admits, whatever its id. A NULL and one distinct value still
+#   count as agreeing.
+# - lots: two copies differ in quantity. They are separate lots, so
+#   both admit.
+# - zero: two copies share a quantity; one gross is zero, one positive.
+#   The zero side rejects; the positive side admits and carries
+#   zero:duplicate_dropped.
+# - trio: three ids conflict. A conflict of three never resolves, so
+#   all quarantine.
+# - twopos: a conflict pair carries two positive grosses. Both
+#   quarantine.
+# - noqty: a conflict pair carries no quantity. Both quarantine.
+# - nokey: a row arrives with no natural key. It admits, flagged.
+# - tail: a CNPJ arrives with a decimal tail. It joins the group of
+#   its clean twin.
+# - cross: the same key appears in two snapshots. That is two sole
+#   lots, not a group.
+# - redeliver: one lot arrives twice. Only the newest delivery is
+#   classified.
+unit_tests:
+  - name: admission_semantics
+    model: int_funds_positions
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref('stg_openfinance__funds_positions_detail')
+        rows:
+          - {snapshot_id: S1, investment_id: s1, account_id: A1, fund_cnpj: '11111111000101'}
+          - {snapshot_id: S1, investment_id: r1, account_id: A1, fund_cnpj: '11111111000102'}
+          - {snapshot_id: S1, investment_id: r2, account_id: A1, fund_cnpj: '11111111000102'}
+          - {snapshot_id: S1, investment_id: p1, account_id: A1, fund_cnpj: '11111111000103'}
+          - {snapshot_id: S1, investment_id: p2, account_id: A1, fund_cnpj: '11111111000103'}
+          - {snapshot_id: S1, investment_id: l1, account_id: A1, fund_cnpj: '11111111000104'}
+          - {snapshot_id: S1, investment_id: l2, account_id: A1, fund_cnpj: '11111111000104'}
+          - {snapshot_id: S1, investment_id: z1, account_id: A1, fund_cnpj: '11111111000105'}
+          - {snapshot_id: S1, investment_id: z2, account_id: A1, fund_cnpj: '11111111000105'}
+          - {snapshot_id: S1, investment_id: t1, account_id: A1, fund_cnpj: '11111111000106'}
+          - {snapshot_id: S1, investment_id: t2, account_id: A1, fund_cnpj: '11111111000106'}
+          - {snapshot_id: S1, investment_id: t3, account_id: A1, fund_cnpj: '11111111000106'}
+          - {snapshot_id: S1, investment_id: w1, account_id: A1, fund_cnpj: '11111111000107'}
+          - {snapshot_id: S1, investment_id: w2, account_id: A1, fund_cnpj: '11111111000107'}
+          - {snapshot_id: S1, investment_id: q1, account_id: A1, fund_cnpj: '11111111000108'}
+          - {snapshot_id: S1, investment_id: q2, account_id: A1, fund_cnpj: '11111111000108'}
+          - {snapshot_id: S1, investment_id: d1, account_id: A1, fund_cnpj: '22222222000122.00'}
+          - {snapshot_id: S1, investment_id: d2, account_id: A1, fund_cnpj: '22222222000122'}
+          - {snapshot_id: S1, investment_id: x1, account_id: A1, fund_cnpj: '11111111000110'}
+          - {snapshot_id: S2, investment_id: x2, account_id: A1, fund_cnpj: '11111111000110'}
+          - {snapshot_id: S1, investment_id: v1, account_id: A1, fund_cnpj: '11111111000111'}
+      - input: ref('stg_openfinance__funds_positions_balances')
+        rows:
+          - {snapshot_id: S1, investment_id: s1, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: r1, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: r2, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: p1, account_id: A1, quota_quantity: 10, gross_amount: null}
+          - {snapshot_id: S1, investment_id: p2, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: l1, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: l2, account_id: A1, quota_quantity: 20, gross_amount: 200}
+          - {snapshot_id: S1, investment_id: z1, account_id: A1, quota_quantity: 10, gross_amount: 0}
+          - {snapshot_id: S1, investment_id: z2, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: t1, account_id: A1, quota_quantity: 10, gross_amount: 0}
+          - {snapshot_id: S1, investment_id: t2, account_id: A1, quota_quantity: 10, gross_amount: 0}
+          - {snapshot_id: S1, investment_id: t3, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: w1, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: w2, account_id: A1, quota_quantity: 10, gross_amount: 200}
+          - {snapshot_id: S1, investment_id: q1, account_id: A1, quota_quantity: null, gross_amount: 0}
+          - {snapshot_id: S1, investment_id: q2, account_id: A1, quota_quantity: null, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: k1, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: d1, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: d2, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: x1, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S2, investment_id: x2, account_id: A1, quota_quantity: 10, gross_amount: 100}
+          - {snapshot_id: S1, investment_id: v1, account_id: A1, quota_quantity: 10, gross_amount: 100, ingested_at: 2026-01-01 10:00:00}
+          - {snapshot_id: S1, investment_id: v1, account_id: A1, quota_quantity: 10, gross_amount: 150, ingested_at: 2026-01-02 10:00:00}
+    expect:
+      rows:
+        - {investment_id: s1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: r1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: r2, admission: reject_duplicate, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: p1, admission: reject_duplicate, gross_amount: null, data_quality_flags: "[missing:gross_amount]"}
+        - {investment_id: p2, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: l1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: l2, admission: admit, gross_amount: 200, data_quality_flags: "[]"}
+        - {investment_id: z1, admission: reject_zero_duplicate, gross_amount: 0, data_quality_flags: "[]"}
+        - {investment_id: z2, admission: admit, gross_amount: 100, data_quality_flags: "[zero:duplicate_dropped]"}
+        - {investment_id: t1, admission: quarantine, gross_amount: 0, data_quality_flags: "[]"}
+        - {investment_id: t2, admission: quarantine, gross_amount: 0, data_quality_flags: "[]"}
+        - {investment_id: t3, admission: quarantine, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: w1, admission: quarantine, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: w2, admission: quarantine, gross_amount: 200, data_quality_flags: "[]"}
+        - {investment_id: q1, admission: quarantine, gross_amount: 0, data_quality_flags: "[missing:quota_quantity]"}
+        - {investment_id: q2, admission: quarantine, gross_amount: 100, data_quality_flags: "[missing:quota_quantity]"}
+        - {investment_id: k1, admission: admit, gross_amount: 100, data_quality_flags: "[missing:natural_key, missing:fund_cnpj]"}
+        - {investment_id: d1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: d2, admission: reject_duplicate, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: x1, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: x2, admission: admit, gross_amount: 100, data_quality_flags: "[]"}
+        - {investment_id: v1, admission: admit, gross_amount: 150, data_quality_flags: "[]"}

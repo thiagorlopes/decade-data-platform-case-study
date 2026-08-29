@@ -5,3 +5,12 @@ decade:
       type: duckdb
       path: warehouse.duckdb
       threads: 4
+    read_only:
+      type: duckdb
+      path: ':memory:'
+      database: warehouse
+      threads: 4
+      attach:
+        - path: warehouse.duckdb
+          alias: warehouse
+          read_only: true

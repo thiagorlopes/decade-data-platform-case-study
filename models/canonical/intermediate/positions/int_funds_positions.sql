@@ -27,8 +27,8 @@ WITH joined AS (
         bal.blocked_amount,
         bal.quota_quantity,
         bal.quota_gross_price
-    FROM {{ ref('stg_openfinance__funds_positions_detail') }} AS det
-    FULL JOIN {{ ref('stg_openfinance__funds_positions_balances') }} AS bal
+    FROM {{ latest_lot_delivery(ref('stg_openfinance__funds_positions_detail')) }} AS det
+    FULL JOIN {{ latest_lot_delivery(ref('stg_openfinance__funds_positions_balances')) }} AS bal
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations
@@ -56,4 +56,7 @@ with_natural_key AS (
     ('fund_cnpj IS NULL',      'missing:fund_cnpj'),
     ('gross_amount IS NULL',   'missing:gross_amount'),
     ('quota_quantity IS NULL', 'missing:quota_quantity'),
+    ('net_amount > gross_amount + 0.01', 'net:above_gross'),
+    ('abs(gross_amount::DOUBLE - quota_quantity::DOUBLE * quota_gross_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
+    ('financial_transaction_tax_amount <> 0 AND abs(gross_amount - net_amount - coalesce(income_tax_amount, 0)) <= 0.02', 'financial_transaction_tax:placeholder'),
 ]) }}
