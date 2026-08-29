@@ -187,9 +187,9 @@ FROM classified
 
 {# Collapses movement duplicates that per-id dedup cannot see.
 
-   When one holding is delivered under two investment_ids, its movements
-   arrive under both with fresh transaction_ids. int_*_transactions dedups
-   per id, so both copies pass through.
+   The provider sometimes re-issues a movement under another of the
+   holding's investment_ids, minting a fresh transaction_id on the copy.
+   int_*_transactions dedups per id, so both pass through.
 
    Rule (content, not id):
      - Two movements are the same event if they agree on every business
