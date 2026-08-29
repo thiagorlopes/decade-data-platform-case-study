@@ -185,29 +185,35 @@ SELECT
 FROM classified
 {%- endmacro %}
 
-{# Collapses movement duplicates that per-id dedup cannot see.
+{# Collapses duplicate movements that hide under different
+   investment_ids of the same holding.
 
-   The provider sometimes re-issues a movement under another of the
-   holding's investment_ids, minting a fresh transaction_id on the copy.
-   int_*_transactions dedups per id, so both pass through.
+   The provider sometimes delivers a movement again under another of
+   the holding's investment_ids, and gives the copy a new
+   transaction_id. int_*_transactions dedups within each id, so both
+   copies pass through to this macro.
 
-   Rule (content, not id):
-     - Two movements are the same event if they agree on every business
-       field (holding, date, type, quantity, amount, currency).
-     - Same event, one id delivered twice: keep one.
-     - Same event, two ids ever admitted together in one sync with
-       different gross amounts (real lots, flagged investment_id:multiple):
-       keep both. Identical movements across real lots are real repeats.
-       The gross condition blocks placeholder-quantity copies from
-       counting as lots.
-     - A movement with no identical twin: always kept. Under a replaced
-       id, the retired id may hold the only record of old history.
+   The macro compares content, not ids:
+   - Two movements are the same event if they agree on every business
+     field: holding, date, type, quantity, amount, currency.
+   - If the same event appears twice under one id, keep one copy.
+   - If the same event appears under two ids that were ever admitted
+     together in one sync with different gross amounts, keep both.
+     Such ids are real lots (flagged investment_id:multiple), and the
+     same movement on two real lots is two real events. The
+     different-gross requirement stops placeholder-quantity copies
+     from passing as real lots.
+   - A movement with no identical twin is always kept. After an id
+     replacement, the retired id may hold the only record of old
+     history.
 
-   Survivor: first-delivered copy; lowest investment_id breaks ties. A
-   late re-issue cannot displace a published transaction_id.
+   Of the copies, the first-delivered one survives; on a tie, the
+   lowest investment_id does. So a copy that arrives later can never
+   take over from a transaction_id that earlier builds already
+   published to consumers.
 
-   Emits a subquery: the deduped movement stream, with holding_key and a
-   had_cross_id_twin flag on each surviving copy. #}
+   Emits a subquery: the deduped movement stream, with holding_key and
+   a had_cross_id_twin flag on each surviving copy. #}
 {% macro cross_id_movements(transactions_ref, positions_ref, date_col='transaction_date', qty_col='transaction_quantity', gross_col='transaction_gross_amount') -%}
 (
     WITH
