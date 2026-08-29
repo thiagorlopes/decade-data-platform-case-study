@@ -58,5 +58,5 @@ with_natural_key AS (
     ('quota_quantity IS NULL', 'missing:quota_quantity'),
     ('net_amount > gross_amount + 0.01', 'net:above_gross'),
     ('abs(gross_amount::DOUBLE - quota_quantity::DOUBLE * quota_gross_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
-    ('financial_transaction_tax_amount <> 0 AND abs(gross_amount - net_amount - coalesce(income_tax_amount, 0)) <= 0.02', 'financial_transaction_tax:not_deducted'),
+    ('financial_transaction_tax_amount <> 0 AND abs(gross_amount - net_amount - coalesce(income_tax_amount, 0)) <= 0.02', 'financial_transaction_tax:placeholder'),
 ]) }}

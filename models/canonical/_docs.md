@@ -55,11 +55,12 @@ Lot-grain, added in int_*_positions:
   own quantity times unit price beyond a 0.5% tolerance. One of the
   three fields is wrong and there is no way to tell which. All are kept
   as delivered.
-- `financial_transaction_tax:not_deducted`: the payload reports a
-  financial transaction tax, yet its net equals gross minus income tax
-  to the cent. The reported tax was never subtracted, so it is a claim
-  the money contradicts. Amounts are kept as delivered; do not trust
-  financial_transaction_tax_amount on this row.
+- `financial_transaction_tax:placeholder`: the payload reports a
+  financial transaction tax that does not exist for this row. Its net
+  equals gross minus income tax to the cent, so no such tax was ever
+  charged; the reported amount is a placeholder, not a tax. Amounts
+  are kept as delivered; ignore financial_transaction_tax_amount on
+  this row.
 
 Holding-grain, added in int_*_holdings (cross-sync signals that only
 make sense once lots are aggregated by natural key):
