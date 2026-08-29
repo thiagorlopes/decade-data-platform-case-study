@@ -330,3 +330,9 @@ Incremental means two different things in this pipeline.
 - **Building canonical from raw**: reprocessing only the snapshots with arrivals at or past the newest one already built (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
 
 
+
+### Deliberately left out: a test on the watermark boundary
+
+The `>=` in `snapshot_watermark` is load-bearing. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read that batch whole on the next run. No automated test pins this. dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
+
+The verification is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check would be a two-run CI job that builds, lands a late row carrying the boundary stamp, rebuilds, and asserts the row arrived. At this repo's scale the manual check earns its keep; that CI job is the first test to add when the loader goes live.
