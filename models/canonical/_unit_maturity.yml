@@ -1,0 +1,50 @@
+version: 2
+
+# Unit test for the holding:matured disclosure. It feeds fixed position
+# and movement rows to int_bank_fixed_incomes_holdings and checks the
+# exact flags. The flag compares the instrument's due_date against the
+# snapshot's reference date, so this test pins the boundary and the
+# guard conditions rather than any number.
+#
+# Bank fixed incomes carries a real due date. Funds and variable incomes
+# hardcode it to NULL and can never raise the flag, which _unit_replay
+# already covers by expecting no maturity flag anywhere.
+#
+# Reference date is 2026-02-01 on every fixture. Each line states the
+# situation, then the flags the holding must carry:
+# - NK_due: due date passed and the position still reports a balance.
+#   The holding carries holding:matured.
+# - NK_open: due date is in the future. No flag.
+# - NK_today: due date equals the reference date. The instrument is not
+#   yet overdue, so no flag. This pins the boundary as strictly before.
+# - NK_null: the provider sent no due date. No flag, because nothing
+#   proves maturity.
+# - NK_settled: due date passed but the balance is zero. The position
+#   settled, so there is nothing to disclose. No maturity flag. The
+#   replay still reads the reported quantity as stale, which is the
+#   pre-existing rule and not what this test is about.
+unit_tests:
+  - name: maturity_disclosure
+    model: int_bank_fixed_incomes_holdings
+    given:
+      - input: ref('int_bank_fixed_incomes_positions')
+        rows:
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: due1, natural_key: NK_due, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: 2025-01-01}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: open1, natural_key: NK_open, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: 2027-01-01}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: today1, natural_key: NK_today, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: 2026-02-01}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: null1, natural_key: NK_null, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: null}
+          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: settled1, natural_key: NK_settled, admission: admit, data_quality_flags: "[]", quantity: 0, gross_amount: 0, updated_unit_price: 10, due_date: 2025-01-01}
+      - input: ref('int_bank_fixed_incomes_transactions')
+        rows:
+          - {transaction_id: m_due1, investment_id: due1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
+          - {transaction_id: m_open1, investment_id: open1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
+          - {transaction_id: m_today1, investment_id: today1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
+          - {transaction_id: m_null1, investment_id: null1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
+          - {transaction_id: m_settled1, investment_id: settled1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
+    expect:
+      rows:
+        - {snapshot_id: S1, holding_key: NK_due, data_quality_flags: "[holding:matured]"}
+        - {snapshot_id: S1, holding_key: NK_open, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_today, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_null, data_quality_flags: "[]"}
+        - {snapshot_id: S1, holding_key: NK_settled, data_quality_flags: "[quantity_reported:stale]"}

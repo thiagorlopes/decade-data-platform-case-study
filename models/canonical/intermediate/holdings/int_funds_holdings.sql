@@ -33,6 +33,7 @@ lots AS (
             CAST(sum(quota_quantity::DOUBLE * quota_gross_price::DOUBLE) / nullif(sum(quota_quantity::DOUBLE), 0) AS DECIMAL(38, 10)),
             CAST(avg(quota_gross_price::DOUBLE) AS DECIMAL(38, 10))
         )                                               AS unit_price,
+        CAST(NULL AS DATE)                              AS due_date,
         count(*)                                        AS n_investment_ids,
         array_agg(admitted.investment_id ORDER BY admitted.investment_id) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,

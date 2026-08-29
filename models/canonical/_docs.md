@@ -88,6 +88,31 @@ make sense once lots are aggregated by natural key):
   `quantity_derived` cannot be trusted for this holding. Keep the
   provider's `quantity` and caveat it.
 
+  This is usually a gap in the feed rather than an error by the
+  provider. The transactions endpoint serves only a bounded window of
+  history, which is how a replay goes negative with nobody at fault.
+  In this sample every
+  holding carries its opening acquisition at its true date, back to 2019,
+  while 99.6% of third-and-later movements fall on or after 2025-08-19.
+  The syncs run from 2026-07-28 to 2026-08-21, so that start date is a
+  trailing twelve months. The feed never serves trades struck between the
+  purchase and the start of that window. A ledger can therefore show an
+  outflow whose matching inflow is missing, and the running total goes
+  negative. Every occurrence in this sample is that case: 1,094 of 1,094
+  are the running-total-below-zero branch. None is a holding with no
+  receipts at all.
+
+  Breakage tracks how many movements are visible, not how old the
+  purchase is. The flag never fires on holdings with one or two
+  movements, and it reaches 49% at six or more.
+- `holding:matured`: the instrument's `due_date` has passed and the
+  institution still reports the position with a balance. This flag
+  discloses a fact. It changes no number, and it is not an error. An
+  institution may legitimately carry a matured instrument until
+  settlement clears. Only bank_fixed_incomes, credit_fixed_incomes and
+  treasure_titles carry a due date, so only they raise it. Funds and
+  variable_incomes never do.
+
 Movement-grain, added in fct_movements:
 
 - `transaction_date:missing`: the provider sent no usable movement date
