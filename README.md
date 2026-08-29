@@ -137,10 +137,10 @@ The upgrade path to the full target is replacing DuckDB with a Databricks dev wo
 Set three environment variables (`DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`), then pass the target:
 
 ```bash
-dbt build --target prod --exclude-resource-type unit_test
+dbt build --target prod
 ```
 
-Unit tests are excluded on Databricks because their yml fixtures carry DuckDB array literals; porting the fixtures to SQL format is the known follow-up. Everything else, including contracts, data tests, and the incremental merges, runs on both engines.
+Everything runs on both engines: contracts, data tests, unit tests, and the incremental merges. The unit test fixtures build their arrays through `filter(split(...))`, a spelling both engines parse the same way. Running the unit tests on Databricks caught a real cross-engine bug: the two engines read the backslash in a regex literal differently, which silently turned every fund CNPJ to NULL in prod. The fix and the rationale live next to `clean_cnpj` in [`macros/openfinance.sql`](macros/openfinance.sql).
 
 ### Two kinds of incremental
 
@@ -183,10 +183,11 @@ The layout serves four query patterns:
 | Portfolio analytics | many customers, bounded dates | analysts and services |
 | The build itself | whole snapshots at or past the watermark | the incremental job |
 
-Three decisions serve them:
+Four decisions serve them:
 
 - **Cluster by customer, then time.** Both facts are Delta tables with [liquid clustering](https://docs.databricks.com/aws/en/tables/clustering): `(party_id, snapshot_created_at)` for holdings, `(party_id, transaction_date)` for movements. Every product query filters on one customer first, so file skipping cuts a point lookup to a handful of files. Hive-style partitioning on `party_id` would create the small-file problem by design: one folder per customer. The clustering keys live in `dbt_project.yml` (`liquid_clustered_by`); the DuckDB adapter ignores them.
 - **Compact toward ~128 MB files.** A build every few minutes writes small files all day. Auto compaction and optimized writes keep files near target, so the file count tracks data volume, not run count.
+- **Size compute by role.** Builds and readers get separate compute. The build runs on a jobs cluster sized by arrivals per window, because the watermark bounds each run's work no matter how large the tables grow. Readers share a SQL warehouse that autoscales with concurrent queries, so a burst of analysts scales the warehouse and never the build. Neither workload pays for the other.
 - **Let cost grow with customers, not history.** Storage grows linearly with customers, a point query reads one cluster, and build compute follows the arrival rate. At ten times the customers: ten times the storage, the same wealth-page latency, builds still sized by arrivals per window.
 
 ## Compliance
