@@ -8,7 +8,7 @@ version: 2
 # The macro treats every family the same way. One family (funds) carries
 # the fixture rows; the inputs of the other families stay empty.
 #
-# Four cases, one holding each:
+# Seven cases, one holding each:
 # - H_a: the same movement arrives again under a second id, in a later
 #   sync. The copy that arrived first survives and carries the flag.
 # - H_b: two ids were admitted in the same sync with different gross
@@ -17,6 +17,12 @@ version: 2
 #   amount. One is a copy of the other, so the movements collapse to one.
 # - H_d: both copies arrived at the same instant. The lowest
 #   investment_id survives.
+# - H_e: a movement delivered once. It passes through unchanged.
+# - H_f: the twin case of H_a, but the provider lost the movement date.
+#   The copies still collapse, and the survivor carries both flags.
+# - H_g: three ids share the same movements, and only two of them are
+#   certified real lots. One certified pair exempts the whole group, so
+#   every copy stays.
 unit_tests:
   - name: cross_id_dedup_semantics
     model: fct_movements
@@ -31,6 +37,12 @@ unit_tests:
           - {snapshot_id: S1, account_id: A1, investment_id: ic2, natural_key: H_c, admission: admit, gross_amount: 100}
           - {snapshot_id: S1, account_id: A1, investment_id: id1, natural_key: H_d, admission: admit, gross_amount: 100}
           - {snapshot_id: S2, account_id: A1, investment_id: id2, natural_key: H_d, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ie1, natural_key: H_e, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: if1, natural_key: H_f, admission: admit, gross_amount: 100}
+          - {snapshot_id: S2, account_id: A1, investment_id: if2, natural_key: H_f, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ig1, natural_key: H_g, admission: admit, gross_amount: 100}
+          - {snapshot_id: S1, account_id: A1, investment_id: ig2, natural_key: H_g, admission: admit, gross_amount: 200}
+          - {snapshot_id: S2, account_id: A1, investment_id: ig3, natural_key: H_g, admission: admit, gross_amount: 100}
       - input: ref('int_funds_transactions')
         rows:
           - {transaction_id: ta1, investment_id: ia1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
@@ -41,6 +53,12 @@ unit_tests:
           - {transaction_id: tc2, investment_id: ic2, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
           - {transaction_id: td1, investment_id: id1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
           - {transaction_id: td2, investment_id: id2, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: te1, investment_id: ie1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tf1, investment_id: if1, account_id: A1, ingested_at: 2026-01-01 10:00:00, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tf2, investment_id: if2, account_id: A1, ingested_at: 2026-01-02 10:00:00, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tg1, investment_id: ig1, account_id: A1, ingested_at: 2026-01-01 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tg2, investment_id: ig2, account_id: A1, ingested_at: 2026-01-02 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
+          - {transaction_id: tg3, investment_id: ig3, account_id: A1, ingested_at: 2026-01-03 10:00:00, transaction_conversion_date: 2026-01-05, movement_type: ENTRADA, transaction_type: APORTE, transaction_quota_quantity: 10, transaction_gross_amount: 100, transaction_net_amount: 100, currency: BRL}
       - input: ref('int_bank_fixed_incomes_positions')
         rows: []
       - input: ref('int_bank_fixed_incomes_transactions')
@@ -64,3 +82,8 @@ unit_tests:
         - {transaction_id: tb2, investment_id: ib2, data_quality_flags: "[]"}
         - {transaction_id: tc1, investment_id: ic1, data_quality_flags: "[duplicate:cross_id]"}
         - {transaction_id: td1, investment_id: id1, data_quality_flags: "[duplicate:cross_id]"}
+        - {transaction_id: te1, investment_id: ie1, data_quality_flags: "[]"}
+        - {transaction_id: tf1, investment_id: if1, data_quality_flags: "[missing:transaction_date, duplicate:cross_id]"}
+        - {transaction_id: tg1, investment_id: ig1, data_quality_flags: "[]"}
+        - {transaction_id: tg2, investment_id: ig2, data_quality_flags: "[]"}
+        - {transaction_id: tg3, investment_id: ig3, data_quality_flags: "[]"}
