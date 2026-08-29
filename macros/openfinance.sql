@@ -87,22 +87,24 @@ snapshot_id IN (
 )
 {%- endmacro %}
 
-{# --- Classify duplicate investment_ids per natural key and stamp each row
-   with an admission verdict (notebook 03). Shared by every int_*_positions
-   model so the five families agree on what counts as a duplicate and how
-   to resolve one.
+{# --- Classifies duplicate investment_ids per natural key and stamps
+   each row with an admission verdict (notebook 03). Shared by every
+   int_*_positions model, so the five families agree on what counts as
+   a duplicate and how to resolve one.
 
-   Caller contract:
-     - Provides a CTE named `with_natural_key` with columns `snapshot_id`, `account_id`,
-       `natural_key`, `investment_id`, `gross_amount`, and the quantity column
-       named by `qty_col` (default `quantity`; funds pass `quota_quantity`).
-     - Gets back the final SELECT of the model, with every input column plus
-       `admission` (admit / reject_duplicate / reject_zero_duplicate / quarantine) and
-       `data_quality_flags` (array of defect labels).
+   The caller provides a CTE named `with_natural_key` with the columns
+   `snapshot_id`, `account_id`, `natural_key`, `investment_id`,
+   `gross_amount`, and the quantity column named by `qty_col` (default
+   `quantity`; funds pass `quota_quantity`).
 
-   `extra_flags` lets a family append its own (condition, label) pairs to
-   data_quality_flags — used for missing-field signals like ('indexer IS NULL',
-   'missing:indexer'). --- #}
+   The caller gets back the final SELECT of the model: every input
+   column plus `admission` (admit / reject_duplicate /
+   reject_zero_duplicate / quarantine) and `data_quality_flags` (an
+   array of defect labels).
+
+   With `extra_flags`, a family appends its own (condition, label)
+   pairs to data_quality_flags. This carries the missing-field
+   signals, like ('indexer IS NULL', 'missing:indexer'). --- #}
 {% macro resolve_duplicate_investments(qty_col='quantity', extra_flags=[]) -%}
 -- Step 1: find the duplicate groups. A duplicate group is one natural key
 -- held by two or more investment_ids within the same sync.
@@ -225,10 +227,12 @@ FROM classified
         GROUP BY investment_id
     ),
 
-    -- id pairs the provider counted as money at the same moment: real
-    -- lots of one holding, never one record and its copy. Lots share one
-    -- price per sync, so real lots with different quantities must differ
-    -- in gross; identical gross betrays a duplicated record whose
+    -- Pairs of ids that were both admitted in one sync: the provider
+    -- valued both as live money at once, so they are two real lots of
+    -- the holding, not a record and its copy. The differing-gross
+    -- condition filters out fakes: lots share one price per sync, so
+    -- two real lots with different quantities cannot show the same
+    -- gross. A pair with identical gross is a duplicated record whose
     -- quantity is a placeholder (README, placeholder quantity defect).
     ids_live_together AS (
         SELECT DISTINCT lot_a.investment_id AS id_a, lot_b.investment_id AS id_b
@@ -367,13 +371,17 @@ replay AS (
 )
 {%- endmacro %}
 
-{# --- holdings cross-sync flags (shared by every int_*_holdings model).
-   `holding_timeline()` emits the `timeline` CTE (SELECT * plus lag/lead
-   over the holding-grain window). `holding_data_quality_flags()` emits the final
-   data_quality_flags expression: per-lot flags unioned with the cross-sync
-   signals (investment_id:multiple, zero:lot_kept, zero:transient, investment_id:replaced) and the
-   replay verdicts (movements:incomplete, stale:quantity); a holding with
-   neither replay flag has a quantity the movements confirm. --- #}
+{# --- Holdings cross-sync flags, shared by every int_*_holdings model.
+
+   `holding_timeline()` emits the `timeline` CTE: SELECT * plus lag and
+   lead columns over the holding-grain window.
+
+   `holding_data_quality_flags()` emits the final data_quality_flags
+   expression. It unions the per-lot flags with the cross-sync signals
+   (investment_id:multiple, zero:lot_kept, zero:transient,
+   investment_id:replaced) and the replay verdicts
+   (movements:incomplete, stale:quantity). A holding that carries
+   neither replay verdict has a quantity the movements confirm. --- #}
 {% macro holding_timeline() -%}
 timeline AS (
     SELECT
