@@ -205,6 +205,7 @@ Every flag follows the shape `family:detail`, so a consumer selects a whole clas
 | Lot | `zero:duplicate_dropped` | The sync delivered two copies of the lot, one live and one zero. The live copy was kept; the zero copy was dropped. |
 | Lot | `net:above_gross` | The payload's net exceeds its gross. One of the two is wrong; both are kept as delivered. Do not trust net on this row. |
 | Lot | `gross:price_mismatch` | The payload's gross disagrees with its own quantity times unit price. All three fields are kept as delivered. |
+| Lot | `financial_transaction_tax:not_deducted` | The payload reports a transaction tax, yet net equals gross minus income tax to the cent. The tax was never subtracted; do not trust it. |
 | Holding | `investment_id:multiple` | The provider keeps two or more live position records for the security at once. The holding sums them. |
 | Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Both ids resolve to the same holding, so its movements and replay follow it across the replacement. |
 | Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `zero:duplicate_dropped`. |
@@ -261,6 +262,7 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 | `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` | `missing:transaction_date` on `fct_movements` | 3 001 |
 | CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | none, fully repaired | 1 370 |
 | `9900` placeholder quantity on duplicated position records | Required field arriving empty | co-admission rule in `cross_id_movements` | `gross:price_mismatch` | 1 722 |
+| `88.90` placeholder transaction tax, constant across position sizes and never subtracted from net | Required field arriving empty | flag only, amounts kept as delivered | `financial_transaction_tax:not_deducted` | 1 877 |
 
 **Unlisted classes, all zero hits.** Nine defect classes the brief does not name and the sample does not contain. Zero hits shows the seeding stuck to the announced classes. It does not prove these defects are absent in production. In production, each would become a warn test in `_staging_quality.yml`. The sample does not justify permanent tests for data that is not there.
 
