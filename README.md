@@ -216,11 +216,11 @@ Three decisions serve them:
 
 The sample is synthetic, so the repo can commit query outputs (`consumers/wealth/output/`); production outputs never land in git. In production every field is personal financial data under LGPD, Brazil's data protection law, and five boundaries would apply:
 
-- **The layer boundary is the access boundary.** Raw and staging hold provider payloads verbatim and stay locked to the pipeline's service principal. Consumers get Unity Catalog grants on the consumption schema only, so "consumers read consumption, never raw" becomes an ACL, not a convention.
-- **Consumption is pseudonymous.** `party_id`, `account_id`, and `investment_id` are opaque UUIDs end to end. The layer carries product attributes, never customer names or personal documents. Re-identification requires the customer registry, which lives outside this platform.
-- **Erasure is a clustered delete, then a purge.** The facts cluster on `party_id`, so the same key that serves the wealth page serves a targeted `DELETE`. That alone is not erasure: the rows survive in raw, in staging, and in Delta time travel. Full erasure also purges those copies, runs `VACUUM` past the retention window, and lets backups expire on a stated schedule.
-- **Consent bounds what the pipeline may hold.** Open Finance consent has a scope and an expiry. Revocation stops ingestion for that connection and triggers the erasure path. Raw is kept only as long as reprocessing needs it. A new use, such as model training, needs a new legal basis.
-- **Access is logged; data stays encrypted and in Brazil.** Unity Catalog audit logs record every read of the consumption schema. Encryption in transit and at rest is the platform default. Data stays in a Brazilian region, with the customers and their consent.
+- **The layer boundary is the access boundary.** Raw and staging stay locked to the pipeline's service principal; consumers get grants on the consumption schema only. "Never read raw" is an ACL, not a convention.
+- **Consumption is pseudonymous.** The ids are opaque UUIDs, and the layer carries no names or personal documents. Re-identification needs the customer registry, which lives outside this platform.
+- **Erasure is a clustered delete, then a purge.** The facts cluster on `party_id`, so one targeted `DELETE` uses the same key that serves the wealth page. The purge then covers raw, staging, Delta time travel, and expiring backups.
+- **Consent bounds what the pipeline holds.** Consent has a scope and an expiry; revocation stops ingestion and triggers erasure. Raw is purged once reprocessing no longer needs it. A new use, such as model training, needs a new legal basis.
+- **Access is logged; data stays encrypted and in Brazil.** Audit logs record every read of the consumption schema. Encryption is the default. Storage stays in a Brazilian region.
 
 These five boundaries are the platform's technical measures. The organizational side of LGPD (a data protection officer, records of processing, incident response) lives outside this repo.
 
