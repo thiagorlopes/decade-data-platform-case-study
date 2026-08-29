@@ -79,13 +79,13 @@ The typical loop: edit a model, rebuild, then check the numbers.
 
 **`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. The warehouse opens read-only. Close it before running `make build`. DuckDB is single-writer, so an open connection blocks the build.
 
-**`make shell`** opens the DuckDB CLI inside the container. Use it for quick raw SQL, or when you can't install duckdb on the host. Same rule: close it before a build. To leave the shell, type `.quit` or press Ctrl-D.
+**`make shell`** opens the DuckDB CLI inside the container: a terminal alternative to `make ui`. Same rule: close it before a build. Type `.quit` or press Ctrl-D to leave.
 
 ## Browsing the data model
 
 Every staging and intermediate model carries a description and per-column docs, sourced from the Open Finance Brasil investment API specs and referenced through shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md).
 
-Run `make docs` and open http://localhost:8080. The site lets you browse the DAG, jump between models, and read OFB spec fields, enum values, and defect handling rules per column. Docs render from `warehouse.duckdb` — run `make build` first if it's missing.
+Run `make docs` and open http://localhost:8080. The site lets you browse the DAG, jump between models, and read OFB spec fields, enum values, and defect handling rules per column. Docs render from `warehouse.duckdb`, so run `make build` first if it's missing.
 
 <img width="1828" height="927" alt="image" src="https://github.com/user-attachments/assets/0fc52a71-f6ed-4aed-8fa7-2c66e25bcb2f" />
 
