@@ -3,8 +3,8 @@
 
     Databricks (prod): each layer lands in its own schema so the layer
     boundary is also the access boundary. Grants attach to schemas:
-    consumers get decade_consumption, nobody else reads decade_staging
-    or decade_canonical. Test failures land in decade_dbt_test__audit.
+    consumers get consumption, nobody else reads staging or canonical.
+    Test failures land in dbt_test__audit.
 
     DuckDB (dev): one flat schema. The local warehouse is one file per
     developer, so schema fan-out buys no isolation and would break the
@@ -18,7 +18,7 @@
 #}
 {% macro generate_schema_name(custom_schema_name, node) -%}
     {%- if target.type == 'databricks' and custom_schema_name is not none -%}
-        {{ target.schema }}_{{ custom_schema_name | trim }}
+        {{ custom_schema_name | trim }}
     {%- else -%}
         {{ target.schema }}
     {%- endif -%}

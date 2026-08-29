@@ -127,7 +127,7 @@ This case study solution ships a two-environment slice of that target: **DuckDB 
 
 The two targets lay out schemas differently, on purpose:
 
-- **Prod fans out by layer.** On Databricks each layer lands in its own schema: `decade_staging`, `decade_canonical`, `decade_consumption`, plus `decade_dbt_test__audit` for stored test failures. That makes the layer boundary from the [Compliance](#compliance) section a grant target: consumers get `decade_consumption` and nothing else.
+- **Prod fans out by layer.** On Databricks each layer lands in its own schema: `staging`, `canonical`, `consumption`, plus `dbt_test__audit` for stored test failures. That makes the layer boundary from the [Compliance](#compliance) section a grant target: consumers get `consumption` and nothing else.
 - **Dev stays flat.** The local warehouse is one DuckDB file per developer, so schema fan-out buys no isolation there and the consumer queries keep their bare table names.
 
 The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. In that shared workspace, Asset Bundles deploy each engineer's job under their own prefix and the dev profile writes to a per-user schema, so concurrent runs from different branches cannot overwrite each other. `generate_schema_name` in [`macros/schemas.sql`](macros/schemas.sql) is the seam where that per-user prefix goes; it is documented there and deliberately not built, because the single current workspace is prod only.
