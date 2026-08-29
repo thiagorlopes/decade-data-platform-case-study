@@ -111,8 +111,7 @@ make sense once lots are aggregated by natural key):
   institution may legitimately carry a matured instrument until
   settlement clears. Only bank_fixed_incomes, credit_fixed_incomes and
   treasure_titles carry a due date, so only they raise it. Funds and
-  variable_incomes never do. Confirm a long-overdue balance with the
-  institution before showing it as investable wealth.
+  variable_incomes never do.
 
 Movement-grain, added in fct_movements:
 
