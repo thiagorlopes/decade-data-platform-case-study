@@ -7,12 +7,13 @@ SELECT
     dim.holding_name,
     fct.holding_key,
     -- plain columns are the platform's resolved, row-consistent numbers;
-    -- _reported columns are the provider's claims, for reconciliation
-    fct.unit_price,
-    fct.quantity,
-    fct.gross_amount,
-    fct.quantity_reported,
-    fct.gross_amount_reported,
+    -- _reported columns are the provider's claims, for reconciliation.
+    -- The contract keeps full precision; the page rounds for reading.
+    round(fct.unit_price::DOUBLE, 4) AS unit_price,
+    round(fct.quantity::DOUBLE, 6) AS quantity,
+    round(fct.gross_amount::DOUBLE, 2) AS gross_amount,
+    round(fct.quantity_reported::DOUBLE, 6) AS quantity_reported,
+    round(fct.gross_amount_reported::DOUBLE, 2) AS gross_amount_reported,
     fct.currency,
     fct.snapshot_created_at AS valued_at,
     fct.data_quality_flags
