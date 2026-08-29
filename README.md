@@ -94,7 +94,7 @@ Schema changes ship as versioned, replayable steps: a model change gated by its 
 
 ## Data quality: detect, resolve, guarantee
 
-Provider defects (§2.2 of the brief) split into two tiers. Within a record: a required field empty, a value in the wrong form, a legal value outside its enum, a cross-field contradiction. Across records: the same holding under two ids, holdings that freeze under a new id, a zero-then-nonzero valuation. Three layers handle them, one job each: staging detects, intermediate resolves, consumption guarantees.
+Provider defects (§2.2 of the brief) split into two tiers: within a record and across records. Three layers handle them, one job each: staging detects, intermediate resolves, consumption guarantees.
 
 Two terms recur. A **lot** is one delivered position row from a custodian sync (a row in `int_*_positions`). A **holding** aggregates lots by natural key (account + security), one row per account and security (rows in `int_*_holdings` and `fct_holdings`).
 
@@ -196,7 +196,7 @@ The check is manual instead: build twice over the same raw files and the warehou
 
 ### A Claude skill for the quality vocabulary
 
-The [data quality reference](docs/data-quality-reference.md) is nearly an agent skill already. Point Claude at the doc, add the triage queries, and an analyst gets fast answers: what a flag means, why a replay went negative, whether to trust a field, how to work a quarantined lot up to escalation. It is left out because good answers need more than the doc. They need the business domain: how each institution reports in practice, which defects matter to which consumers, and how escalation with an institution works. That knowledge comes from operating the platform, so the domain comes first and the skill after.
+The [data quality reference](docs/data-quality-reference.md) is nearly an agent skill already. Point Claude at the doc, add the triage queries, and an analyst gets fast answers: what a flag means, why a replay went negative, whether to trust a field, how to work a quarantined lot up to escalation. It is left out because a skill distills a workflow that has already repeated and stabilized. Good answers also need the business domain: how each institution reports in practice, which defects matter to which consumers, and how escalation with an institution works. Both come from operating the platform, so the operating comes first and the skill after.
 
 ### Three descriptive-field defects
 
