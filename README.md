@@ -17,7 +17,9 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 
 ## General Information
 
-This repo turns Open Finance Brasil investment snapshots into two consumption-ready fact tables (`fct_holdings`, `fct_movements`) using dbt on DuckDB. Raw parquet lands in `data/`, dbt transforms it through staging, intermediate, and consumption layers, and enforced contracts guarantee the output shape.
+The visible deliverable is under [`consumers/wealth/`](consumers/wealth/): two SQL queries and their committed CSV output, answering what one customer holds and the movements behind it. Everything else in this repo exists to make that query cheap to write and safe to trust.
+
+Two raw Open Finance Brasil feeds land in `data/`: **positions** (balance snapshots) and **transactions** (the movements behind them). dbt on DuckDB transforms both into a small consumption layer under an enforced output contract: `fct_holdings` and `fct_movements` for keys and measures, `dim_holding` for the descriptive attributes both facts join to. The wealth queries read only those three tables. A new consumer for a different question does the same, without touching raw or talking to the platform author.
 
 For architecture and design rationale, see [Target Architecture & Environments](#target-architecture--environments) and [Data quality: detect, resolve, guarantee](#data-quality-detect-resolve-guarantee) below.
 
