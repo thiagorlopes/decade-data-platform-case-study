@@ -428,9 +428,6 @@ list_distinct(lot_flags || list_filter([
     CASE WHEN has_arrived_ids AND has_departed_ids THEN 'investment_id:replaced' END,
     CASE WHEN has_incomplete_replay THEN 'movements:incomplete' END,
     CASE WHEN NOT has_incomplete_replay AND has_stale_lot THEN 'quantity_reported:stale' END,
-    -- Disclosure, not an error: the instrument's own due date has passed and
-    -- the institution still reports the position with a balance. Only the
-    -- three families that carry a due date can raise it.
     CASE WHEN due_date IS NOT NULL AND due_date < reference_date
               AND coalesce(gross_amount, 0) > 0
          THEN 'holding:matured' END
