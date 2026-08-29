@@ -77,7 +77,7 @@ The typical loop: edit a model, rebuild, then check the numbers.
 
 **`make build`** runs models + tests and writes `warehouse.duckdb`. Run it after every model edit, and before the first `make ui` or `make shell` on a fresh clone.
 
-**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. It runs the DuckDB CLI inside the container and publishes the UI port, so nothing needs to be installed on the host beyond a browser. The warehouse opens read-only. Close it before running `make build`. DuckDB is single-writer, so an open connection blocks the build.
+**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. The warehouse opens read-only. Close it before running `make build`. DuckDB is single-writer, so an open connection blocks the build.
 
 **`make shell`** opens the DuckDB CLI inside the container. Use it for quick raw SQL, or when you can't install duckdb on the host. Same rule: close it before a build. To leave the shell, type `.quit` or press Ctrl-D.
 
