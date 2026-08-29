@@ -48,8 +48,8 @@ WITH joined AS (
         bal.purchase_unit_price,
         bal.fine_amount,
         bal.late_payment_amount
-    FROM {{ latest_delivery(ref('stg_openfinance__credit_fixed_incomes_positions_detail')) }} AS det
-    FULL JOIN {{ latest_delivery(ref('stg_openfinance__credit_fixed_incomes_positions_balances')) }} AS bal
+    FROM {{ latest_lot_delivery(ref('stg_openfinance__credit_fixed_incomes_positions_detail')) }} AS det
+    FULL JOIN {{ latest_lot_delivery(ref('stg_openfinance__credit_fixed_incomes_positions_balances')) }} AS bal
         USING (snapshot_id, investment_id)
     {% if is_incremental() %}
     -- watermark rationale: README § Materializations

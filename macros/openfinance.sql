@@ -71,13 +71,12 @@ snapshot_id IN (
 )
 {%- endmacro %}
 
-{# A provider may re-deliver the same (snapshot_id, investment_id) with a
-   changed value. The latest arrival wins. Superseded copies stay visible
-   in staging and in the lot_redelivery warn ledger. Ties cannot happen
-   here: the staging grain test errors on
-   (snapshot_id, investment_id, ingested_at), so the sort always has one
-   winner. #}
-{% macro latest_delivery(staging_ref) -%}
+{# A provider may re-deliver the same lot (snapshot_id, investment_id)
+   with a changed value. The latest arrival wins. Superseded copies stay
+   visible in staging and in the lot_redelivery warn ledger. The sort
+   cannot tie: the staging grain test errors when two rows share
+   (snapshot_id, investment_id, ingested_at). #}
+{% macro latest_lot_delivery(staging_ref) -%}
 (
     SELECT * FROM {{ staging_ref }}
     QUALIFY row_number() OVER (
