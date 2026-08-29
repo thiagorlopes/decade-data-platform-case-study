@@ -1,9 +1,10 @@
-# Runs the documented install path, not a shortcut around it. `make install` and
-# `make build` are the two commands the README tells a reader to run, so this job
-# verifies those instructions rather than a CI-only variant of them.
+# This job runs the two commands the README gives the reader. `make install`
+# builds the image. `make build` runs the models and tests inside it. So CI
+# checks the instructions a reader follows, not a path only CI takes.
 #
-# The 19 warns are the staging detect tier and are expected; `dbt build` exits 0
-# on a warn, so the job stays green while the warn counts stay visible.
+# Expect 19 warns. They are the staging detect-tier rules doing their job.
+# `dbt build` exits 0 on a warn, so the job stays green and the warn counts
+# stay visible.
 name: build
 
 on:

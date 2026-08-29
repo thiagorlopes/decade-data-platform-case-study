@@ -1,8 +1,3 @@
-# Exact pins, not ranges. The image is rebuilt from scratch on every `make
-# install` and on every CI run, so a range would let a fresh resolve pick up a
-# version this project was never built against. dbt-adapters and dbt-common
-# arrive transitively through dbt-core; they are pinned too because the repo's
-# claim is a reproducible build, and a range leaves that to chance.
 dbt-core==1.9.11
 dbt-duckdb==1.9.6
 dbt-adapters==1.24.5
