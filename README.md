@@ -149,6 +149,7 @@ Layer materializations follow dbt Labs' guidance: [staging as views](https://doc
 |-------|----------------|-----|
 | staging | view | Cheap renames and casts, read only during builds; always fresh, no storage spent on models consumers never query. |
 | intermediate (positions) | incremental | Each run reprocesses whole snapshots at or past the watermark, not single rows: duplicate classification compares rows within one sync, so a late or re-delivered row is re-judged with the siblings that already landed. The `(snapshot_id, investment_id)` unique key makes re-touched rows an upsert, so repeated runs stay idempotent. |
+| intermediate (transactions) | incremental | Same watermark as positions, upserting on `transaction_id`: a re-delivered movement replaces its earlier copy, and the latest arrival wins. |
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free. Fine at sample scale; each reader also recomputes the deduplicated movement stream (about twenty macro runs per build). When volume outgrows the views, persist that stream and the holdings as tables per the progression above. |
 | consumption | table | Contract-enforced union of the five families, read by every consumer and by ad-hoc queries. Built once per run rather than recomputed on every query. |
 
