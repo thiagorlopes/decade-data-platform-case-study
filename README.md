@@ -59,19 +59,15 @@ Run `make help` for the full list, including partial variants like `make run` (m
 
 ## Querying the warehouse
 
-The typical loop: edit a model, rebuild, then check the numbers.
+The loop: edit a model, `make build`, check the numbers.
 
-**`make build`** runs models + tests and writes `warehouse.duckdb`. Run it after every model edit, and before the first `make ui` or `make shell` on a fresh clone.
+**`make build`** runs models + tests and writes `warehouse.duckdb`. Run it after every model edit, and first on a fresh clone.
 
-**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids. The warehouse opens read-only. Close it before running `make build`. DuckDB is single-writer, so an open connection blocks the build.
-
-**`make shell`** opens the DuckDB CLI inside the container: a terminal alternative to `make ui`. Same rule: close it before a build. Type `.quit` or press Ctrl-D to leave.
+**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids, all read-only. **`make shell`** opens the DuckDB CLI inside the container (`.quit` to leave). Close either before a build: DuckDB is single-writer, so an open connection blocks it.
 
 ## Browsing the data model
 
-Every staging and intermediate model carries a description and per-column docs, sourced from the Open Finance Brasil investment API specs and referenced through shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md).
-
-Run `make docs` and open http://localhost:8080. The site lets you browse the DAG, jump between models, and read OFB spec fields, enum values, and defect handling rules per column. Docs render from `warehouse.duckdb`, so run `make build` first if it's missing.
+Run `make docs` and open http://localhost:8080 to browse the DAG and read per-column docs: Open Finance Brasil spec fields, enum values, and defect handling rules. They are sourced from the OFB investment API specs through shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md). Docs render from `warehouse.duckdb`, so run `make build` first if it's missing.
 
 <img width="1828" height="927" alt="image" src="https://github.com/user-attachments/assets/0fc52a71-f6ed-4aed-8fa7-2c66e25bcb2f" />
 
@@ -134,15 +130,15 @@ This case study solution ships a two-environment slice of that target: **DuckDB 
 All the orchestrator has to do is run two commands on timers:
 
 - `dbt build`, every few minutes: matches the arrival cadence of the raw feeds. The job is watermarked and idempotent, so a repeated or overlapping run leaves the same result as a single run.
-- `dbt source freshness`, on its own cadence: pages the on-call when a feed stalls. The thresholds live in `models/_sources.yml`: warn after one quiet hour, error after six, measured on `ingested_at`. Staleness never blocks the build, so consumers keep reading correct data that is merely old. On this static sample the command always reports stale; that is the signal working against week-old data, not a defect.
+- `dbt source freshness`, on its own cadence: detects a stalled feed, the signal an alert would page on in production. Thresholds live in `models/_sources.yml`: warn after one quiet hour, error after six, on `ingested_at`. Staleness never blocks the build, so consumers keep reading correct data that is merely old. On this static sample the command always reports stale; that is the signal working, not a defect.
 
-In the Databricks target this is a two-task Workflows job. Airflow, Dagster, or cron can do the same work, because each command is self-contained: ordering, retries, and state all live in dbt and the watermark. This keeps the scheduler free of pipeline logic, so swapping it is a profile-sized change.
+In the Databricks target this is a two-task Workflows job. Airflow, Dagster, or cron can do the same work, because ordering, retries, and state live in dbt and the watermark. The scheduler stays free of pipeline logic, so swapping it is a profile-sized change.
 
 ### Two kinds of incremental
 
 Incremental means two different things in this pipeline.
 
-- **Loading raw**: picking up only the new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen before. Not implemented here: raw was handed to us as two static parquet files, so there are no "new arrivals". This is what the Databricks target above turns on.
+- **Loading raw**: picking up only new arrival files. In production, Databricks Auto Loader watches the drop folder and appends what it hasn't seen. Not implemented here: raw arrived as two static parquet files, so there are no new arrivals.
 - **Building canonical from raw**: reprocessing only the snapshots with arrivals at or past the newest one already built (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
 
 ### Materializations
@@ -151,14 +147,14 @@ Layer materializations follow dbt Labs' guidance: [staging as views](https://doc
 
 | Layer | Materialization | Why |
 |-------|----------------|-----|
-| staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
+| staging | view | Cheap renames and casts, read only during builds; always fresh, no storage spent on models consumers never query. |
 | intermediate (positions) | incremental | Each run reprocesses whole snapshots at or past the watermark, not single rows: duplicate classification compares rows within one sync, so a late or re-delivered row is re-judged with the siblings that already landed. The `(snapshot_id, investment_id)` unique key makes re-touched rows an upsert, so repeated runs stay idempotent. |
-| intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; each reader also recomputes the deduplicated movement stream (about twenty macro runs per build). When volume outgrows the views, persist that stream and the holdings as intermediate tables per the progression above. |
-| consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
+| intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free. Fine at sample scale; each reader also recomputes the deduplicated movement stream (about twenty macro runs per build). When volume outgrows the views, persist that stream and the holdings as tables per the progression above. |
+| consumption | table | Contract-enforced union of the five families, read by every consumer and by ad-hoc queries. Built once per run rather than recomputed on every query. |
 
 ### Physical layout
 
-Locally the warehouse is one 62 MB DuckDB file, and at that size no layout tuning pays for itself. The decisions below are for the Databricks target, where the canonical layer absorbs millions of records a day and layout decides how much data each query reads.
+Locally the warehouse is one 62 MB DuckDB file; at that size no layout tuning pays for itself. The decisions below are for the Databricks target, where the canonical layer absorbs millions of records a day and layout decides how much data each query reads.
 
 The layout serves four query patterns:
 
@@ -171,9 +167,9 @@ The layout serves four query patterns:
 
 Three decisions serve them:
 
-- **Cluster by customer, then time.** Both facts are Delta tables with [liquid clustering](https://docs.databricks.com/aws/en/tables/clustering): `(party_id, snapshot_created_at)` for holdings, `(party_id, transaction_date)` for movements. Every product query filters on one customer first, so file skipping cuts a point lookup to a handful of files no matter how many customers connect. We cluster instead of partitioning Hive-style because `party_id` has far too many values for a partition key: one folder per customer creates the small-file problem by design.
+- **Cluster by customer, then time.** Both facts are Delta tables with [liquid clustering](https://docs.databricks.com/aws/en/tables/clustering): `(party_id, snapshot_created_at)` for holdings, `(party_id, transaction_date)` for movements. Every product query filters on one customer first, so file skipping cuts a point lookup to a handful of files. Hive-style partitioning on `party_id` would create the small-file problem by design: one folder per customer, far too many values for a partition key.
 - **Compact toward ~128 MB files.** A build every few minutes writes small files all day. Auto compaction and optimized writes keep files near the 128 MB target, so the file count tracks data volume, not run count.
-- **Let cost grow with customers, not with history.** Storage grows linearly with connected customers. A point query reads one cluster, so its cost stays flat as customers grow. Build compute follows the arrival rate, because the watermark reprocesses only snapshots with new arrivals. At ten times the customers: ten times the storage, the same wealth-page latency, and builds still sized by arrivals per window.
+- **Let cost grow with customers, not with history.** Storage grows linearly with connected customers. A point query reads one cluster, so its cost stays flat. Build compute follows the arrival rate, because the watermark reprocesses only snapshots with new arrivals. At ten times the customers: ten times the storage, the same wealth-page latency, builds still sized by arrivals per window.
 
 ## Compliance
 
@@ -193,18 +189,16 @@ The brief asks what was left out and why. Two entries.
 
 ### A test on the watermark boundary
 
-The `>=` in `snapshot_watermark` is load-bearing. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read that batch whole on the next run. No automated test pins this. dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
+The `>=` in `snapshot_watermark` carries a correctness guarantee. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read it whole on the next run. No automated test pins this: dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
 
-The verification is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check would be a two-run CI job that builds, lands a late row carrying the boundary stamp, rebuilds, and asserts the row arrived. At this repo's scale the manual check earns its keep; that CI job is the first test to add when the loader goes live.
+The check is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check is a two-run CI job that builds, lands a late row on the boundary stamp, rebuilds, and asserts the row arrived. It is the first test to add when the loader goes live.
 
 ### Three descriptive-field defects
 
-An audit over the descriptive attributes of `dim_holding` ([details](docs/data-quality-reference.md#beyond-the-listed-defects)) found three defects there. The platform ships all three exactly as the provider sent them. Each one is real and measured below. None of them moves a number: no balance, quantity or movement total reads these fields, so the wealth math is unaffected.
+An audit over the descriptive attributes of `dim_holding` ([details](docs/data-quality-reference.md#beyond-the-listed-defects)) found three defects. The platform ships all three as the provider sent them. None moves a number: no balance, quantity or movement total reads these fields, so the wealth math is unaffected. Each fix is cheap but lost the time to work that touches the numbers a consumer acts on. The recipes are below so the next person can pick them up.
 
-Each would need a detection rule and a repair, and both are cheap. They lost the time to work that touches the numbers a consumer acts on. The recipes are written out so the next person can pick them up.
+**A placeholder value in `post_fixed_indexer_percentage`.** 1,569 admitted lot rows carry `-0.000016`, the only negative value in the feed, repeating to the last digit: a placeholder, not rounding. Every other bank and credit row carries `1.000000` or `1.020000`. It reaches 114 of the 5,296 rows in `dim_holding`. Recipe: warn on `post_fixed_indexer_percentage < 0` in `_staging_quality.yml`, then null the value and flag the row, the same shape `clean_missing_date` uses for `0001-01-01`.
 
-**A placeholder value in `post_fixed_indexer_percentage`.** 1,569 admitted lot rows carry `-0.000016`. A percentage of an indexer cannot be negative. That value is the only negative one in the feed and it repeats to the last digit, so it is a placeholder rather than a rounding artifact. Every other bank and credit row carries `1.000000` or `1.020000`. It reaches 114 of the 5,296 rows in `dim_holding`. The recipe: warn on `post_fixed_indexer_percentage < 0` in `_staging_quality.yml`, then null the value and flag the row, the same shape `clean_missing_date` already uses for `0001-01-01`.
+**Lots of one holding disagree on `indexer`.** 202 of the 5,296 rows in `dim_holding` draw from lots naming more than one indexer, most often `CDI` against `IPCA` (100 times). `arg_max(indexer, snapshot_created_at)` settles it, so the lot written last wins and the consumer never learns the lots disagreed. Recipe: raise an `indexer:unstable` flag and settle by majority vote instead of write order.
 
-**Lots of one holding disagree on `indexer`.** 202 of the 5,296 rows in `dim_holding` draw from lots that name more than one indexer. `CDI` against `IPCA` on the same security is the most common pair, 100 times. `dim_holding` resolves the disagreement with `arg_max(indexer, snapshot_created_at)`, so the lot written last wins and the consumer never learns the lots disagreed. The recipe: raise an `indexer:unstable` flag on the holding, and settle the value by majority vote instead of by write order.
-
-**Treasury indexers contradict their own product name.** A Tesouro Direto title names its indexer in its title. `Tesouro Selic 2031` ships `indexer = OUTROS`. `Tesouro IPCA+ 2029` and `Tesouro Renda+ 2044` do the same. That is 3 of the 8 treasury rows in `dim_holding`. The provider stamps `OUTROS` on a minority of the lots of every treasury title, and `arg_max` sometimes lands on one of them. 375 lot rows carry an indexer their own product name rules out. The recipe: read the indexer off the product name for Tesouro Direto, where the name is authoritative, and warn when the payload disagrees.
+**Treasury indexers contradict their own product name.** A Tesouro Direto title names its indexer in its own name, yet `Tesouro Selic 2031` ships `indexer = OUTROS`, as do `Tesouro IPCA+ 2029` and `Tesouro Renda+ 2044`: 3 of the 8 treasury rows in `dim_holding`. The provider stamps `OUTROS` on a minority of every treasury title's lots, and `arg_max` sometimes lands on one; 375 lot rows carry an indexer their own product name rules out. Recipe: read the indexer off the product name, which is authoritative for Tesouro Direto, and warn when the payload disagrees.
