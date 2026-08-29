@@ -143,15 +143,15 @@ In the Databricks target this is a two-task Workflows job. Airflow, Dagster, or 
 
 ### Materializations
 
-Layer materializations follow dbt Labs' guidance: [staging as views](https://docs.getdbt.com/best-practices/how-we-structure/2-staging) and the general progression from the [materializations best practices](https://docs.getdbt.com/best-practices/materializations/1-guide-overview): *"Start with a view. When the view gets too long to query for end users, make it a table. When the table gets too long to build, build it incrementally."*
+Materializations follow dbt Labs' guidance, [staging as views](https://docs.getdbt.com/best-practices/how-we-structure/2-staging) and the [progression](https://docs.getdbt.com/best-practices/materializations/1-guide-overview): *"Start with a view. When the view gets too long to query for end users, make it a table. When the table gets too long to build, build it incrementally."*
 
 | Layer | Materialization | Why |
 |-------|----------------|-----|
-| staging | view | Cheap renames and casts, read only during builds; always fresh, no storage spent on models consumers never query. |
-| intermediate (positions) | incremental | Each run reprocesses whole snapshots at or past the watermark, not single rows: duplicate classification compares rows within one sync, so a late or re-delivered row is re-judged with the siblings that already landed. The `(snapshot_id, investment_id)` unique key makes re-touched rows an upsert, so repeated runs stay idempotent. |
-| intermediate (transactions) | incremental | Same watermark as positions, upserting on `transaction_id`: a re-delivered movement replaces its earlier copy, and the latest arrival wins. |
-| intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free. Fine at sample scale; each reader also recomputes the deduplicated movement stream (about twenty macro runs per build). When volume outgrows the views, persist that stream and the holdings as tables per the progression above. |
-| consumption | table | Contract-enforced union of the five families, read by every consumer and by ad-hoc queries. Built once per run rather than recomputed on every query. |
+| staging | view | Cheap renames and casts, read only during builds: always fresh, no storage spent on models consumers never query. |
+| intermediate (positions) | incremental | Reprocesses whole snapshots at or past the watermark: duplicate classification compares rows within one sync, so a late or re-delivered row is re-judged with the siblings that already landed. The `(snapshot_id, investment_id)` key makes re-touched rows an upsert, so reruns stay idempotent. |
+| intermediate (transactions) | incremental | Same watermark, upserting on `transaction_id`: a re-delivered movement replaces its earlier copy, and the latest arrival wins. |
+| intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free. Fine at sample scale, though each reader recomputes the deduplicated movement stream (about twenty macro runs per build); when volume outgrows this, persist the stream and the holdings as tables per the progression above. |
+| consumption | table | Contract-enforced union of the five families, read by every consumer and ad-hoc query. Built once per run, not recomputed per query. |
 
 ### Physical layout
 
