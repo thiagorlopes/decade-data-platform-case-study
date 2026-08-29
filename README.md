@@ -132,25 +132,24 @@ Two terms recur below. A **lot** is one delivered position row from a custodian 
 dbt build (every run)
 
 raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental) ─→ CANONICAL fct ─→ consumers/
-                         DETECT                          RESOLVE                    GUARANTEE
 
-  ┌────────────────────────────┐   ┌─────────────────────────┐   ┌──────────────────────────┐
-  │ envelope (ours) → ERROR    │   │ no payload tests here   │   │ output contract → ERROR  │
-  │   not_null snapshot_id     │   │ logic instead:          │   │   not_null natural key   │
-  │   not_null investment_id   │   │   normalize forms       │   │   not_null reference_dt  │
-  │   not_null ingested_at     │   │     (strip CNPJ tail,   │   │   grain uniqueness       │
-  │   unique grain             │   │      map IPC-A → IPCA)  │   │   enums clean post-map   │
-  │   build DIES: bug is ours  │   │ build data_quality_flags│   │   build DIES: our        │
-  ├────────────────────────────┤   │     for what cannot be  │   │     resolution failed    │
-  │ payload (theirs) → WARN    │   │     repaired            │   ├──────────────────────────┤
-  │   not_null required        │   │   dedupe across records │   │ data_quality_flags → WARN│
-  │   format regex             │   └─────────────────────────┘   │   count stays visible    │
-  │   accepted_values          │                                 └──────────────────────────┘
+  ┌─ DETECT (staging) ─────────┐   ┌─ RESOLVE (intermediate) ───┐   ┌─ GUARANTEE (canonical) ────┐
+  │ envelope (ours) → ERROR    │   │ no payload tests here      │   │ output contract → ERROR    │
+  │   not_null snapshot_id     │   │ logic instead:             │   │   not_null natural key     │
+  │   not_null investment_id   │   │   normalize forms          │   │   not_null reference_dt    │
+  │   not_null ingested_at     │   │     (strip CNPJ tail,      │   │   grain uniqueness         │
+  │   unique grain             │   │      map IPC-A → IPCA)     │   │   enums clean post-map     │
+  │   build DIES: bug is ours  │   │ build data_quality_flags   │   │   build DIES: our          │
+  ├────────────────────────────┤   │     for what cannot be     │   │     resolution failed      │
+  │ payload (theirs) → WARN    │   │     repaired               │   ├────────────────────────────┤
+  │   not_null required        │   │   dedupe across records    │   │ data_quality_flags → WARN  │
+  │   format regex             │   └────────────────────────────┘   │   count stays visible      │
+  │   accepted_values          │                                    └────────────────────────────┘
   │   cross-field rules        │
   │   store_failures: true     │
   └────────────────────────────┘
-              │
-              ▼
+                │
+                ▼
    main_dbt_test__audit.*  ◀── provider defect ledger (row-level, queryable)
 ```
 
