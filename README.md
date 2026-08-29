@@ -7,7 +7,6 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 ## Table of Contents
 
 **[General information](#general-information)**<br>
-**[Prerequisites](#prerequisites)**<br>
 **[Installation](#installation)**<br>
 **[Development cycle](#development-cycle)**<br>
 **[Querying the warehouse](#querying-the-warehouse)**<br>
@@ -25,17 +24,9 @@ The visible deliverable is under [`consumers/wealth/`](consumers/wealth/): two S
 
 Two raw Open Finance Brasil feeds land in `data/`: **positions** (balance snapshots) and **transactions** (the movements behind them). dbt on DuckDB transforms both into a small consumption layer under an enforced output contract: `fct_holdings` and `fct_movements` for keys and measures, `dim_holding` for the descriptive attributes both facts join to. The wealth queries read only those three tables. A new consumer for a different question does the same, without touching raw or talking to the platform author.
 
-For design rationale, see [Data quality: detect, resolve, guarantee](#data-quality-detect-resolve-guarantee) and [Architecture and operations](#architecture-and-operations) below.
-
-## Prerequisites
-
-- Docker Engine with Docker Compose v2
-- `make` and `git`
-- Python 3.11+ (only if you want to run notebooks or scoped `dbt` commands on the host)
-
 ## Installation
 
-Build the docker image. This is all you need to run the pipeline end-to-end:
+You need Docker Engine with Docker Compose v2, `make`, and `git`. Build the docker image; this is all you need to run the pipeline end-to-end:
 
 ```bash
 make install
@@ -43,21 +34,12 @@ make install
 
 The image ships Python, dbt, and the DuckDB CLI. The `make` targets drive the whole pipeline from inside the container.
 
-### Optional: host-side Python environment
-
-Set up a local venv if you want to:
-
-- run the notebooks under `notebooks/` (they are dev-only and stay out of the image), or
-- run scoped dbt commands on the host, for example `dbt build --select <model>+`.
+Optional: to run the notebooks under `notebooks/` or scoped dbt commands on the host (for example `dbt build --select <model>+`), set up a venv with Python 3.11+:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-dbt deps                       # dbt_packages/ is gitignored; a fresh clone has none
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt && dbt deps
 ```
-
-`requirements.txt` pins the same `dbt` and `duckdb` versions the image uses, plus `notebook` and `pandas` for the notebooks. One venv covers both cases.
 
 ## Development cycle
 
@@ -93,8 +75,6 @@ Run `make docs` and open http://localhost:8080. The site lets you browse the DAG
 
 <img width="1828" height="927" alt="image" src="https://github.com/user-attachments/assets/0fc52a71-f6ed-4aed-8fa7-2c66e25bcb2f" />
 
-<img width="1898" height="972" alt="image" src="https://github.com/user-attachments/assets/d09a46c7-526f-417b-baf8-16c565e4b369" />
-
 ## Consumers
 
 The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL queries over the consumption layer, never raw or staging.
@@ -121,6 +101,8 @@ On every `dbt build`, dbt compares the compiled output of `fct_holdings` and `fc
 - a **new column appears** without being declared
 
 What this means for consumers: the output of `make build` always matches the contract file. Teams can develop against the declared columns and types without talking to the platform team. A platform-side refactor cannot break a consumer silently. It either preserves the contract, or it must update the contract file in the same PR. That file change is the review signal.
+
+Schema changes therefore ship as versioned, replayable steps: a model change in git, gated by its contract change in the same PR, replayed over history with `make clean && make build`.
 
 ## Data quality: detect, resolve, guarantee
 
@@ -178,15 +160,9 @@ The full reference lives in [`docs/data-quality-reference.md`](docs/data-quality
 
 ## Architecture and operations
 
-Decade runs its data workflows on Databricks, so the target architecture for this case is Databricks-native. The shape below is what production could look like, and the case is designed so the work could be transferred if considered appropriate by the Decade Data Team.
+Decade runs its data workflows on Databricks, so the target architecture for this case is Databricks-native, following the Databricks [developer best practices](https://docs.databricks.com/gcp/en/developers/best-practices): git is the source of truth, and CI/CD gates promotion between environments. The shape below is what production could look like, and the case is designed so the work could be transferred if considered appropriate by the Decade Data Team.
 
 <img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
-
-It follows the Databricks [developer best practices](https://docs.databricks.com/gcp/en/developers/best-practices). The doc scales workspace count to team size: two workspaces (dev/prod) for teams up to five engineers, three (dev/staging/prod) beyond that.
-
-Git is the source of truth ("if it isn't in version control, it doesn't exist"), and CI/CD gates promotion between environments. The diagrams below are the doc's illustration of one such production deployment workflow at scale, included here for reference rather than as the shape this case commits to:
-
-<img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 
 This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required; the same dbt models run against Databricks when promoted. The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. That way, we would be able to close one tradeoff this shortcut carries: SQL dialect drift between the two engines.
 
@@ -213,7 +189,7 @@ Layer materializations follow dbt Labs' guidance: [staging as views](https://doc
 | Layer | Materialization | Why |
 |-------|----------------|-----|
 | staging | view | Cheap renames/casts read only by the next layer during builds; always fresh, no storage spent on models consumers never query. |
-| intermediate (positions) | incremental | Each run reprocesses every snapshot that received an arrival at or past the watermark (`ingested_at`, the arrival time), whole, not row by row. Duplicate classification compares rows within one sync, so a late or re-delivered row must be re-judged with the siblings that already landed; `unique_key (snapshot_id, investment_id)` makes the re-touched rows an upsert, so repeated runs stay idempotent. When a lot is re-delivered with a changed value, the `latest_lot_delivery` macro keeps only the newest arrival of each lot before the join. Replay after a transform fix: `dbt build --full-refresh`. |
+| intermediate (positions) | incremental | Each run reprocesses whole snapshots at or past the watermark, not single rows: duplicate classification compares rows within one sync, so a late or re-delivered row is re-judged with the siblings that already landed. The `(snapshot_id, investment_id)` unique key makes re-touched rows an upsert, so repeated runs stay idempotent. |
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; each reader also recomputes the deduplicated movement stream (about twenty macro runs per build). When volume outgrows the views, persist that stream and the holdings as intermediate tables per the progression above. |
 | consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
 
@@ -240,11 +216,11 @@ Three decisions serve them:
 
 The sample is synthetic, so the repo can commit query outputs (`consumers/wealth/output/`); production outputs never land in git. In production every field is personal financial data under LGPD, Brazil's data protection law, and five boundaries would apply:
 
-- **The layer boundary is the access boundary.** Raw and staging hold provider payloads verbatim and stay locked to the pipeline's service principal. Consumers get Unity Catalog grants on the consumption schema only. The rule "consumers read consumption, never raw" stops being a convention and becomes an ACL.
-- **Consumption is pseudonymous.** `party_id`, `account_id`, and `investment_id` are opaque UUIDs end to end. The consumption layer carries product attributes (fund names, issuer CNPJs, tickers) and no customer names or personal documents. Re-identification requires the customer registry, which lives outside this platform.
-- **Erasure is a clustered delete, then a purge.** LGPD gives customers the right to have their data deleted on request. The facts cluster on `party_id`, so step one is a targeted `DELETE` that touches only that customer's files; the same key that serves the wealth page serves erasure. A `DELETE` alone is not erasure: the rows survive in raw, in staging, and in Delta time travel. Full erasure also purges the raw and staging copies, runs `VACUUM` past the retention window so old table versions forget the rows, and lets backups expire on a stated schedule.
-- **Consent bounds what the pipeline may hold.** Open Finance consent has a scope and an expiry. When a customer revokes it, ingestion stops for that connection and the erasure path runs. Raw is kept only as long as reprocessing needs it, then purged on a stated retention window. Data serves the consented purpose only; a new use, such as model training, needs a new legal basis.
-- **Access is logged; data stays encrypted and in Brazil.** Unity Catalog audit logs record every read of the consumption schema. Encryption in transit and at rest is the platform default. Data stays in a Brazilian region, where the customers and their Open Finance consent live.
+- **The layer boundary is the access boundary.** Raw and staging hold provider payloads verbatim and stay locked to the pipeline's service principal. Consumers get Unity Catalog grants on the consumption schema only, so "consumers read consumption, never raw" becomes an ACL, not a convention.
+- **Consumption is pseudonymous.** `party_id`, `account_id`, and `investment_id` are opaque UUIDs end to end. The layer carries product attributes, never customer names or personal documents. Re-identification requires the customer registry, which lives outside this platform.
+- **Erasure is a clustered delete, then a purge.** The facts cluster on `party_id`, so the same key that serves the wealth page serves a targeted `DELETE`. That alone is not erasure: the rows survive in raw, in staging, and in Delta time travel. Full erasure also purges those copies, runs `VACUUM` past the retention window, and lets backups expire on a stated schedule.
+- **Consent bounds what the pipeline may hold.** Open Finance consent has a scope and an expiry. Revocation stops ingestion for that connection and triggers the erasure path. Raw is kept only as long as reprocessing needs it. A new use, such as model training, needs a new legal basis.
+- **Access is logged; data stays encrypted and in Brazil.** Unity Catalog audit logs record every read of the consumption schema. Encryption in transit and at rest is the platform default. Data stays in a Brazilian region, with the customers and their consent.
 
 These five boundaries are the platform's technical measures. The organizational side of LGPD (a data protection officer, records of processing, incident response) lives outside this repo.
 
