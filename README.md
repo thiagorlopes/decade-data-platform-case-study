@@ -189,7 +189,7 @@ The brief asks what was left out and why. Two entries.
 
 ### A test on the watermark boundary
 
-The `>=` in `snapshot_watermark` is load-bearing. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read it whole on the next run. No automated test pins this: dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
+The `>=` in `snapshot_watermark` carries a correctness guarantee. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read it whole on the next run. No automated test pins this: dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
 
 The check is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check is a two-run CI job that builds, lands a late row on the boundary stamp, rebuilds, and asserts the row arrived. It is the first test to add when the loader goes live.
 
