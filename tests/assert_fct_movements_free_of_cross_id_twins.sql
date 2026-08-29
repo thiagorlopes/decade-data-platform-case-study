@@ -15,6 +15,9 @@ WITH ids_live_together AS (
         AND lot_a.natural_key   = lot_b.natural_key
         AND lot_a.investment_id < lot_b.investment_id
     WHERE lot_a.admission = 'admit' AND lot_b.admission = 'admit'
+      -- real lots share one price per sync: different quantities must
+      -- differ in gross. Mirrors ids_live_together in cross_id_movements.
+      AND lot_a.gross_amount IS DISTINCT FROM lot_b.gross_amount
     {{ 'UNION' if not loop.last }}
     {% endfor %}
 ),

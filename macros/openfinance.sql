@@ -195,9 +195,11 @@ FROM classified
      - Two movements are the same event if they agree on every business
        field (holding, date, type, quantity, amount, currency).
      - Same event, one id delivered twice: keep one.
-     - Same event, two ids ever admitted together in one sync (real lots,
-       flagged investment_id:multiple): keep both. Identical movements
-       across real lots are real repeats.
+     - Same event, two ids ever admitted together in one sync with
+       different gross amounts (real lots, flagged investment_id:multiple):
+       keep both. Identical movements across real lots are real repeats.
+       The gross condition blocks placeholder-quantity copies from
+       counting as lots.
      - A movement with no identical twin: always kept. Under a replaced
        id, the retired id may hold the only record of old history.
 
@@ -217,8 +219,11 @@ FROM classified
         GROUP BY investment_id
     ),
 
-    -- id pairs the provider counted as money at the same moment:
-    -- two real lots of one holding, never one record and its copy
+    -- id pairs the provider counted as money at the same moment: real
+    -- lots of one holding, never one record and its copy. Lots share one
+    -- price per sync, so real lots with different quantities must differ
+    -- in gross; identical gross betrays a duplicated record whose
+    -- quantity is a placeholder (README, placeholder quantity defect).
     ids_live_together AS (
         SELECT DISTINCT lot_a.investment_id AS id_a, lot_b.investment_id AS id_b
         FROM {{ positions_ref }} AS lot_a
@@ -228,6 +233,7 @@ FROM classified
             AND lot_a.natural_key   = lot_b.natural_key
             AND lot_a.investment_id < lot_b.investment_id
         WHERE lot_a.admission = 'admit' AND lot_b.admission = 'admit'
+          AND lot_a.gross_amount IS DISTINCT FROM lot_b.gross_amount
     ),
 
     movements AS (

@@ -260,6 +260,7 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 | `'IPC-A'` for `'IPCA'` (plausible market spelling) | Legal value outside the enumeration | `clean_indexer` | none, fully repaired | 2 |
 | `1970-01-01` placeholder dates (Unix epoch zero) on transaction dates | Required field arriving empty | `clean_missing_date` | `missing:transaction_date` on `fct_movements` | 3 001 |
 | CNPJ with decimal tail (`92894922000108.00`) | Right concept, wrong form (named) | `clean_cnpj` | none, fully repaired | 1 370 |
+| `9900` placeholder quantity on duplicated position records | Required field arriving empty | co-admission rule in `cross_id_movements` | `gross:price_mismatch` | 1 722 |
 
 **Unlisted classes, all zero hits.** Nine defect classes the brief does not name and the sample does not contain. Zero hits shows the seeding stuck to the announced classes. It does not prove these defects are absent in production. In production, each would become a warn test in `_staging_quality.yml`. The sample does not justify permanent tests for data that is not there.
 
