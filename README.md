@@ -1,6 +1,10 @@
 # Decade Data Platform Case Study
 
+[![build](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml/badge.svg)](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml)
+
 This repository contains Thiago Portugues's solution for the hiring process at Decade.
+
+Every push runs `make install` and `make build` on a clean runner, so the test tally quoted throughout this README is reproduced from scratch rather than asserted.
 
 ## Table of Contents
 
@@ -46,6 +50,7 @@ Set up a local venv if you want to:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+dbt deps                       # dbt_packages/ is gitignored; a fresh clone has none
 ```
 
 `requirements.txt` pins the same `dbt` and `duckdb` versions the image uses, plus `notebook` and `pandas` for the notebooks. One venv covers both cases.
@@ -62,7 +67,7 @@ Run `make install` once, then `make build`. Everything else works from the built
 | `make ui` / `make shell` | Query the warehouse. Both need a built warehouse. See [Querying the warehouse](#querying-the-warehouse). |
 | `make clean` | Wipe the warehouse and dbt artifacts. Use when state gets stuck. |
 
-Run `make help` for the full list, including partial variants like `make run` (models only) and `make test` (tests only).
+Run `make help` for the full list, including partial variants like `make run` (models only), `make test` (tests only), and `make deps` (install dbt packages; every compiling target runs it first).
 
 `make build` is idempotent. Canonical models are incremental, keyed on `(snapshot_id, investment_id)` with an `ingested_at` watermark, so reruns only process snapshots at or past the newest arrival. To reprocess everything after a transform change, run `make clean && make build`. This equals `dbt build --full-refresh` on a fresh warehouse.
 
