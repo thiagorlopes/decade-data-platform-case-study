@@ -68,4 +68,6 @@ with_natural_key AS (
     ('isin_code IS NULL',     'missing:isin_code'),
     ('indexer IS NULL',       'missing:indexer'),
     ('purchase_date IS NULL', 'missing:purchase_date'),
+    ('net_amount > gross_amount + 0.01', 'net:above_gross'),
+    ('abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
 ]) }}

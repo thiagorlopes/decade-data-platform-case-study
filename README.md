@@ -203,6 +203,8 @@ Every flag follows the shape `family:detail`, so a consumer selects a whole clas
 | Lot | `missing:<column>` | A spec-required column arrived empty and could not be repaired (`missing:indexer`, `missing:isin_code`, ...). |
 | Lot | `missing:natural_key` | The record has no identity to merge on. It becomes its own holding, keyed by its investment_id. |
 | Lot | `zero:duplicate_dropped` | The sync delivered two copies of the lot, one live and one zero. The live copy was kept; the zero copy was dropped. |
+| Lot | `net:above_gross` | The payload's net exceeds its gross. One of the two is wrong; both are kept as delivered. Do not trust net on this row. |
+| Lot | `gross:price_mismatch` | The payload's gross disagrees with its own quantity times unit price. All three fields are kept as delivered. |
 | Holding | `investment_id:multiple` | The provider keeps two or more live position records for the security at once. The holding sums them. |
 | Holding | `investment_id:replaced` | The provider retired one id and issued a new one for the same security. Both ids resolve to the same holding, so its movements and replay follow it across the replacement. |
 | Holding | `zero:lot_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `zero:duplicate_dropped`. |
@@ -213,6 +215,22 @@ Every flag follows the shape `family:detail`, so a consumer selects a whole clas
 | Movement | `duplicate:cross_id` | The provider re-delivered this movement under another investment_id of the same holding, with a fresh transaction_id. This copy stands for the copies; its twins were dropped. |
 
 The long-form version of each entry lives in the [`data_quality_flags` doc block](models/canonical/_docs.md) and renders on every column that carries it via `make docs`.
+
+#### Field trust at a glance
+
+Every field earns its treatment from evidence, not hope. Quantity is a
+write-once field in this feed (zero of ten thousand raw position records
+ever update it), so the platform recalculates it from the movements ledger
+and publishes the resolved number as `quantity_best`. Prices update every
+sync and drive gross, so `unit_price` is exposed as the maintained half of
+the provider's valuation. Gross and net stay as the provider's marks, on
+the provider's own basis, with that basis disclosed in the contract; they
+cannot be recomputed without inventing data, but they can be cross-checked
+against the record itself, and the `net:above_gross` and
+`gross:price_mismatch` flags carry the verdicts. The rule behind the
+table: recalculate what an independent source can prove, quote and
+disclose what only the provider knows, and contradiction-check everything
+inside the record.
 
 #### Quarantine runbook
 

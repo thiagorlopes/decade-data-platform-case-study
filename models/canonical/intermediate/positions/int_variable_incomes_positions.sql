@@ -52,4 +52,5 @@ with_natural_key AS (
 {{ resolve_duplicate_investments(extra_flags=[
     ('ticker IS NULL',    'missing:ticker'),
     ('isin_code IS NULL', 'missing:isin_code'),
+    ('abs(gross_amount::DOUBLE - quantity::DOUBLE * closing_price::DOUBLE / coalesce(price_factor::DOUBLE, 1)) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
 ]) }}

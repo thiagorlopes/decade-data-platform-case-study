@@ -56,4 +56,6 @@ with_natural_key AS (
     ('fund_cnpj IS NULL',      'missing:fund_cnpj'),
     ('gross_amount IS NULL',   'missing:gross_amount'),
     ('quota_quantity IS NULL', 'missing:quota_quantity'),
+    ('net_amount > gross_amount + 0.01', 'net:above_gross'),
+    ('abs(gross_amount::DOUBLE - quota_quantity::DOUBLE * quota_gross_price::DOUBLE) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:price_mismatch'),
 ]) }}

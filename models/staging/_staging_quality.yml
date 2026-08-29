@@ -480,6 +480,16 @@ models:
     data_tests:
       - *lot_grain
       - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_bank_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_bank_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -552,6 +562,16 @@ models:
     data_tests:
       - *lot_grain
       - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_credit_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_credit_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -599,6 +619,16 @@ models:
     data_tests:
       - *lot_grain
       - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_funds_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_funds_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quota_quantity::DOUBLE * quota_gross_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -638,6 +668,16 @@ models:
     data_tests:
       - *lot_grain
       - *lot_redelivery
+      # net of taxes and fees can never exceed gross
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_balances_net_le_gross
+          expression: "net_amount <= gross_amount + 0.01"
+          config: *dq_warn_stored
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_treasure_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * updated_unit_price::DOUBLE) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id
@@ -676,6 +716,11 @@ models:
     data_tests:
       - *lot_grain
       - *lot_redelivery
+      # the record's own valuation identity: gross is quantity times unit price
+      - dbt_utils.expression_is_true:
+          name: dq_variable_balances_gross_is_qty_x_price
+          expression: "abs(gross_amount::DOUBLE - quantity::DOUBLE * closing_price::DOUBLE / coalesce(price_factor::DOUBLE, 1)) <= greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)"
+          config: *dq_warn_stored
     columns:
       - *env_snapshot_id
       - *env_investment_id

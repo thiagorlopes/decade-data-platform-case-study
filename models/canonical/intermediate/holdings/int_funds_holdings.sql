@@ -29,6 +29,10 @@ lots AS (
         sum(gross_amount)                               AS gross_amount,
         sum(net_amount)                                 AS net_amount,
         any_value(currency)                AS currency,
+        coalesce(
+            CAST(sum(quota_quantity::DOUBLE * quota_gross_price::DOUBLE) / nullif(sum(quota_quantity::DOUBLE), 0) AS DECIMAL(38, 10)),
+            CAST(avg(quota_gross_price::DOUBLE) AS DECIMAL(38, 10))
+        )                                               AS unit_price,
         count(*)                                        AS n_investment_ids,
         array_agg(admitted.investment_id ORDER BY admitted.investment_id) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,
@@ -68,6 +72,7 @@ SELECT
     gross_amount,
     net_amount,
     currency,
+    unit_price,
     n_investment_ids,
     investment_ids,
     {{ holding_data_quality_flags() }} AS data_quality_flags

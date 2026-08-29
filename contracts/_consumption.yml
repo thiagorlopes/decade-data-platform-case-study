@@ -104,12 +104,18 @@ models:
       - name: quantity_derived
         data_type: decimal(38,10)
         description: '{{ doc("dq_quantity_derived") }}'
+      - name: quantity_best
+        data_type: decimal(38,10)
+        description: '{{ doc("dq_quantity_best") }}'
       - name: gross_amount
         data_type: decimal(38,10)
-        description: '{{ doc("ofb_gross_amount") }} Summed over the holding''s admitted lots.'
+        description: '{{ doc("ofb_gross_amount") }} Summed over the holding''s admitted lots. The provider computes it on its own basis, which for stale:quantity holdings includes its frozen quantity; quantity_best * unit_price gives a movements-consistent value on the same prices.'
       - name: net_amount
         data_type: decimal(38,10)
-        description: '{{ doc("ofb_net_amount") }} Summed over the holding''s admitted lots. NULL for variable incomes: the position payload for that family carries no net_amount.'
+        description: '{{ doc("ofb_net_amount") }} Summed over the holding''s admitted lots. NULL for variable incomes: the position payload for that family carries no net_amount. Same basis caveat as gross_amount; a payload where net contradicts gross carries net:above_gross.'
+      - name: unit_price
+        data_type: decimal(38,10)
+        description: '{{ doc("dq_unit_price") }}'
       - name: currency
         data_type: varchar
         description: '{{ doc("ofb_currency") }}'

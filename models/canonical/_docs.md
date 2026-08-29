@@ -47,6 +47,14 @@ Lot-grain, added in int_*_positions:
   carries this flag; the zero copy was dropped (see `reject_zero_duplicate` in
   admission). The holding's number is stable even though the raw feed
   disagreed.
+- `net:above_gross`: the payload's net_amount exceeds its gross_amount.
+  Net of taxes and fees can never exceed gross, so one of the two is
+  wrong and there is no way to tell which. Both are kept as delivered;
+  do not trust net on this row.
+- `gross:price_mismatch`: the payload's gross_amount disagrees with its
+  own quantity times unit price beyond a 0.5% tolerance. One of the
+  three fields is wrong and there is no way to tell which. All are kept
+  as delivered.
 
 Holding-grain, added in int_*_holdings (cross-sync signals that only
 make sense once lots are aggregated by natural key):
@@ -86,6 +94,23 @@ Movement-grain, added in fct_movements:
   int_*_transactions. Ids that were admitted together in some sync are
   distinct live lots (investment_id:multiple), and identical movements
   across those are real repeats, never collapsed.
+{% enddocs %}
+
+{% docs dq_quantity_best %}
+The resolved quantity, one rule for every consumer: `quantity_derived`
+unless the replay is untrustworthy (`movements:incomplete`), then the
+provider's `quantity`. Read this column unless you need a specific basis;
+it is the number the wealth page shows.
+{% enddocs %}
+
+{% docs dq_unit_price %}
+The provider's price per unit at the sync, conformed per family
+(updatedUnitPrice for bank, credit and treasury records, the quota gross
+price for funds, closingPrice over the price factor for variable incomes)
+and quantity-weighted across the holding's admitted lots. Unlike the
+frozen quantity, prices update every sync and drive gross_amount, so this
+is the maintained half of the provider's valuation. `quantity_best *
+unit_price` is a movements-consistent value on the provider's own prices.
 {% enddocs %}
 
 {% docs dq_quantity_derived %}
