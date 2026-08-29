@@ -213,11 +213,39 @@ Every flag follows the shape `subject:verdict`: the prefix names the column or e
 | Holding | `lot:zero_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `lot:zero_copy_dropped`. |
 | Holding | `gross:zero_transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
 | Holding | `quantity_reported:stale` | The balance quantity disagrees with the quantity replayed from movements. The plain quantity column already prefers the replay; the provider's number stays in `quantity_reported`. |
-| Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity, with a caveat. |
+| Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity and caveat it. The feed serves only recent history, so gaps are expected ([why](#the-feed-serves-only-recent-history)). |
+| Holding | `holding:matured` | The due date has passed and the institution still reports a balance. This flag discloses a fact. It changes no number. Only the three families that carry a due date raise it. |
 | Movement | `transaction_date:missing` | No usable movement date. The movement counts in totals but has no place on a timeline. |
 | Movement | `transaction_id:reissued` | The provider re-delivered this movement under another investment_id of the same holding, with a fresh transaction_id. This copy stands for the copies; its twins were dropped. |
 
 The long-form version of each entry lives in the [`data_quality_flags` doc block](models/canonical/_docs.md) and renders on every column that carries it via `make docs`.
+
+#### The feed serves only recent history
+
+The transactions endpoint returns a bounded slice of history. That limit
+is how a replay can go negative with nobody at fault, so
+`movements:incomplete` is usually a gap in the feed rather than an error
+by the provider.
+
+Three facts measured on this sample:
+
+- Every holding carries its opening acquisition at its true date, back to 2019.
+- 99.6% of third-and-later movements land on or after 2025-08-19.
+- The syncs run from 2026-07-28 to 2026-08-21, so that start date is a trailing twelve months.
+
+The feed never serves trades struck between the purchase and the start of
+that window. A ledger can therefore show a sell whose matching buy is
+missing, and the replay runs negative through no fault of the data. All
+1,094 occurrences are that case. None is a holding with no receipts at all.
+
+The platform refuses rather than guesses. A holding whose replay is
+infeasible keeps the provider's `quantity`, carries `movements:incomplete`,
+and tells the consumer so. It does not publish a derived number it cannot
+support.
+
+Breakage tracks how many movements are visible, not how old the purchase
+is. The flag never fires on holdings with one or two movements, and it
+reaches 49% at six or more.
 
 #### Field trust at a glance
 
@@ -280,6 +308,8 @@ The brief warns that "an institution respecting [the spec] is a hope, not a guar
 
 The last probe is also a modeling finding. Quantities never move in the sample. Every seeded across-record defect keys on "quantity unchanged" because quantity is the only invariant the sample offers.
 
+**Unlisted classes found and left unhandled.** A third audit ran over the descriptive attributes of `dim_holding` and found three defects there. The platform ships all three as they arrive. They are measured and written up under [Deliberately left out: three descriptive-field defects](#deliberately-left-out-three-descriptive-field-defects).
+
 ### Materializations
 
 Layer materializations follow dbt Labs' guidance — [staging as views](https://docs.getdbt.com/best-practices/how-we-structure/2-staging) and the general progression from the [materializations best practices](https://docs.getdbt.com/best-practices/materializations/1-guide-overview): *"Start with a view. When the view gets too long to query for end users, make it a table. When the table gets too long to build, build it incrementally."*
@@ -336,3 +366,15 @@ Incremental means two different things in this pipeline.
 The `>=` in `snapshot_watermark` is load-bearing. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read that batch whole on the next run. No automated test pins this. dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
 
 The verification is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check would be a two-run CI job that builds, lands a late row carrying the boundary stamp, rebuilds, and asserts the row arrived. At this repo's scale the manual check earns its keep; that CI job is the first test to add when the loader goes live.
+
+### Deliberately left out: three descriptive-field defects
+
+The audit found three defects in the descriptive attributes of `dim_holding`. The platform ships all three exactly as the provider sent them. Each one is real and measured below. None of them moves a number: no balance, quantity or movement total reads these fields, so the wealth math is unaffected.
+
+Each would need a detection rule and a repair, and both are cheap. They lost the time to work that touches the numbers a consumer acts on. The recipes are written out so the next person can pick them up.
+
+**A placeholder value in `post_fixed_indexer_percentage`.** 1,569 admitted lot rows carry `-0.000016`. A percentage of an indexer cannot be negative. That value is the only negative one in the feed and it repeats to the last digit, so it is a placeholder rather than a rounding artifact. Every other bank and credit row carries `1.000000` or `1.020000`. It reaches 114 of the 5,296 rows in `dim_holding`. The recipe: warn on `post_fixed_indexer_percentage < 0` in `_staging_quality.yml`, then null the value and flag the row, the same shape `clean_missing_date` already uses for `0001-01-01`.
+
+**Lots of one holding disagree on `indexer`.** 202 of the 5,296 rows in `dim_holding` draw from lots that name more than one indexer. `CDI` against `IPCA` on the same security is the most common pair, 100 times. `dim_holding` resolves the disagreement with `arg_max(indexer, snapshot_created_at)`, so the lot written last wins and the consumer never learns the lots disagreed. The recipe: raise an `indexer:unstable` flag on the holding, and settle the value by majority vote instead of by write order.
+
+**Treasury indexers contradict their own product name.** A Tesouro Direto title names its indexer in its title. `Tesouro Selic 2031` ships `indexer = OUTROS`. `Tesouro IPCA+ 2029` and `Tesouro Renda+ 2044` do the same. That is 3 of the 8 treasury rows in `dim_holding`. The provider stamps `OUTROS` on a minority of the lots of every treasury title, and `arg_max` sometimes lands on one of them. 375 lot rows carry an indexer their own product name rules out. The recipe: read the indexer off the product name for Tesouro Direto, where the name is authoritative, and warn when the payload disagrees.

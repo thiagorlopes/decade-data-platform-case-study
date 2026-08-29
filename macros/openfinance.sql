@@ -396,7 +396,8 @@ holding AS (
    (investment_id:multiple, lot:zero_kept, gross:zero_transient,
    investment_id:replaced) and the replay verdicts
    (movements:incomplete, quantity_reported:stale). A holding that carries
-   neither replay verdict has a quantity the movements confirm. --- #}
+   neither replay verdict has a quantity the movements confirm. It also
+   raises the informational holding:matured disclosure. --- #}
 {% macro holding_timeline() -%}
 timeline AS (
     SELECT
@@ -426,6 +427,12 @@ list_distinct(lot_flags || list_filter([
     -- The provider reissued investment_ids for the same holding.
     CASE WHEN has_arrived_ids AND has_departed_ids THEN 'investment_id:replaced' END,
     CASE WHEN has_incomplete_replay THEN 'movements:incomplete' END,
-    CASE WHEN NOT has_incomplete_replay AND has_stale_lot THEN 'quantity_reported:stale' END
+    CASE WHEN NOT has_incomplete_replay AND has_stale_lot THEN 'quantity_reported:stale' END,
+    -- Disclosure, not an error: the instrument's own due date has passed and
+    -- the institution still reports the position with a balance. Only the
+    -- three families that carry a due date can raise it.
+    CASE WHEN due_date IS NOT NULL AND due_date < reference_date
+              AND coalesce(gross_amount, 0) > 0
+         THEN 'holding:matured' END
 ], f -> f IS NOT NULL))
 {%- endmacro %}

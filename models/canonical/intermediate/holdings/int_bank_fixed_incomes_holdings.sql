@@ -29,6 +29,7 @@ lots AS (
             CAST(sum(quantity::DOUBLE * updated_unit_price::DOUBLE) / nullif(sum(quantity::DOUBLE), 0) AS DECIMAL(38, 10)),
             CAST(avg(updated_unit_price::DOUBLE) AS DECIMAL(38, 10))
         )                                               AS unit_price,
+        max(due_date)                                   AS due_date,
         count(*)                                        AS n_investment_ids,
         array_agg(admitted.investment_id ORDER BY admitted.investment_id) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,
