@@ -1,13 +1,22 @@
 version: 2
 
-# Pins the cross-id dedup semantics with concrete examples, independent of
-# the cross_id_movements implementation. One family (funds) carries the
-# fixtures; the macro is family-agnostic, so the other inputs stay empty.
-# Four behaviors, one holding each:
-#   H_a  twin re-issued across syncs      -> first-delivered survives, flagged
-#   H_b  co-admitted pair, differing gross -> real lots, both copies kept
-#   H_c  co-admitted pair, identical gross -> placeholder copy, collapsed
-#   H_d  equal ingested_at                 -> lowest investment_id survives
+# Unit test for the cross-id dedup. It feeds fixed input rows to
+# fct_movements and checks the exact output. The expected rows state the
+# rules the cross_id_movements macro must follow, so the test fails when
+# the behavior changes, no matter how the macro is written.
+#
+# The macro treats every family the same way. One family (funds) carries
+# the fixture rows; the inputs of the other families stay empty.
+#
+# Four cases, one holding each:
+# - H_a: the same movement arrives again under a second id, in a later
+#   sync. The copy that arrived first survives and carries the flag.
+# - H_b: two ids were admitted in the same sync with different gross
+#   amounts. They are two real lots, so both copies stay, with no flag.
+# - H_c: two ids were admitted in the same sync with the same gross
+#   amount. One is a copy of the other, so the movements collapse to one.
+# - H_d: both copies arrived at the same instant. The lowest
+#   investment_id survives.
 unit_tests:
   - name: cross_id_dedup_semantics
     model: fct_movements
