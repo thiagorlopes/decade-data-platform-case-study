@@ -10,11 +10,13 @@ version: 2
 # The resolution treats every family the same way. Funds carries the
 # fixtures; the other families stay empty.
 #
-# Three holdings, reported quantity 10 and unit price 2 on all:
-# - Q_a: a trusted replay of 4 wins over the reported 10. Gross follows.
-# - Q_b: no replay at all falls back to the reported 10.
-# - Q_c: movements:incomplete means the replay of 7 is untrustworthy.
-#   The reported 10 wins and gross follows it.
+# Three holdings, reported quantity 10 and unit price 2 on all. Each
+# line states the situation, then the quantity the contract must carry:
+# - Q_a: the replay says 4 and nothing distrusts it. The 4 wins over
+#   the reported 10, and gross follows.
+# - Q_b: there is no replay. The reported 10 fills in.
+# - Q_c: the replay says 7, but the holding carries
+#   movements:incomplete. The reported 10 wins, and gross follows it.
 unit_tests:
   - name: quantity_resolution
     model: fct_holdings

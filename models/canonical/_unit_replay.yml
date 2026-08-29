@@ -11,28 +11,33 @@ version: 2
 # Every fixture lot is admitted and no movement has a cross-id twin; the
 # cross-id dedup is pinned by its own test.
 #
-# Eleven holdings, one natural key each:
+# Eleven holdings, one natural key each. Each line states the
+# situation, then the flags the holding must carry:
 # - NK_ok: buys and sells replay to the reported quantity. No flags.
 # - NK_st: the replay disagrees with the reported quantity. The holding
 #   carries stale:quantity and the derived quantity.
-# - NK_lb: a buy whose date the provider lost sorts before everything,
-#   so a sell it funds does not dip the running total. No flags.
-# - NK_ls: a lost-date sell sorts after everything. No flags.
+# - NK_lb: the provider lost the date of a buy. The buy sorts before
+#   everything, so the sell it funds does not dip the running total.
+#   No flags.
+# - NK_ls: the provider lost the date of a sell. The sell sorts after
+#   everything. No flags.
 # - NK_dp: the running total dips below zero, so movements are missing.
-#   The holding carries movements:incomplete, and the stale flag is
-#   suppressed even though replay and reported disagree.
-# - NK_nq: movements with no quantity cannot replay. movements:incomplete.
+#   The holding carries movements:incomplete. The stale flag stays off
+#   even though replay and reported disagree.
+# - NK_nq: no movement carries a quantity, so nothing can replay. The
+#   holding carries movements:incomplete.
 # - NK_nm: no movements at all. movements:incomplete, derived NULL.
-# - NK_tr: gross drops to zero between two positive snapshots with the
-#   quantity unchanged. The middle snapshot carries zero:transient.
-# - NK_lq: the same dip, but the quantity moved too. A real liquidation:
-#   no zero:transient. Replay is all-time, so the empty middle snapshot
-#   disagrees with the final derived quantity and reads stale:quantity.
-# - NK_rp: the ids change between snapshots, one arriving and one
-#   departing. The later snapshot carries investment_id:replaced.
-# - NK_gr: a second id arrives without one departing: not a replacement.
-#   Two admitted ids, one a zero lot, flag investment_id:multiple and
-#   zero:lot_kept.
+# - NK_tr: gross drops to zero between two positive snapshots and the
+#   quantity holds still. The middle snapshot carries zero:transient.
+# - NK_lq: the same dip, but the quantity moved too. That is a real
+#   liquidation: no zero:transient. The replay is all-time, so the
+#   empty middle snapshot disagrees with the final derived quantity
+#   and reads stale:quantity.
+# - NK_rp: one id departs and another arrives between snapshots. The
+#   later snapshot carries investment_id:replaced.
+# - NK_gr: a second id arrives and none departs. Not a replacement:
+#   two admitted ids, one a zero lot. The holding carries
+#   investment_id:multiple and zero:lot_kept.
 unit_tests:
   - name: replay_semantics
     model: int_funds_holdings

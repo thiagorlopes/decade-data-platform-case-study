@@ -10,23 +10,31 @@ version: 2
 # The test runs with is_incremental off, so the snapshot watermark is out
 # of scope here.
 #
-# Twelve cases, one CNPJ each:
-# - sole: a unique natural key admits with no flags.
+# Twelve cases, one CNPJ each. Each line states the situation, then
+# the verdict the macros must produce:
+# - sole: one id holds the natural key. It admits with no flags.
 # - redundant: two copies agree on quantity and gross. The lowest
-#   investment_id survives; the other rejects as a duplicate.
-# - priced: among redundant copies, a priced copy outranks an unpriced
-#   one. A NULL gross and one distinct gross value still count as
-#   agreeing.
-# - lots: different quantities are separate lots; both admit.
-# - zero: equal quantity, one zero and one positive gross. The zero side
-#   rejects; the positive side admits and carries zero:duplicate_dropped.
-# - trio: a conflict of three ids never resolves; all quarantine.
-# - twopos: a conflict pair with two positive grosses quarantines.
-# - noqty: a conflict pair with no quantity quarantines.
-# - nokey: a row with no natural key admits, flagged.
-# - tail: a decimal-tailed CNPJ joins the group of its clean twin.
-# - cross: the same key in two snapshots is two sole lots, not a group.
-# - redeliver: of two deliveries of one lot, the newest is classified.
+#   investment_id admits; the other rejects as a duplicate.
+# - priced: two redundant copies, one with a NULL gross. The priced
+#   copy admits, whatever its id. A NULL and one distinct value still
+#   count as agreeing.
+# - lots: two copies differ in quantity. They are separate lots, so
+#   both admit.
+# - zero: two copies share a quantity; one gross is zero, one positive.
+#   The zero side rejects; the positive side admits and carries
+#   zero:duplicate_dropped.
+# - trio: three ids conflict. A conflict of three never resolves, so
+#   all quarantine.
+# - twopos: a conflict pair carries two positive grosses. Both
+#   quarantine.
+# - noqty: a conflict pair carries no quantity. Both quarantine.
+# - nokey: a row arrives with no natural key. It admits, flagged.
+# - tail: a CNPJ arrives with a decimal tail. It joins the group of
+#   its clean twin.
+# - cross: the same key appears in two snapshots. That is two sole
+#   lots, not a group.
+# - redeliver: one lot arrives twice. Only the newest delivery is
+#   classified.
 unit_tests:
   - name: admission_semantics
     model: int_funds_positions
