@@ -115,9 +115,11 @@ Decade runs its data workflows on Databricks, so the target architecture for thi
 
 It follows the Databricks [developer best practices](https://docs.databricks.com/gcp/en/developers/best-practices). The doc scales workspace count to team size: two workspaces (dev/prod) for teams up to five engineers, three (dev/staging/prod) beyond that.
 
-Git is the source of truth ("if it isn't in version control, it doesn't exist"), and CI/CD gates promotion between environments. The diagram below is the doc's illustration of one such production deployment workflow at scale, included here for reference rather than as the shape this case commits to:
+Git is the source of truth ("if it isn't in version control, it doesn't exist"), and CI/CD gates promotion between environments. The diagrams below are the doc's illustration of one such production deployment workflow at scale, included here for reference rather than as the shape this case commits to:
 
 <img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
+
+<img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
 
 This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required; the same dbt models run against Databricks when promoted. The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. That way, we would be able to close one tradeoff this shortcut carries: SQL dialect drift between the two engines.
 
@@ -173,7 +175,7 @@ How a consumer finds out which happened (§2.2's closing question):
 
 - **Row-level**: `data_quality_flags` column on every fct and holdings row (e.g. `['purchase_date:missing', 'gross:zero_transient']`). Empty list means clean.
 - **Row-level, per-lot verdict**: `admission` column on the intermediate `int_*_positions` tables. `admit` flows to the holdings views; `reject_duplicate`, `reject_zero_duplicate` and `quarantine` stay in the positions table for audit.
-- **Row-level, dropped movement twins**: anti-join `int_*_transactions` to `fct_movements` on `transaction_id`; every missing row has a surviving copy flagged `transaction_id:reissued`, and a test enforces that.
+- **Row-level, dropped movement twins**: anti-join `int_*_transactions` to `fct_movements` on `transaction_id`; every missing row has a surviving copy flagged `transaction_id:reissued`. The `cross_id_dedup_semantics` unit test pins that rule.
 - **Run-level**: `main_dbt_test__audit.*`, one row per warned row per test per run.
 - **Contract-level**: `models/canonical/_canonical.yml`. The full admission enum and data_quality_flags vocabulary are single-sourced in [`_docs.md`](models/canonical/_docs.md) and rendered on every column that carries them via `make docs`.
 
@@ -289,8 +291,6 @@ Layer materializations follow dbt Labs' guidance — [staging as views](https://
 | intermediate (holdings) | view | Cross-sync flags need lag/lead over the whole natural-key timeline, which a view sees for free without re-materializing prior syncs. Fine at sample scale; each reader also recomputes the deduplicated movement stream (about twenty macro runs per build). When volume outgrows the views, persist that stream and the holdings as intermediate tables per the progression above. |
 | consumption | table | Contract-enforced union of the five families. Read by every consumer and by ad-hoc queries. Stored as a table so the guarantee layer is built once per run, not recomputed on every query. |
 
-<img width="720" height="596" alt="bundles-branching-0b017c959921574bebad867191cd736b" src="https://github.com/user-attachments/assets/669a223a-aa0a-463a-882a-11d4abe01a05" />
-
 ### Physical layout
 
 Locally the warehouse is one 62 MB DuckDB file, and at that size no layout tuning pays for itself. The decisions below are for the Databricks target, where the canonical layer absorbs millions of records a day and layout decides how much data each query reads.
@@ -330,3 +330,9 @@ Incremental means two different things in this pipeline.
 - **Building canonical from raw**: reprocessing only the snapshots with arrivals at or past the newest one already built (watermark on `ingested_at`), merged by key so re-runs are idempotent. **This is what §3.2 of the brief asks for, and what this repo ships.**
 
 
+
+### Deliberately left out: a test on the watermark boundary
+
+The `>=` in `snapshot_watermark` is load-bearing. One arrival batch shares one `ingested_at` stamp, so a run that read a batch mid-landing must re-read that batch whole on the next run. No automated test pins this. dbt unit tests run with `is_incremental` off, so no fixture can reach the comparison. A mutation pass confirmed the gap: flipping `>=` to `>` passes every test in the project, while nineteen other rule mutations fail their unit test.
+
+The verification is manual instead: build twice over the same raw files and the warehouse is byte-identical. The closing check would be a two-run CI job that builds, lands a late row carrying the boundary stamp, rebuilds, and asserts the row arrived. At this repo's scale the manual check earns its keep; that CI job is the first test to add when the loader goes live.

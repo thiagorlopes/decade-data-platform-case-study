@@ -1,0 +1,41 @@
+version: 2
+
+# Unit test for the resolved quantity. It feeds fixed holding rows to
+# fct_holdings and checks the exact output. The expected rows state the
+# promise the plain columns make: quantity is resolved once (the replay,
+# unless it is untrustworthy, then the provider's number), gross_amount
+# is recomputed from it, and the provider's claims keep the _reported
+# suffix.
+#
+# The resolution treats every family the same way. Funds carries the
+# fixtures; the other families stay empty.
+#
+# Three holdings, reported quantity 10 and unit price 2 on all. Each
+# line states the situation, then the quantity the contract must carry:
+# - Q_a: the replay says 4 and nothing distrusts it. The 4 wins over
+#   the reported 10, and gross follows.
+# - Q_b: there is no replay. The reported 10 fills in.
+# - Q_c: the replay says 7, but the holding carries
+#   movements:incomplete. The reported 10 wins, and gross follows it.
+unit_tests:
+  - name: quantity_resolution
+    model: fct_holdings
+    given:
+      - input: ref('int_funds_holdings')
+        rows:
+          - {snapshot_id: S1, account_id: A1, holding_key: Q_a, quantity: 10, quantity_derived: 4, unit_price: 2, data_quality_flags: "[quantity_reported:stale]"}
+          - {snapshot_id: S1, account_id: A1, holding_key: Q_b, quantity: 10, quantity_derived: null, unit_price: 2, data_quality_flags: "[]"}
+          - {snapshot_id: S1, account_id: A1, holding_key: Q_c, quantity: 10, quantity_derived: 7, unit_price: 2, data_quality_flags: "[movements:incomplete]"}
+      - input: ref('int_bank_fixed_incomes_holdings')
+        rows: []
+      - input: ref('int_credit_fixed_incomes_holdings')
+        rows: []
+      - input: ref('int_treasure_titles_holdings')
+        rows: []
+      - input: ref('int_variable_incomes_holdings')
+        rows: []
+    expect:
+      rows:
+        - {holding_key: Q_a, quantity: 4, gross_amount: 8, quantity_reported: 10}
+        - {holding_key: Q_b, quantity: 10, gross_amount: 20, quantity_reported: 10}
+        - {holding_key: Q_c, quantity: 10, gross_amount: 20, quantity_reported: 10}
