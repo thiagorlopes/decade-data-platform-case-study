@@ -1,6 +1,6 @@
 # Data quality reference
 
-Lookup material for the [detect, resolve, guarantee pipeline](../README.md#data-quality-detect-resolve-guarantee): what each admission verdict and quality flag means, how to work a quarantined lot, which fields the platform recalculates and which it only quotes, and what two audits found beyond the brief's defect list. The same vocabulary renders per column on the dbt docs site (`make docs`).
+Lookup material for the [detect, resolve, guarantee pipeline](../README.md#data-quality-detect-resolve-guarantee): what each [admission verdict](#admission-at-a-glance) and [quality flag](#flags-at-a-glance) means, [how to work a quarantined lot](#quarantine-runbook), [which fields the platform recalculates and which it only quotes](#field-trust-at-a-glance), and [what two audits found](#beyond-the-listed-defects) beyond the brief's defect list. The same vocabulary renders per column on the dbt docs site (`make docs`).
 
 ## The three stages in detail
 
@@ -31,7 +31,13 @@ raw parquet ─→ STAGING (views, 1:1 flatten) ─→ INTERMEDIATE (incremental
 
 **DETECT** lives in `models/staging/`. Rules sit in `_staging_quality.yml`. After `make build`, the audit ledger lands in `main_dbt_test__audit.*`. Every warn count is reproduced cell-by-cell in [`notebooks/02_within_record_defects.ipynb`](../notebooks/02_within_record_defects.ipynb).
 
-**RESOLVE** lives in `models/canonical/intermediate/`. Both feeds survive a record re-delivered with a different value: the latest arrival wins. Positions apply this through the `latest_lot_delivery` macro; transactions use the same rule inline. Superseded copies stay countable in the `lot_redelivery` warn ledger. Positions are then deduped across investment_ids by the `resolve_duplicate_investments` macro. Movements the provider re-issued under another investment_id of the same holding collapse to one copy, flagged `transaction_id:reissued`, through the `cross_id_movements` macro; the same deduplicated stream feeds the holding-grain quantity replay. The admission enum is contract-tested at error severity. The cross-sync flags (`gross:zero_transient`, `investment_id:replaced`, `investment_id:multiple`, `lot:zero_kept`) are columns on the `int_*_holdings` views in the same folder. Those views have unique-grain tests and are materialized as views (not tables), so downstream `lag`/`lead` over the full sync history stays cheap.
+**RESOLVE** lives in `models/canonical/intermediate/`. No payload tests here; repair logic instead:
+
+- **Re-deliveries.** A record re-delivered with a different value survives in both feeds: the latest arrival wins. Positions apply the rule through the `latest_lot_delivery` macro; transactions apply it inline. Superseded copies stay countable in the `lot_redelivery` warn ledger.
+- **Duplicate investment_ids.** The `resolve_duplicate_investments` macro dedupes positions across investment_ids.
+- **Re-issued movements.** The `cross_id_movements` macro collapses movements re-issued under another investment_id of the same holding to one copy, flagged `transaction_id:reissued`. The same deduplicated stream feeds the holding-grain quantity replay.
+- **Cross-sync flags.** `gross:zero_transient`, `investment_id:replaced`, `investment_id:multiple`, and `lot:zero_kept` are columns on the `int_*_holdings` views in the same folder. The admission enum is contract-tested at error severity.
+- **Views, not tables.** The `int_*_holdings` views carry unique-grain tests and stay views so that downstream `lag`/`lead` over the full sync history stays cheap.
 
 **GUARANTEE** lives in `models/consumption/`. `fct_holdings` and `fct_movements` each union the five families into one conformed shape. dbt contracts are enforced, so the build fails on column or type drift. Grain tests run at error severity. Consumers under `consumers/` read those two models and nothing below them.
 
@@ -97,29 +103,18 @@ reaches 49% at six or more.
 
 ## Field trust at a glance
 
-Every field earns its treatment from evidence, not hope. Quantity is a
-write-once field in this feed (zero of ten thousand raw position records
-ever update it), so the platform recalculates it from the movements ledger
-and publishes the resolved number as the plain `quantity` column. Prices update every
-sync and drive gross, so `unit_price` is exposed as the maintained half of
-the provider's valuation. Gross and net stay as the provider's marks, on
-the provider's own basis, with that basis disclosed in the contract; they
-cannot be recomputed without inventing data, but they can be cross-checked
-against the record itself, and the `net:above_gross` and
-`gross:not_quantity_times_price` flags carry the verdicts. The naming carries the
-same rule: a plain column (`quantity`, `gross_amount`) is a number the
-platform stands behind, and the plain columns of a row agree with each
-other; a `_reported` column is the provider's original claim, kept for
-reconciliation; net exists only as `net_amount_reported` because nothing
-can vouch for it. In one line: recalculate what an independent source can
-prove, quote and disclose what only the provider knows, and
-contradiction-check everything inside the record.
+The rule in one line: recalculate what an independent source can prove, quote and disclose what only the provider knows, and contradiction-check everything inside the record.
+
+- **`quantity` is recalculated.** Quantity is a write-once field in this feed (zero of ten thousand raw position records ever update it), so the platform recalculates it from the movements ledger and publishes the resolved number as the plain `quantity` column.
+- **`unit_price` is maintained.** Prices update every sync and drive gross, so `unit_price` is the maintained half of the provider's valuation.
+- **Gross and net are quoted and cross-checked.** They stay as the provider's marks, on the provider's own basis, with that basis disclosed in the contract. They cannot be recomputed without inventing data, but they can be checked against the record itself; the `net:above_gross` and `gross:not_quantity_times_price` flags carry the verdicts.
+- **The naming carries the rule.** A plain column (`quantity`, `gross_amount`) is a number the platform stands behind, and the plain columns of a row agree with each other. A `_reported` column is the provider's original claim, kept for reconciliation. Net exists only as `net_amount_reported` because nothing can vouch for it.
 
 ## Quarantine runbook
 
 Quarantined lots live in `int_*_positions` with `admission = 'quarantine'`: the classifier refused to guess. Every occurrence is actionable:
 
-1. **Triage.** Query the family's `int_*_positions` filtered on `admission = 'quarantine'` for the natural key, both investment_ids, quantity and the conflicting gross amounts. Cross-check the transactions feed for the same account and holding (did a redemption explain the drop?), then look at the next sync (did one copy fossilize while the other moved?).
+1. **Triage.** Query the family's `int_*_positions` filtered on `admission = 'quarantine'` for the natural key, both investment_ids, quantity and the conflicting gross amounts. Cross-check the transactions feed for the same account and holding (did a redemption explain the drop?), then look at the next sync (did one copy stop updating while the other moved?).
 2. **Resolve.** One of three paths:
    - **Transient**: the next sync disambiguates on its own. No code change; the holding re-admits itself.
    - **Systematic**: a pattern emerges (e.g. the row with the newer `reference_datetime` is always the live one). Encode it as a new classification branch in `resolve_duplicate_investments`, then replay history with `make clean && make build` (the incremental-idempotency deliverable pays for exactly this).
