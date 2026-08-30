@@ -134,15 +134,15 @@ The upgrade path to the full target is replacing DuckDB with a Databricks dev wo
 
 #### Deploying to prod
 
-Production deploys run from CI, not from a laptop. A scheduled GitHub Actions job ([`.github/workflows/prod-build.yml`](.github/workflows/prod-build.yml)) runs `dbt build --target prod` against Databricks, authenticated with repository secrets, so no personal token touches prod and every prod build ties to a commit on `master`. The job also runs `dbt source freshness`, which mirrors the two-command contract from the [Orchestration](#orchestration) section.
+Deploys to prod run from CI, never from a laptop. A scheduled GitHub Actions job ([`.github/workflows/prod-build.yml`](.github/workflows/prod-build.yml)) runs `dbt build --target prod` and `dbt source freshness`, the same two commands the [Orchestration](#orchestration) section describes. The job reads its Databricks credentials from repository secrets. No personal token reaches prod, and every prod build points to a commit on `master`.
 
-To verify prod from your own machine, set three environment variables (`DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`), then pass the target:
+You can still run the prod build yourself. Set three environment variables (`DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`), then pass the target:
 
 ```bash
 dbt build --target prod
 ```
 
-Treat this as a break-glass path, not the deploy path. It exists so a reviewer can reproduce the prod build without waiting for the schedule.
+This path is for verification, not for deploys. It lets a reviewer reproduce the prod build without waiting for the schedule.
 
 Everything runs on both engines: contracts, data tests, unit tests, and the incremental merges. The unit test fixtures build their arrays through `filter(split(...))`, a spelling both engines parse the same way. Running the unit tests on Databricks caught a real cross-engine bug: the two engines read the backslash in a regex literal differently, which silently turned every fund CNPJ to NULL in prod. The fix and the rationale live next to `clean_cnpj` in [`macros/openfinance.sql`](macros/openfinance.sql).
 
