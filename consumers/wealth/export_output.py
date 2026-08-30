@@ -1,6 +1,6 @@
 """Regenerate the committed wealth output under consumers/wealth/output/.
 
-Runs holdings.sql and movements.sql against warehouse.duckdb, scoped to the
+Runs holdings.sql and movements.sql against decade.duckdb, scoped to the
 three sample customers, and writes one CSV per query per customer. Run it
 with `make consumers` after `make build`, so the committed output always
 matches the committed queries.
@@ -18,7 +18,7 @@ SAMPLE_PARTIES = [
 ]
 
 WEALTH_DIR = Path(__file__).resolve().parent
-WAREHOUSE = WEALTH_DIR.parent.parent / "warehouse.duckdb"
+WAREHOUSE = WEALTH_DIR.parent.parent / "decade.duckdb"
 
 # The committed queries return every customer. To scope one query to one
 # customer, insert a WHERE clause at a stable anchor line: the final QUALIFY
@@ -40,7 +40,7 @@ def scoped_query(sql_text, anchor, where_clause, party_id):
 
 def main():
     if not WAREHOUSE.exists():
-        sys.exit("warehouse.duckdb missing. Run: make build")
+        sys.exit("decade.duckdb missing. Run: make build")
     con = duckdb.connect(str(WAREHOUSE), read_only=True)
     for party_id in SAMPLE_PARTIES:
         party_dir = WEALTH_DIR / "output" / party_id

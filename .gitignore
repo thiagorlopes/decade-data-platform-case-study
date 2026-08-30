@@ -229,8 +229,8 @@ logs/
 .user.yml
 
 # Local duckdb warehouse
-warehouse.duckdb
-warehouse.duckdb.wal
+decade.duckdb
+decade.duckdb.wal
 dev.duckdb
 .duckdb/
 .duckdb_history

@@ -7,7 +7,7 @@ export DOCKER_GID := $(shell id -g)
 .DEFAULT_GOAL := help
 .PHONY: help install deps build run test docs refresh consumers shell ui ui-stop clean
 
-# DuckDB is single-writer: targets that write warehouse.duckdb pause the UI
+# DuckDB is single-writer: targets that write decade.duckdb pause the UI
 # service to release its read lock, then start it again so an open browser
 # tab reconnects on its own.
 define with_write_lock
@@ -49,18 +49,18 @@ consumers:  ## Regenerate the wealth output CSVs from the committed queries
 	$(RUN) python consumers/wealth/export_output.py
 
 shell:  ## Open duckdb CLI on the warehouse (read-write; pauses the UI)
-	@test -f warehouse.duckdb || { echo "warehouse.duckdb missing. Run: make build"; exit 1; }
-	$(call with_write_lock,$(RUN) duckdb warehouse.duckdb)
+	@test -f decade.duckdb || { echo "decade.duckdb missing. Run: make build"; exit 1; }
+	$(call with_write_lock,$(RUN) duckdb decade.duckdb)
 
-ui:  ## Browse warehouse.duckdb read-only at http://localhost:4213 (stays up until `make ui-stop`)
-	@test -f warehouse.duckdb || { echo "warehouse.duckdb missing. Run: make build"; exit 1; }
+ui:  ## Browse decade.duckdb read-only at http://localhost:4213 (stays up until `make ui-stop`)
+	@test -f decade.duckdb || { echo "decade.duckdb missing. Run: make build"; exit 1; }
 	$(COMPOSE) up -d ui
 	@i=0; until curl -s -o /dev/null http://localhost:4213 || [ $$i -ge 60 ]; do i=$$((i+1)); sleep 0.5; done
 	@( xdg-open http://localhost:4213 || open http://localhost:4213 || explorer.exe "http://localhost:4213" ) >/dev/null 2>&1 || true
-	@echo "DuckDB UI at http://localhost:4213 (default catalog: warehouse). Stop with: make ui-stop"
+	@echo "DuckDB UI at http://localhost:4213 (query with full paths: decade.consumption.fct_holdings). Stop with: make ui-stop"
 
 ui-stop:  ## Stop the DuckDB UI container
 	$(COMPOSE) rm -sf ui
 
 clean: ui-stop  ## Remove warehouse and dbt artifacts (host side)
-	rm -rf warehouse.duckdb warehouse.duckdb.wal target logs
+	rm -rf decade.duckdb decade.duckdb.wal target logs

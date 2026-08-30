@@ -4,7 +4,7 @@
 -- net worth over time), not this page.
 WITH current_holdings AS (
     SELECT account_id, product_family, holding_key
-    FROM consumption.fct_holdings
+    FROM decade.consumption.fct_holdings
     QUALIFY dense_rank() OVER (
         PARTITION BY account_id, product_family
         ORDER BY snapshot_created_at DESC, snapshot_id DESC
@@ -26,12 +26,12 @@ SELECT
     mov.currency,
     mov.transaction_id,
     mov.data_quality_flags
-FROM consumption.fct_movements AS mov
+FROM decade.consumption.fct_movements AS mov
 INNER JOIN current_holdings AS cur
     ON cur.account_id = mov.account_id
     AND cur.product_family = mov.product_family
     AND cur.holding_key = mov.holding_key
-INNER JOIN consumption.dim_holding AS dim
+INNER JOIN decade.consumption.dim_holding AS dim
     ON dim.product_family = cur.product_family
     AND dim.holding_key = cur.holding_key
 ORDER BY mov.transaction_date, mov.transaction_id;
