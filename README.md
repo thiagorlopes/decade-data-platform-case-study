@@ -17,6 +17,7 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Architecture and operations](#architecture-and-operations)**<br>
 **[Compliance](#compliance)**<br>
 **[Deliberately left out](#deliberately-left-out)**<br>
+**[How I used AI](#how-i-used-ai)**<br>
 
 ## General Information
 
@@ -245,3 +246,20 @@ An audit over the descriptive attributes of `dim_holding` ([details](docs/data-q
 **Lots of one holding disagree on `indexer`.** 202 of the 5,296 rows in `dim_holding` draw from lots naming more than one indexer, most often `CDI` against `IPCA` (100 times). `arg_max(indexer, snapshot_created_at)` settles it, so the lot written last wins and the consumer never learns the lots disagreed. Recipe: raise an `indexer:unstable` flag and settle by majority vote instead of write order.
 
 **Treasury indexers contradict their own product name.** A Tesouro Direto title names its indexer in its own name, yet `Tesouro Selic 2031` ships `indexer = OUTROS`, as do `Tesouro IPCA+ 2029` and `Tesouro Renda+ 2044`: 3 of the 8 treasury rows in `dim_holding`. The provider stamps `OUTROS` on a minority of every treasury title's lots, and `arg_max` sometimes lands on one; 375 lot rows carry an indexer their own product name rules out. Recipe: read the indexer off the product name, which is authoritative for Tesouro Direto, and warn when the payload disagrees.
+
+## How I used AI
+
+I explored the raw feeds first, worked out the architecture, and broke the case into milestones before writing any prompts. Claude Code (Opus 4.x) then generated most of the code: SQL models, unit tests, macros, CI, and prose. I reviewed every diff, ran the pipeline myself between edits, and rewrote what missed the mark.
+
+How I directed it:
+- Set repo conventions in `CLAUDE.md` (SQL style, layer boundaries, refs stay in-layer) so it stopped rediscovering them per file.
+- Enforced a "lazy senior" mode (`ponytail`) to block scaffolding, one-implementation interfaces, and speculative flexibility.
+- Ran the `iso-24495` plain-language skill on every README and doc pass so the prose reads in one voice.
+
+What I did by hand:
+- The final call on naming, layer boundaries, and what to leave out.
+- Manual edits when the generated version was close but wrong on the domain.
+- Running `dbt build`, reading failures, and deciding which warns to accept as detect-tier signal versus fix at the source.
+- Every plain-language pass on prose the model produced, before commit.
+
+The model wrote the first draft. I owned the merge.
