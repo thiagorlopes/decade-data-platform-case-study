@@ -14,11 +14,6 @@ on:
   schedule:
     - cron: "0 6 * * *"
   workflow_dispatch:
-    inputs:
-      full_refresh:
-        description: "Pass --full-refresh (overwrites incremental tables; needed after a schema reset or a first bootstrap)"
-        type: boolean
-        default: false
 
 jobs:
   build:
@@ -49,12 +44,10 @@ jobs:
             python scripts/bootstrap_databricks_raw.py
 
       - name: Run models and tests
-        env:
-          FULL_REFRESH: ${{ inputs.full_refresh && '--full-refresh' || '' }}
         run: |
           set -o pipefail
           docker compose run --rm -u $(id -u):$(id -g) dbt \
-            dbt build --target prod $FULL_REFRESH 2>&1 | tee /tmp/build.log
+            dbt build --target prod 2>&1 | tee /tmp/build.log
 
       # On the static sample this always reports stale. That is the signal
       # working, so it never fails the job.
