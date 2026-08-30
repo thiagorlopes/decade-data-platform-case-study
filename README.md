@@ -41,7 +41,7 @@ For scoped dbt commands on the host (for example `dbt build --select <model>+`),
 docker compose run --rm dbt dbt build --select <model>+
 ```
 
-Optional: the exploratory notebooks under [`notebooks/`](notebooks/) sit outside the reproducible build. To re-run them, install their dependencies on the host and open the folder in Jupyter:
+Optional: the exploratory notebooks under [`notebooks/`](notebooks/) sit outside the reproducible build. To read them without installing anything, open the folder on GitHub, which renders each `.ipynb` inline. To re-run them, install their dependencies on the host and open the folder in Jupyter:
 
 ```bash
 pip install duckdb==1.1.3 notebook==7.6.2 pandas==2.2.3
