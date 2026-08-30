@@ -235,5 +235,5 @@ dev.duckdb
 .duckdb/
 .duckdb_history
 
-# Notebook and consumer local artifacts
+# Notebook local artifacts
 notebooks/.ofb_specs/

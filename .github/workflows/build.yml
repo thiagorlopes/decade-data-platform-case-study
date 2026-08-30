@@ -31,7 +31,6 @@ jobs:
           make build 2>&1 | tee /tmp/build.log
 
       # Catches dialect drift: SQL DuckDB accepts that Databricks would reject.
-      # Compile only, no build, so no Databricks compute is spent.
       - name: Compile against Databricks
         if: github.repository == 'thiagorlopes/decade-data-platform-case-study'
         env:
