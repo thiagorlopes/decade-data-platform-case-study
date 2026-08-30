@@ -17,8 +17,8 @@ SELECT
     fct.currency,
     fct.snapshot_created_at AS valued_at,
     fct.data_quality_flags
-FROM consumption.fct_holdings AS fct
-LEFT JOIN consumption.dim_holding AS dim
+FROM warehouse.consumption.fct_holdings AS fct
+LEFT JOIN warehouse.consumption.dim_holding AS dim
     ON dim.product_family = fct.product_family
     AND dim.holding_key = fct.holding_key
 QUALIFY dense_rank() OVER (
