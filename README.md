@@ -132,13 +132,17 @@ The two targets lay out schemas differently, on purpose:
 
 The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. In that shared workspace, Asset Bundles deploy each engineer's job under their own prefix and the dev profile writes to a per-user schema, so concurrent runs from different branches cannot overwrite each other. `generate_schema_name` in [`macros/schemas.sql`](macros/schemas.sql) is the seam where that per-user prefix goes; it is documented there and deliberately not built, because the single current workspace is prod only.
 
-#### Running against prod
+#### Deploying to prod
 
-Set three environment variables (`DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`), then pass the target:
+Production deploys run from CI, not from a laptop. A scheduled GitHub Actions job ([`.github/workflows/prod-build.yml`](.github/workflows/prod-build.yml)) runs `dbt build --target prod` against Databricks, authenticated with repository secrets, so no personal token touches prod and every prod build ties to a commit on `master`. The job also runs `dbt source freshness`, which mirrors the two-command contract from the [Orchestration](#orchestration) section.
+
+To verify prod from your own machine, set three environment variables (`DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`), then pass the target:
 
 ```bash
 dbt build --target prod
 ```
+
+Treat this as a break-glass path, not the deploy path. It exists so a reviewer can reproduce the prod build without waiting for the schedule.
 
 Everything runs on both engines: contracts, data tests, unit tests, and the incremental merges. The unit test fixtures build their arrays through `filter(split(...))`, a spelling both engines parse the same way. Running the unit tests on Databricks caught a real cross-engine bug: the two engines read the backslash in a regex literal differently, which silently turned every fund CNPJ to NULL in prod. The fix and the rationale live next to `clean_cnpj` in [`macros/openfinance.sql`](macros/openfinance.sql).
 
