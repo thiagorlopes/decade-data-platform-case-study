@@ -3,17 +3,19 @@
 # credentials come from repository secrets, so no personal token reaches
 # prod and every prod build points to a commit on master.
 #
-# The schedule is daily because the workspace holds a static sample. With
-# live feeds, only the cron line changes: the watermark keeps overlapping
-# runs idempotent, so a tighter cadence is safe.
+# Trigger is manual only. With live feeds, add a `schedule:` block: the
+# watermark keeps overlapping runs idempotent, so any cadence is safe.
 #
 # The repository check keeps forks from failing on missing secrets.
 name: prod build
 
 on:
-  schedule:
-    - cron: "0 6 * * *"
   workflow_dispatch:
+  # Production runs on a daily cadence. Left commented for the case study
+  # so trial credits are not spent on unattended runs; the watermark keeps
+  # overlapping runs idempotent, so any cadence is safe to enable.
+  # schedule:
+  #   - cron: "0 6 * * *"
 
 jobs:
   build:
