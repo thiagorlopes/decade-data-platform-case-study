@@ -14,3 +14,26 @@ services:
     # only bound when started with `--service-ports` (make docs-serve)
     ports:
       - "8080:8080"
+
+  # DuckDB UI on the warehouse, read-only, long-lived. `make ui` starts it and
+  # it survives closed terminals and crashes (restart policy). Write targets
+  # (`make build` etc.) stop it to take DuckDB's single-writer lock and start
+  # it again; the open browser tab reconnects on its own. Opening the file as
+  # the primary database (not ATTACH) makes `warehouse` the default catalog for
+  # every UI notebook connection, so `consumption.fct_holdings` resolves
+  # without a catalog prefix. socat bridges the UI's loopback-only server to
+  # the published port. HOME=/workspace persists notebook state in the repo.
+  ui:
+    build: .
+    working_dir: /workspace
+    user: "${DOCKER_UID:-1000}:${DOCKER_GID:-1000}"
+    volumes:
+      - .:/workspace
+    environment:
+      HOME: /workspace
+    ports:
+      - "4213:4214"
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: sh -c "socat TCP-LISTEN:4214,fork,reuseaddr 'TCP6:[::1]:4213' & exec duckdb -ui -readonly warehouse.duckdb"
