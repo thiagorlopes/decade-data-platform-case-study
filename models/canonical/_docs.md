@@ -86,7 +86,9 @@ make sense once lots are aggregated by natural key):
 - `movements:incomplete`: the holding's movement replay dips below zero
   even with lost-date sells placed last, so movements must be missing and
   `quantity_derived` cannot be trusted for this holding. Keep the
-  provider's `quantity` and caveat it.
+  provider's figures and caveat them: their `quantity` as delivered, or,
+  when the row also fails `gross:not_quantity_times_price`, the quantity
+  their own gross and price imply.
 
   This is usually a gap in the feed rather than an error by the
   provider. The transactions endpoint serves only a bounded window of
@@ -133,8 +135,13 @@ Movement-grain, added in fct_movements:
 {% docs dq_quantity %}
 The resolved quantity, one rule for every consumer: the movement replay
 unless it is untrustworthy (`movements:incomplete`), then the provider's
-number. A plain column name is a promise the row stands behind; the
-provider's original claim is kept in `quantity_reported`.
+figures. The fallback anchors to what their row corroborates: their
+quantity as delivered, except when the row also carries
+`gross:not_quantity_times_price`; there gross and price agree with each
+other and the quantity is the odd field out (a placeholder such as
+9900), so the published quantity is gross / price instead. A plain
+column name is a promise the row stands behind; the provider's original
+claim is kept in `quantity_reported`.
 {% enddocs %}
 
 {% docs dq_gross_amount %}

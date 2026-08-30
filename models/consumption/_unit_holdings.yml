@@ -17,6 +17,11 @@ version: 2
 # - Q_b: there is no replay. The reported 10 fills in.
 # - Q_c: the replay says 7, but the holding carries
 #   movements:incomplete. The reported 10 wins, and gross follows it.
+# - Q_d: movements:incomplete again, but the provider's own row fails
+#   gross = quantity x price (gross 15, quantity 10, price 2). Gross and
+#   price corroborate each other and the quantity is the odd field out,
+#   so quantity anchors to gross / price (7.5) and gross follows the
+#   provider's valuation (15).
 unit_tests:
   - name: quantity_resolution
     model: fct_holdings
@@ -42,7 +47,7 @@ unit_tests:
               CAST(NULL AS STRING) AS isin_code,
               CAST(10 AS DECIMAL(38, 10)) AS quantity,
               CAST(core.quantity_derived AS DECIMAL(38, 10)) AS quantity_derived,
-              CAST(NULL AS DECIMAL(38, 10)) AS gross_amount,
+              CAST(core.gross_amount AS DECIMAL(38, 10)) AS gross_amount,
               CAST(NULL AS DECIMAL(38, 10)) AS net_amount,
               CAST(NULL AS STRING) AS currency,
               CAST(2 AS DECIMAL(38, 10)) AS unit_price,
@@ -50,9 +55,10 @@ unit_tests:
               filter(split('', ','), f -> f <> '') AS investment_ids,
               filter(split(core.flags, ','), f -> f <> '') AS data_quality_flags
           FROM (
-              SELECT 'Q_a' AS holding_key, 4 AS quantity_derived, 'quantity_reported:stale' AS flags
-              UNION ALL SELECT 'Q_b', NULL, ''
-              UNION ALL SELECT 'Q_c', 7, 'movements:incomplete'
+              SELECT 'Q_a' AS holding_key, 4 AS quantity_derived, CAST(NULL AS INT) AS gross_amount, 'quantity_reported:stale' AS flags
+              UNION ALL SELECT 'Q_b', NULL, NULL, ''
+              UNION ALL SELECT 'Q_c', 7, NULL, 'movements:incomplete'
+              UNION ALL SELECT 'Q_d', 7, 15, 'movements:incomplete,gross:not_quantity_times_price'
           ) AS core
       - input: ref('int_bank_fixed_incomes_holdings')
         rows: []
@@ -67,3 +73,4 @@ unit_tests:
         - {holding_key: Q_a, quantity: 4, gross_amount: 8, quantity_reported: 10}
         - {holding_key: Q_b, quantity: 10, gross_amount: 20, quantity_reported: 10}
         - {holding_key: Q_c, quantity: 10, gross_amount: 20, quantity_reported: 10}
+        - {holding_key: Q_d, quantity: 7.5, gross_amount: 15, quantity_reported: 10}

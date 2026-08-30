@@ -67,7 +67,7 @@ Every flag follows the shape `subject:verdict`: the prefix names the column or e
 | Holding | `lot:zero_kept` | One of the summed lots is worth zero while its siblings are live. It was kept, not dropped like a `lot:zero_copy_dropped`. |
 | Holding | `gross:zero_transient` | Gross went to zero for one sync and came back, with quantity unchanged. |
 | Holding | `quantity_reported:stale` | The balance quantity disagrees with the quantity replayed from movements. The plain quantity column already prefers the replay; the provider's number stays in `quantity_reported`. |
-| Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's quantity and caveat it. The feed serves only recent history, so gaps are expected ([why](#the-feed-serves-only-recent-history)). |
+| Holding | `movements:incomplete` | The replay is infeasible even under the most favorable ordering, so movements must be missing. Keep the provider's figures and caveat them; when their own row also fails gross = quantity times price, the quantity their gross and price imply replaces the placeholder. The feed serves only recent history, so gaps are expected ([why](#the-feed-serves-only-recent-history)). |
 | Holding | `holding:matured` | The due date has passed and the institution still reports a balance. This flag discloses a fact. It changes no number. Only the three families that carry a due date raise it. |
 | Movement | `transaction_date:missing` | No usable movement date. The movement counts in totals but has no place on a timeline. |
 | Movement | `transaction_id:reissued` | The provider re-delivered this movement under another investment_id of the same holding, with a fresh transaction_id. This copy stands for the copies; its twins were dropped. |
@@ -93,9 +93,14 @@ missing, and the replay runs negative through no fault of the data. All
 1,094 occurrences are that case. None is a holding with no receipts at all.
 
 The platform refuses rather than guesses. A holding whose replay is
-infeasible keeps the provider's `quantity`, carries `movements:incomplete`,
-and tells the consumer so. It does not publish a derived number it cannot
-support.
+infeasible keeps the provider's figures, carries `movements:incomplete`,
+and tells the consumer so. It does not publish a replay it cannot
+support. One case inside that fallback: when the provider's own row also
+fails gross = quantity times price, their gross and price corroborate
+each other and the quantity is the odd field out, so the published
+quantity is gross / price rather than the placeholder. Repeating the
+placeholder would let the recomputed gross inflate the holding by
+orders of magnitude.
 
 Breakage tracks how many movements are visible, not how old the purchase
 is. The flag never fires on holdings with one or two movements, and it
