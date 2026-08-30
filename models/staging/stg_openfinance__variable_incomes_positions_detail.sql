@@ -1,5 +1,5 @@
 -- 1:1 flatten of raw VARIABLE_INCOMES detail payloads into typed columns.
--- API: GET /investments/{investmentId} — variable-incomes v1.3.0
+-- API: GET /investments/{investmentId} (variable-incomes v1.3.0)
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/variable-incomes/1.3.0.yml#L122
 -- Payload schema #/components/schemas/ResponseVariableIncomesProductIdentificationData: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/variable-incomes/1.3.0.yml#L504
 SELECT

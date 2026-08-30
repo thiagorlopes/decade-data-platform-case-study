@@ -1,5 +1,5 @@
 -- 1:1 flatten of raw VARIABLE_INCOMES transaction payloads into typed columns, in spec order.
--- API: GET /investments/{investmentId}/transactions (and /transactions-current) — variable-incomes v1.3.0
+-- API: GET /investments/{investmentId}/transactions (and /transactions-current) (variable-incomes v1.3.0)
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/variable-incomes/1.3.0.yml#L226
 -- Payload schema #/components/schemas/ResponseVariableIncomesTransactionsData: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/variable-incomes/1.3.0.yml#L568
 SELECT

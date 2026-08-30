@@ -241,7 +241,7 @@ Do not join on this column raw.
 
 {% docs stg_purchase_date_placeholder %}
 Some providers send `0001-01-01` when they do not know the real purchase
-date — a fake date that means "missing". It looks like a valid date, so
+date. It is a fake date that means "missing". It looks like a valid date, so
 downstream code that treats it as one silently corrupts date ranges and
 sort orders. Staging leaves it as-is and flags it via the
 `*_purchase_date_not_placeholder` warn test; the intermediate layer nulls it
@@ -339,11 +339,6 @@ tesourodireto.com.br (spec field `productName`, e.g. "Tesouro Selic 2029").
 {% docs ofb_reference_datetime %}
 Moment the balance figures refer to: the position is marked as of this
 timestamp, as stated by the provider (spec field `referenceDateTime`).
-{% enddocs %}
-
-{% docs ofb_updated_unit_price_currency %}
-ISO-4217 currency code of `updated_unit_price` (spec field
-`updatedUnitPrice.currency`).
 {% enddocs %}
 
 {% docs ofb_quota_quantity %}
