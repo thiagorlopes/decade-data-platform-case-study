@@ -198,7 +198,7 @@ Four decisions serve them:
 - **Cluster by customer, then time.** Both facts are Delta tables with [liquid clustering](https://docs.databricks.com/aws/en/tables/clustering): `(party_id, snapshot_created_at)` for holdings, `(party_id, transaction_date)` for movements. Every product query filters on one customer first, so file skipping cuts a point lookup to a handful of files. Hive-style partitioning on `party_id` would create the small-file problem by design: one folder per customer. The clustering keys live in `dbt_project.yml` (`liquid_clustered_by`); the DuckDB adapter ignores them.
 - **Compact toward ~128 MB files.** A build every few minutes writes small files all day. Auto compaction and optimized writes keep files near target, so the file count tracks data volume, not run count. They are set as Delta table properties in `dbt_project.yml`; the DuckDB adapter ignores them.
 - **Size compute by role.** Builds and readers get separate compute. The build runs on a jobs cluster sized by arrivals per window, because the watermark bounds each run's work no matter how large the tables grow. Readers share a SQL warehouse that autoscales with concurrent queries, so a burst of analysts scales the warehouse and never the build. Neither workload pays for the other.
-- **Let cost grow with customers, not history.** Storage grows linearly with customers, a point query reads one cluster, and build compute follows the arrival rate. At ten times the customers: ten times the storage, the same wealth-page latency, builds still sized by arrivals per window.
+- **Let cost grow with customers, not history.** Storage grows linearly with customers, a point query reads one cluster, and build compute follows the arrival rate. At ten times the customers: ten times the storage, the same wealth-page latency, builds still sized by arrivals per window. The consumption layer is the deliberate exception: it rebuilds in full every run, the cheaper trade at this scale. The cutover trigger lives in [Deliberately left out](#deliberately-left-out).
 
 ## Compliance
 
@@ -214,7 +214,13 @@ These five boundaries are the platform's technical measures. The organizational 
 
 ## Deliberately left out
 
-The brief asks what was left out and why. Three entries.
+The brief asks what was left out and why. Four entries.
+
+### An incremental consumption layer
+
+Consumption rebuilds in full every run. The `int_*_holdings` views window over each holding's whole history, and the two facts and `dim_holding` are tables built from those views. So this part of the build grows with total history, not with arrivals. At this scale that is the right trade: the whole rebuild takes seconds, and a full rebuild is simpler to operate than incremental state that earns nothing back.
+
+At production volume the trade flips. The trigger is build duration: when the consumption rebuild approaches the run cadence of a few minutes, persist the deduplicated movement stream and the holdings as incremental tables, and reprocess only the holdings the watermarked snapshots touched. The cross-sync flags stay correct because each touched holding is recomputed over its full timeline.
 
 ### A test on the watermark boundary
 
