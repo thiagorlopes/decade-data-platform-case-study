@@ -12,6 +12,7 @@ WITH current_holdings AS (
 )
 
 SELECT
+    mov.party_id,
     mov.transaction_date,
     mov.institution_name,
     mov.account_id,
@@ -21,6 +22,7 @@ SELECT
     mov.movement_type,
     mov.transaction_type,
     mov.transaction_type_additional_info,
+    round(mov.quantity::DOUBLE, 6) AS quantity,
     round(mov.gross_amount::DOUBLE, 2) AS gross_amount,
     round(mov.net_amount::DOUBLE, 2) AS net_amount,
     mov.currency,

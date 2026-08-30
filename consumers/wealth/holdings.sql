@@ -1,6 +1,7 @@
 -- What customers hold, valued at each account's latest sync per family.
 -- Reads the consumption layer only, never raw or staging.
 SELECT
+    fct.party_id,
     fct.institution_name,
     fct.account_id,
     fct.product_family,
@@ -15,7 +16,10 @@ SELECT
     round(fct.quantity_reported::DOUBLE, 6) AS quantity_reported,
     round(fct.gross_amount_reported::DOUBLE, 2) AS gross_amount_reported,
     fct.currency,
-    fct.snapshot_created_at AS valued_at,
+    -- reference_date is the provider's valuation date; synced_at is when
+    -- the sync that delivered these figures started.
+    fct.reference_date,
+    fct.snapshot_created_at AS synced_at,
     fct.data_quality_flags
 FROM decade.consumption.fct_holdings AS fct
 LEFT JOIN decade.consumption.dim_holding AS dim
