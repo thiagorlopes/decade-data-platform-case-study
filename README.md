@@ -85,7 +85,7 @@ The wealth page lives in [`consumers/wealth/`](consumers/wealth/): two plain SQL
 - [`holdings.sql`](consumers/wealth/holdings.sql): what customers hold, valued at each account's latest sync per product family, with `data_quality_flags` on every row.
 - [`movements.sql`](consumers/wealth/movements.sql): the movements behind those holdings, joined to their current holding on the shared `holding_key`.
 
-Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. `make consumers` regenerates the committed CSVs under [`output/`](consumers/wealth/output/) (three sample customers) from these same queries, so the output cannot drift from its SQL. A new consumer follows the same pattern: query `fct_holdings` and `fct_movements` under the contract.
+Run them from `make ui`. Add `WHERE party_id = '<uuid>'` to scope to one customer. `make consumers` regenerates the committed CSVs under [`output/`](consumers/wealth/output/) (three sample customers) from these same queries, so the output cannot drift from its SQL. A new consumer follows the same pattern: query `consumption.fct_holdings` and `consumption.fct_movements` under the contract.
 
 ## Contracts
 
@@ -132,10 +132,7 @@ Decade runs its data workflows on Databricks, so the target architecture for thi
 
 This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required. The same models build on Databricks with `--target prod`. Where the two engines disagree on SQL spelling, a small set of `adapter.dispatch` macros carries the difference, so the model files stay engine-neutral.
 
-The two targets lay out schemas differently, on purpose:
-
-- **Prod fans out by layer.** On Databricks each layer lands in its own schema: `staging`, `canonical`, `consumption`, plus `dbt_test__audit` for stored test failures. That makes the layer boundary from the [Compliance](#compliance) section a grant target: consumers get `consumption` and nothing else.
-- **Dev stays flat.** The local warehouse is one DuckDB file per developer, so schema fan-out buys no isolation there and the consumer queries keep their bare table names.
+Both targets fan out by layer: `staging`, `canonical`, `consumption`, plus `dbt_test__audit` for stored test failures. On Databricks the schema boundary is also the access boundary, so grants attach to schemas from the [Compliance](#compliance) section: consumers get `consumption` and nothing else. On DuckDB the same layout keeps one mental model across environments and stops the UI browser from flattening every layer into `main`. Consumer queries reference the layer explicitly (`consumption.fct_holdings`) so the SQL text is portable across both targets.
 
 The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. In that shared workspace, Asset Bundles deploy each engineer's job under their own prefix and the dev profile writes to a per-user schema, so concurrent runs from different branches cannot overwrite each other. `generate_schema_name` in [`macros/schemas.sql`](macros/schemas.sql) is the seam where that per-user prefix goes; it is documented there and deliberately not built, because the single current workspace is prod only.
 

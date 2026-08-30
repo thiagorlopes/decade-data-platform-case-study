@@ -1,25 +1,25 @@
 {#
-    Schema layout per target.
+    Schema layout: every layer lands in its own schema on both targets.
+    On Databricks the schema boundary is also the access boundary, so
+    grants attach to schemas (consumers get consumption, nobody else
+    reads staging or canonical). On DuckDB the same layout keeps one
+    mental model across environments and stops the UI browser from
+    flattening every layer into main.
 
-    Databricks (prod): each layer lands in its own schema so the layer
-    boundary is also the access boundary. Grants attach to schemas:
-    consumers get consumption, nobody else reads staging or canonical.
-    Test failures land in dbt_test__audit.
-
-    DuckDB (dev): one flat schema. The local warehouse is one file per
-    developer, so schema fan-out buys no isolation and would break the
-    bare table names used by consumers/ and the notebooks.
+    Custom schema names come from the +schema config in dbt_project.yml
+    per layer; test failures land in dbt_test__audit through the same
+    macro (dbt passes 'dbt_test__audit' as custom_schema_name).
 
     Future multi-workspace note: when dev moves to a shared Databricks
-    workspace, extend the non-prod branch to prefix the developer's own
+    workspace, extend the else branch to prefix the developer's own
     schema (target.schema is per-developer there), so two people running
     the same DAG never overwrite each other. Not built now: the single
     current workspace is prod only.
 #}
 {% macro generate_schema_name(custom_schema_name, node) -%}
-    {%- if target.type == 'databricks' and custom_schema_name is not none -%}
-        {{ custom_schema_name | trim }}
-    {%- else -%}
+    {%- if custom_schema_name is none -%}
         {{ target.schema }}
+    {%- else -%}
+        {{ custom_schema_name | trim }}
     {%- endif -%}
 {%- endmacro %}
