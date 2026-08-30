@@ -2,7 +2,7 @@
 
 ## Start here
 
-Read `Data Platform Case Study.pdf` first. It is the full brief — context, inputs, deliverables, constraints, evaluation criteria, submission instructions.
+Read `Data Platform Case Study.pdf` first. It is the full brief: context, inputs, deliverables, constraints, evaluation criteria, submission instructions.
 
 ## Files
 

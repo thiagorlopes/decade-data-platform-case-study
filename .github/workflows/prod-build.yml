@@ -50,7 +50,7 @@ jobs:
           docker compose run --rm -u $(id -u):$(id -g) dbt \
             dbt source freshness --target prod
 
-      - name: Report the test tally
+      - name: Post build summary
         if: always()
         run: |
           {

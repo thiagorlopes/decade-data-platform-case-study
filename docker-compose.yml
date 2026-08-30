@@ -14,11 +14,3 @@ services:
     # only bound when started with `--service-ports` (make docs-serve)
     ports:
       - "8080:8080"
-  jupyter:
-    build: .
-    working_dir: /workspace
-    volumes:
-      - .:/workspace
-    ports:
-      - "8888:8888"
-    command: jupyter notebook --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='' --NotebookApp.password=''

@@ -26,19 +26,26 @@ Two raw Open Finance Brasil feeds land in `data/`: **positions** (balance snapsh
 
 ## Installation
 
-You need Docker Engine with Docker Compose v2, `make`, and `git`. Build the docker image; this is all you need to run the pipeline end-to-end:
+You need Docker Engine with Docker Compose v2, `make`, and `git`. Two commands build the image and reproduce the pipeline end to end:
 
 ```bash
 make install
+make build
 ```
 
-The image ships Python, dbt, and the DuckDB CLI. The `make` targets drive the whole pipeline from inside the container.
+The image ships Python, dbt, and the DuckDB CLI. Every `make` target runs inside that container, so no host Python setup is needed. The wealth CSVs under [`consumers/wealth/output/`](consumers/wealth/output/) are committed, so `make build` alone is enough to verify the deliverable against the queries.
 
-Optional: to run the notebooks under `notebooks/` or scoped dbt commands on the host (for example `dbt build --select <model>+`), set up a venv with Python 3.11+:
+For scoped dbt commands on the host (for example `dbt build --select <model>+`), invoke them through the same image:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt && dbt deps
+docker compose run --rm dbt dbt build --select <model>+
+```
+
+Optional: the exploratory notebooks under [`notebooks/`](notebooks/) sit outside the reproducible build. To re-run them, install their dependencies on the host and open the folder in Jupyter:
+
+```bash
+pip install duckdb==1.1.3 notebook==7.6.2 pandas==2.2.3
+jupyter notebook notebooks/
 ```
 
 ## Development cycle

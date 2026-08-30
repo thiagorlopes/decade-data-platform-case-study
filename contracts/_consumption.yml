@@ -12,7 +12,7 @@ version: 2
 #                  flagged transaction_id:reissued; dropped twins stay in
 #                  int_*_transactions. Unions int_*_transactions.
 #   dim_holding:   one row per (product_family, holding_key). Static contract
-#                  of the security — name, isin, maturity, indexer, rate,
+#                  of the security: name, isin, maturity, indexer, rate,
 #                  issuer, ticker, fund_cnpj. Descriptive attributes live here
 #                  only; the facts carry keys and measures. Join either fact
 #                  on (product_family, holding_key).
@@ -69,7 +69,7 @@ models:
         data_tests: [not_null]
       - name: snapshot_created_at
         data_type: timestamp
-        description: '{{ doc("stg_snapshot_created_at") }} This is the delivery moment, not the valuation moment — see reference_date for the latter.'
+        description: '{{ doc("stg_snapshot_created_at") }} This is the delivery moment, not the valuation moment. See reference_date for the latter.'
         data_tests: [not_null]
       - name: snapshot_id
         data_type: string
@@ -259,10 +259,10 @@ models:
       - name: holding_key
         data_type: string
         description: >-
-          Same value as fct_holdings.holding_key for this investment_id — the
-          equi-join key from a movement to its holding. Resolved from the
-          family's natural key on any snapshot in which the investment appears;
-          falls back to investment_id when no natural key is available.
+          Same value as fct_holdings.holding_key for this investment_id. Join
+          a movement to its holding on this column. Resolved from the family's
+          natural key on any snapshot in which the investment appears; falls
+          back to investment_id when no natural key is available.
       - name: investment_id
         data_type: string
         description: '{{ doc("ofb_investment_id") }}'
