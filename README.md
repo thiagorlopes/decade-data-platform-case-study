@@ -41,7 +41,7 @@ For scoped dbt commands on the host (for example `dbt build --select <model>+`),
 docker compose run --rm dbt dbt build --select <model>+
 ```
 
-Optional: the exploratory notebooks under [`notebooks/`](notebooks/) sit outside the reproducible build. To re-run them, install their dependencies on the host and open the folder in Jupyter:
+Optional: the exploratory notebooks under [`notebooks/`](notebooks/) sit outside the reproducible build. To read them without installing anything, open the folder on GitHub, which renders each `.ipynb` inline. To re-run them, install their dependencies on the host and open the folder in Jupyter:
 
 ```bash
 pip install duckdb==1.1.3 notebook==7.6.2 pandas==2.2.3
@@ -70,7 +70,7 @@ The loop: edit a model, `make build`, check the numbers.
 
 **`make build`** runs models + tests and writes `warehouse.duckdb`. Run it after every model edit, and first on a fresh clone.
 
-**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids, all read-only. **`make shell`** opens the DuckDB CLI inside the container (`.quit` to leave). Close either before a build: DuckDB is single-writer, so an open connection blocks it.
+**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids, all read-only. **`make shell`** opens the DuckDB CLI inside the container. Close either with `Ctrl+D` or `.quit` before a build: DuckDB is single-writer, so an open connection blocks it.
 
 ## Browsing the data model
 
