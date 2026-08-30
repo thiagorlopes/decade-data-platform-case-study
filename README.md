@@ -70,7 +70,7 @@ The loop: edit a model, `make build`, check the numbers.
 
 **`make build`** runs models + tests and writes `warehouse.duckdb`. Run it after every model edit, and first on a fresh clone.
 
-**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids, all read-only. **`make shell`** opens the DuckDB CLI inside the container (`.quit` to leave). Close either before a build: DuckDB is single-writer, so an open connection blocks it.
+**`make ui`** opens the [DuckDB UI](https://duckdb.org/docs/stable/core_extensions/ui.html) at http://localhost:4213: a schema browser, a notebook-style SQL editor, and result grids, all read-only. **`make shell`** opens the DuckDB CLI inside the container. Close either with `Ctrl+D` or `.quit` before a build: DuckDB is single-writer, so an open connection blocks it.
 
 ## Browsing the data model
 
