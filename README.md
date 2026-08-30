@@ -11,6 +11,7 @@ This repository contains Thiago Portugues's solution for the hiring process at D
 **[Development cycle](#development-cycle)**<br>
 **[Querying the warehouse](#querying-the-warehouse)**<br>
 **[Browsing the data model](#browsing-the-data-model)**<br>
+**[Notebooks](#notebooks)**<br>
 **[Consumers](#consumers)**<br>
 **[Contracts](#contracts)**<br>
 **[Data quality: detect, resolve, guarantee](#data-quality-detect-resolve-guarantee)**<br>
@@ -26,19 +27,19 @@ Two raw Open Finance Brasil feeds land in `data/`: **positions** (balance snapsh
 
 ## Installation
 
-You need Docker Engine with Docker Compose v2, `make`, and `git`. Build the docker image; this is all you need to run the pipeline end-to-end:
+You need Docker Engine with Docker Compose v2, `make`, and `git`. Two commands build the image and reproduce the pipeline end to end:
 
 ```bash
 make install
+make build
 ```
 
-The image ships Python, dbt, and the DuckDB CLI. The `make` targets drive the whole pipeline from inside the container.
+The image ships Python, dbt, and the DuckDB CLI. Every `make` target runs inside that container, so no host Python setup is needed. The wealth CSVs under [`consumers/wealth/output/`](consumers/wealth/output/) are committed, so `make build` alone is enough to verify the deliverable against the queries.
 
-Optional: to run the notebooks under `notebooks/` or scoped dbt commands on the host (for example `dbt build --select <model>+`), set up a venv with Python 3.11+:
+For scoped dbt commands on the host (for example `dbt build --select <model>+`), invoke them through the same image:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt && dbt deps
+docker compose run --rm dbt dbt build --select <model>+
 ```
 
 ## Development cycle
@@ -70,6 +71,18 @@ The loop: edit a model, `make build`, check the numbers.
 Run `make docs` and open http://localhost:8080 to browse the DAG and read per-column docs: Open Finance Brasil spec fields, enum values, and defect handling rules. They are sourced from the OFB investment API specs through shared `{% docs %}` blocks in [`models/canonical/_docs.md`](models/canonical/_docs.md). Docs render from `warehouse.duckdb`, so run `make build` first if it's missing.
 
 <img width="1828" height="927" alt="image" src="https://github.com/user-attachments/assets/0fc52a71-f6ed-4aed-8fa7-2c66e25bcb2f" />
+
+## Notebooks
+
+Four exploratory notebooks under [`notebooks/`](notebooks/) show how the design was reached: raw exploration, within-record defects, across-record defects, and two-feed reconciliation. Outputs are committed inside each `.ipynb`, so GitHub renders them without any setup.
+
+Re-execution is optional and runs on the host, not inside the docker image. On Debian and Ubuntu, install `python3-venv` first with `sudo apt install python3-venv`. Then create a virtual environment, install the notebook requirements, and start Jupyter:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-notebook.txt
+jupyter notebook --notebook-dir=notebooks --ServerApp.token='' --IdentityProvider.token=''
+```
 
 ## Consumers
 
