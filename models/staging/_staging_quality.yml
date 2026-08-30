@@ -48,7 +48,7 @@ models:
       # CNPJ must be exactly 14 digits, providers send decimal tails
       - dbt_utils.expression_is_true:
           name: dq_bank_detail_cnpj_form
-          expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          expression: "{{ decade.regex_matches('issuer_cnpj', '^[0-9]{14}$') }}"
           config: &dq_warn_stored
             severity: warn
             store_failures: true
@@ -226,7 +226,7 @@ models:
       - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_credit_detail_debtor_cnpj_form
-          expression: "regexp_matches(debtor_cnpj, '^[0-9]{14}$')"
+          expression: "{{ decade.regex_matches('debtor_cnpj', '^[0-9]{14}$') }}"
           config: *dq_warn_stored
       - dbt_utils.expression_is_true:
           name: dq_credit_detail_purchase_date_not_placeholder
@@ -326,7 +326,7 @@ models:
       - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_funds_detail_cnpj_form
-          expression: "regexp_matches(fund_cnpj, '^[0-9]{14}$')"
+          expression: "{{ decade.regex_matches('fund_cnpj', '^[0-9]{14}$') }}"
           config: *dq_warn_stored
     columns:
       - *env_snapshot_id
@@ -382,7 +382,7 @@ models:
       # ISIN must be 2 letters, 9 alphanumerics, 1 check digit
       - dbt_utils.expression_is_true:
           name: dq_treasure_detail_isin_form
-          expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
+          expression: "{{ decade.regex_matches('isin_code', '^[A-Z]{2}[A-Z0-9]{9}[0-9]$') }}"
           config: *dq_warn_stored
     columns:
       - *env_snapshot_id
@@ -438,11 +438,11 @@ models:
       - *lot_redelivery
       - dbt_utils.expression_is_true:
           name: dq_variable_detail_issuer_cnpj_form
-          expression: "regexp_matches(issuer_cnpj, '^[0-9]{14}$')"
+          expression: "{{ decade.regex_matches('issuer_cnpj', '^[0-9]{14}$') }}"
           config: *dq_warn_stored
       - dbt_utils.expression_is_true:
           name: dq_variable_detail_isin_form
-          expression: "regexp_matches(isin_code, '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')"
+          expression: "{{ decade.regex_matches('isin_code', '^[A-Z]{2}[A-Z0-9]{9}[0-9]$') }}"
           config: *dq_warn_stored
     columns:
       - *env_snapshot_id

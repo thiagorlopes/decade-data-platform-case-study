@@ -59,13 +59,13 @@ WITH joined AS (
 ),
 
 repaired AS (
-    SELECT * REPLACE (
-        {{ clean_cnpj('issuer_cnpj') }}        AS issuer_cnpj,
-        {{ clean_cnpj('debtor_cnpj') }}        AS debtor_cnpj,
-        {{ blank_to_null('isin_code') }}       AS isin_code,
-        {{ clean_indexer('indexer') }}         AS indexer,
-        {{ clean_missing_date('purchase_date') }} AS purchase_date
-    )
+    SELECT {{ decade.star_replace({
+        'issuer_cnpj':   clean_cnpj('issuer_cnpj'),
+        'debtor_cnpj':   clean_cnpj('debtor_cnpj'),
+        'isin_code':     blank_to_null('isin_code'),
+        'indexer':       clean_indexer('indexer'),
+        'purchase_date': clean_missing_date('purchase_date')
+    }) }}
     FROM joined
 ),
 

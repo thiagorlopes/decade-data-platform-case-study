@@ -46,12 +46,12 @@ WITH joined AS (
 ),
 
 repaired AS (
-    SELECT * REPLACE (
-        {{ blank_to_null('isin_code') }}       AS isin_code,
-        {{ blank_to_null('product_name') }}    AS product_name,
-        {{ clean_indexer('indexer') }}         AS indexer,
-        {{ clean_missing_date('purchase_date') }} AS purchase_date
-    )
+    SELECT {{ decade.star_replace({
+        'isin_code':     blank_to_null('isin_code'),
+        'product_name':  blank_to_null('product_name'),
+        'indexer':       clean_indexer('indexer'),
+        'purchase_date': clean_missing_date('purchase_date')
+    }) }}
     FROM joined
 ),
 

@@ -42,26 +42,65 @@ unit_tests:
   - name: replay_semantics
     model: int_funds_holdings
     given:
+      # SQL format because dict fixtures cannot express arrays portably:
+      # dbt casts their values as strings, and only DuckDB accepts that.
+      # The flags build through filter(split(...)), which both engines
+      # parse the same way; an empty string becomes an empty array.
       - input: ref('int_funds_positions')
-        rows:
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: ok1, natural_key: NK_ok, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100, quota_gross_price: 10}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: st1, natural_key: NK_st, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: lb1, natural_key: NK_lb, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: ls1, natural_key: NK_ls, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: dp1, natural_key: NK_dp, admission: admit, data_quality_flags: "[]", quota_quantity: 5, gross_amount: 50}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: nq1, natural_key: NK_nq, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: nm1, natural_key: NK_nm, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: tr1, natural_key: NK_tr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: tr1, natural_key: NK_tr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 0}
-          - {snapshot_id: S3, snapshot_created_at: 2026-02-03 09:00:00, account_id: A1, investment_id: tr1, natural_key: NK_tr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: lq1, natural_key: NK_lq, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: lq1, natural_key: NK_lq, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
-          - {snapshot_id: S3, snapshot_created_at: 2026-02-03 09:00:00, account_id: A1, investment_id: lq1, natural_key: NK_lq, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: rp1, natural_key: NK_rp, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: rp2, natural_key: NK_rp, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, account_id: A1, investment_id: gr1, natural_key: NK_gr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: gr1, natural_key: NK_gr, admission: admit, data_quality_flags: "[]", quota_quantity: 10, gross_amount: 100}
-          - {snapshot_id: S2, snapshot_created_at: 2026-02-02 09:00:00, account_id: A1, investment_id: gr2, natural_key: NK_gr, admission: admit, data_quality_flags: "[]", quota_quantity: 0, gross_amount: 0}
+        format: sql
+        rows: |
+          SELECT
+              core.snapshot_id,
+              core.investment_id,
+              CASE core.snapshot_id
+                  WHEN 'S1' THEN TIMESTAMP '2026-02-01 09:00:00'
+                  WHEN 'S2' THEN TIMESTAMP '2026-02-02 09:00:00'
+                  ELSE TIMESTAMP '2026-02-03 09:00:00'
+              END AS snapshot_created_at,
+              CAST(NULL AS STRING) AS institution_id,
+              CAST(NULL AS STRING) AS institution_name,
+              CAST(NULL AS STRING) AS party_id,
+              'A1' AS account_id,
+              CAST(NULL AS STRING) AS connection_id,
+              CAST(NULL AS TIMESTAMP) AS ingested_at,
+              CAST(NULL AS STRING) AS fund_name,
+              CAST(NULL AS STRING) AS fund_cnpj,
+              CAST(NULL AS STRING) AS isin_code,
+              CAST(NULL AS STRING) AS anbima_category,
+              CAST(NULL AS STRING) AS anbima_class,
+              CAST(NULL AS STRING) AS anbima_subclass,
+              CAST(NULL AS DATE) AS reference_date,
+              CAST(core.gross_amount AS DECIMAL(25, 10)) AS gross_amount,
+              CAST(NULL AS STRING) AS currency,
+              CAST(NULL AS DECIMAL(25, 10)) AS net_amount,
+              CAST(NULL AS DECIMAL(25, 10)) AS income_tax_amount,
+              CAST(NULL AS DECIMAL(25, 10)) AS financial_transaction_tax_amount,
+              CAST(NULL AS DECIMAL(25, 10)) AS blocked_amount,
+              CAST(core.quota_quantity AS DECIMAL(25, 10)) AS quota_quantity,
+              CAST(core.quota_gross_price AS DECIMAL(25, 10)) AS quota_gross_price,
+              core.natural_key,
+              'admit' AS admission,
+              filter(split('', ','), f -> f <> '') AS data_quality_flags
+          FROM (
+              SELECT 'S1' AS snapshot_id, 'ok1' AS investment_id, 'NK_ok' AS natural_key, 10 AS quota_quantity, 100 AS gross_amount, 10 AS quota_gross_price
+              UNION ALL SELECT 'S1', 'st1', 'NK_st', 10, 100, NULL
+              UNION ALL SELECT 'S1', 'lb1', 'NK_lb', 0, 0, NULL
+              UNION ALL SELECT 'S1', 'ls1', 'NK_ls', 0, 0, NULL
+              UNION ALL SELECT 'S1', 'dp1', 'NK_dp', 5, 50, NULL
+              UNION ALL SELECT 'S1', 'nq1', 'NK_nq', 10, 100, NULL
+              UNION ALL SELECT 'S1', 'nm1', 'NK_nm', 10, 100, NULL
+              UNION ALL SELECT 'S1', 'tr1', 'NK_tr', 10, 100, NULL
+              UNION ALL SELECT 'S2', 'tr1', 'NK_tr', 10, 0, NULL
+              UNION ALL SELECT 'S3', 'tr1', 'NK_tr', 10, 100, NULL
+              UNION ALL SELECT 'S1', 'lq1', 'NK_lq', 10, 100, NULL
+              UNION ALL SELECT 'S2', 'lq1', 'NK_lq', 0, 0, NULL
+              UNION ALL SELECT 'S3', 'lq1', 'NK_lq', 10, 100, NULL
+              UNION ALL SELECT 'S1', 'rp1', 'NK_rp', 10, 100, NULL
+              UNION ALL SELECT 'S2', 'rp2', 'NK_rp', 10, 100, NULL
+              UNION ALL SELECT 'S1', 'gr1', 'NK_gr', 10, 100, NULL
+              UNION ALL SELECT 'S2', 'gr1', 'NK_gr', 10, 100, NULL
+              UNION ALL SELECT 'S2', 'gr2', 'NK_gr', 0, 0, NULL
+          ) AS core
       - input: ref('int_funds_transactions')
         rows:
           - {transaction_id: m_ok1, investment_id: ok1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 15}
@@ -78,22 +117,53 @@ unit_tests:
           - {transaction_id: m_lq1, investment_id: lq1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
           - {transaction_id: m_rp1, investment_id: rp1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
           - {transaction_id: m_gr1, investment_id: gr1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_conversion_date: 2026-01-10, movement_type: ENTRADA, transaction_quota_quantity: 10}
+    # dbt compares a SQL expect on every output column, so the outer
+    # SELECT lists all of them. The core subquery carries only the
+    # values the test is about.
     expect:
-      rows:
-        - {snapshot_id: S1, holding_key: NK_ok, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_st, quantity: 10, quantity_derived: 4, data_quality_flags: "[quantity_reported:stale]"}
-        - {snapshot_id: S1, holding_key: NK_lb, quantity: 0, quantity_derived: 0, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_ls, quantity: 0, quantity_derived: 0, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_dp, quantity: 5, quantity_derived: 0, data_quality_flags: "[movements:incomplete]"}
-        - {snapshot_id: S1, holding_key: NK_nq, quantity: 10, quantity_derived: 0, data_quality_flags: "[movements:incomplete]"}
-        - {snapshot_id: S1, holding_key: NK_nm, quantity: 10, quantity_derived: null, data_quality_flags: "[movements:incomplete]"}
-        - {snapshot_id: S1, holding_key: NK_tr, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
-        - {snapshot_id: S2, holding_key: NK_tr, quantity: 10, quantity_derived: 10, data_quality_flags: "[gross:zero_transient]"}
-        - {snapshot_id: S3, holding_key: NK_tr, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_lq, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
-        - {snapshot_id: S2, holding_key: NK_lq, quantity: 0, quantity_derived: 10, data_quality_flags: "[quantity_reported:stale]"}
-        - {snapshot_id: S3, holding_key: NK_lq, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_rp, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
-        - {snapshot_id: S2, holding_key: NK_rp, quantity: 10, quantity_derived: 10, data_quality_flags: "[investment_id:replaced]"}
-        - {snapshot_id: S1, holding_key: NK_gr, quantity: 10, quantity_derived: 10, data_quality_flags: "[]"}
-        - {snapshot_id: S2, holding_key: NK_gr, quantity: 10, quantity_derived: 10, data_quality_flags: "[lot:zero_kept, investment_id:multiple]"}
+      format: sql
+      rows: |
+        SELECT
+            CASE core.snapshot_id
+                WHEN 'S1' THEN TIMESTAMP '2026-02-01 09:00:00'
+                WHEN 'S2' THEN TIMESTAMP '2026-02-02 09:00:00'
+                ELSE TIMESTAMP '2026-02-03 09:00:00'
+            END AS snapshot_created_at,
+            CAST(NULL AS DATE) AS reference_date,
+            core.snapshot_id,
+            'A1' AS account_id,
+            CAST(NULL AS STRING) AS party_id,
+            CAST(NULL AS STRING) AS institution_id,
+            CAST(NULL AS STRING) AS institution_name,
+            core.holding_key,
+            CAST(NULL AS STRING) AS fund_name,
+            CAST(NULL AS STRING) AS fund_cnpj,
+            CAST(NULL AS STRING) AS isin_code,
+            CAST(core.quantity AS DECIMAL(38, 10)) AS quantity,
+            CAST(core.quantity_derived AS DECIMAL(38, 10)) AS quantity_derived,
+            CAST(core.gross_amount AS DECIMAL(38, 10)) AS gross_amount,
+            CAST(NULL AS DECIMAL(38, 10)) AS net_amount,
+            CAST(NULL AS STRING) AS currency,
+            CAST(core.unit_price AS DECIMAL(38, 10)) AS unit_price,
+            CAST(core.n_investment_ids AS BIGINT) AS n_investment_ids,
+            filter(split(core.ids, ','), f -> f <> '') AS investment_ids,
+            filter(split(core.flags, ','), f -> f <> '') AS data_quality_flags
+        FROM (
+            SELECT 'S1' AS snapshot_id, 'NK_ok' AS holding_key, 10 AS quantity, 10 AS quantity_derived, 100 AS gross_amount, 10 AS unit_price, 1 AS n_investment_ids, 'ok1' AS ids, '' AS flags
+            UNION ALL SELECT 'S1', 'NK_st', 10, 4, 100, NULL, 1, 'st1', 'quantity_reported:stale'
+            UNION ALL SELECT 'S1', 'NK_lb', 0, 0, 0, NULL, 1, 'lb1', ''
+            UNION ALL SELECT 'S1', 'NK_ls', 0, 0, 0, NULL, 1, 'ls1', ''
+            UNION ALL SELECT 'S1', 'NK_dp', 5, 0, 50, NULL, 1, 'dp1', 'movements:incomplete'
+            UNION ALL SELECT 'S1', 'NK_nq', 10, 0, 100, NULL, 1, 'nq1', 'movements:incomplete'
+            UNION ALL SELECT 'S1', 'NK_nm', 10, NULL, 100, NULL, 1, 'nm1', 'movements:incomplete'
+            UNION ALL SELECT 'S1', 'NK_tr', 10, 10, 100, NULL, 1, 'tr1', ''
+            UNION ALL SELECT 'S2', 'NK_tr', 10, 10, 0, NULL, 1, 'tr1', 'gross:zero_transient'
+            UNION ALL SELECT 'S3', 'NK_tr', 10, 10, 100, NULL, 1, 'tr1', ''
+            UNION ALL SELECT 'S1', 'NK_lq', 10, 10, 100, NULL, 1, 'lq1', ''
+            UNION ALL SELECT 'S2', 'NK_lq', 0, 10, 0, NULL, 1, 'lq1', 'quantity_reported:stale'
+            UNION ALL SELECT 'S3', 'NK_lq', 10, 10, 100, NULL, 1, 'lq1', ''
+            UNION ALL SELECT 'S1', 'NK_rp', 10, 10, 100, NULL, 1, 'rp1', ''
+            UNION ALL SELECT 'S2', 'NK_rp', 10, 10, 100, NULL, 1, 'rp2', 'investment_id:replaced'
+            UNION ALL SELECT 'S1', 'NK_gr', 10, 10, 100, NULL, 1, 'gr1', ''
+            UNION ALL SELECT 'S2', 'NK_gr', 10, 10, 100, NULL, 2, 'gr1,gr2', 'investment_id:multiple,lot:zero_kept'
+        ) AS core

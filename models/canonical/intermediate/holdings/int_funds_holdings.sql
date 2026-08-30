@@ -35,7 +35,7 @@ lots AS (
         )                                               AS unit_price,
         CAST(NULL AS DATE)                              AS due_date,
         count(*)                                        AS n_investment_ids,
-        array_agg(admitted.investment_id ORDER BY admitted.investment_id) AS investment_ids,
+        array_sort(array_agg(admitted.investment_id)) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,
         flatten(array_agg(data_quality_flags))                    AS lot_flags
     FROM admitted
@@ -57,7 +57,7 @@ SELECT
     holding_key,
     fund_name,
     fund_cnpj,
-    CAST(NULL AS VARCHAR) AS isin_code,
+    CAST(NULL AS STRING) AS isin_code,
     quantity,
     quantity_derived,
     gross_amount,

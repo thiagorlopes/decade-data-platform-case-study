@@ -27,13 +27,59 @@ unit_tests:
   - name: maturity_disclosure
     model: int_bank_fixed_incomes_holdings
     given:
+      # SQL format because dict fixtures cannot express arrays portably:
+      # dbt casts their values as strings, and only DuckDB accepts that.
+      # The flags build through filter(split(...)), which both engines
+      # parse the same way; an empty string becomes an empty array.
       - input: ref('int_bank_fixed_incomes_positions')
-        rows:
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: due1, natural_key: NK_due, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: 2025-01-01}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: open1, natural_key: NK_open, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: 2027-01-01}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: today1, natural_key: NK_today, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: 2026-02-01}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: null1, natural_key: NK_null, admission: admit, data_quality_flags: "[]", quantity: 10, gross_amount: 100, updated_unit_price: 10, due_date: null}
-          - {snapshot_id: S1, snapshot_created_at: 2026-02-01 09:00:00, reference_datetime: 2026-02-01 00:00:00, account_id: A1, investment_id: settled1, natural_key: NK_settled, admission: admit, data_quality_flags: "[]", quantity: 0, gross_amount: 0, updated_unit_price: 10, due_date: 2025-01-01}
+        format: sql
+        rows: |
+          SELECT
+              'S1' AS snapshot_id,
+              core.investment_id,
+              TIMESTAMP '2026-02-01 09:00:00' AS snapshot_created_at,
+              CAST(NULL AS STRING) AS institution_id,
+              CAST(NULL AS STRING) AS institution_name,
+              CAST(NULL AS STRING) AS party_id,
+              'A1' AS account_id,
+              CAST(NULL AS STRING) AS connection_id,
+              CAST(NULL AS TIMESTAMP) AS ingested_at,
+              CAST(NULL AS STRING) AS issuer_cnpj,
+              CAST(NULL AS STRING) AS isin_code,
+              CAST(NULL AS STRING) AS investment_type,
+              CAST(NULL AS DECIMAL(12, 6)) AS pre_fixed_rate,
+              CAST(NULL AS DECIMAL(12, 6)) AS post_fixed_indexer_percentage,
+              CAST(NULL AS STRING) AS rate_type,
+              CAST(NULL AS STRING) AS rate_periodicity,
+              CAST(NULL AS STRING) AS calculation,
+              CAST(NULL AS STRING) AS indexer,
+              CAST(NULL AS STRING) AS indexer_additional_info,
+              CAST(NULL AS DECIMAL(25, 10)) AS issue_unit_price,
+              core.due_date,
+              CAST(NULL AS DATE) AS issue_date,
+              CAST(NULL AS STRING) AS clearing_code,
+              CAST(NULL AS DATE) AS purchase_date,
+              CAST(NULL AS DATE) AS grace_period_date,
+              TIMESTAMP '2026-02-01 00:00:00' AS reference_datetime,
+              CAST(core.quantity AS DECIMAL(25, 10)) AS quantity,
+              CAST(10 AS DECIMAL(25, 10)) AS updated_unit_price,
+              CAST(core.gross_amount AS DECIMAL(25, 10)) AS gross_amount,
+              CAST(NULL AS STRING) AS currency,
+              CAST(NULL AS DECIMAL(25, 10)) AS net_amount,
+              CAST(NULL AS DECIMAL(25, 10)) AS income_tax_amount,
+              CAST(NULL AS DECIMAL(25, 10)) AS financial_transaction_tax_amount,
+              CAST(NULL AS DECIMAL(25, 10)) AS blocked_amount,
+              CAST(NULL AS DECIMAL(25, 10)) AS purchase_unit_price,
+              core.natural_key,
+              'admit' AS admission,
+              filter(split('', ','), f -> f <> '') AS data_quality_flags
+          FROM (
+              SELECT 'due1' AS investment_id, 'NK_due' AS natural_key, DATE '2025-01-01' AS due_date, 10 AS quantity, 100 AS gross_amount
+              UNION ALL SELECT 'open1', 'NK_open', DATE '2027-01-01', 10, 100
+              UNION ALL SELECT 'today1', 'NK_today', DATE '2026-02-01', 10, 100
+              UNION ALL SELECT 'null1', 'NK_null', CAST(NULL AS DATE), 10, 100
+              UNION ALL SELECT 'settled1', 'NK_settled', DATE '2025-01-01', 0, 0
+          ) AS core
       - input: ref('int_bank_fixed_incomes_transactions')
         rows:
           - {transaction_id: m_due1, investment_id: due1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
@@ -41,10 +87,36 @@ unit_tests:
           - {transaction_id: m_today1, investment_id: today1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
           - {transaction_id: m_null1, investment_id: null1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
           - {transaction_id: m_settled1, investment_id: settled1, account_id: A1, ingested_at: 2026-01-25 10:00:00, transaction_date: 2026-01-10, movement_type: ENTRADA, transaction_quantity: 10}
+    # dbt compares a SQL expect on every output column, so the outer
+    # SELECT lists all of them. The core subquery carries only the
+    # values the test is about.
     expect:
-      rows:
-        - {snapshot_id: S1, holding_key: NK_due, data_quality_flags: "[holding:matured]"}
-        - {snapshot_id: S1, holding_key: NK_open, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_today, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_null, data_quality_flags: "[]"}
-        - {snapshot_id: S1, holding_key: NK_settled, data_quality_flags: "[quantity_reported:stale]"}
+      format: sql
+      rows: |
+        SELECT
+            TIMESTAMP '2026-02-01 09:00:00' AS snapshot_created_at,
+            DATE '2026-02-01' AS reference_date,
+            'S1' AS snapshot_id,
+            'A1' AS account_id,
+            CAST(NULL AS STRING) AS party_id,
+            CAST(NULL AS STRING) AS institution_id,
+            CAST(NULL AS STRING) AS institution_name,
+            core.holding_key,
+            CAST(NULL AS STRING) AS investment_type,
+            CAST(NULL AS STRING) AS isin_code,
+            CAST(core.quantity AS DECIMAL(38, 10)) AS quantity,
+            CAST(10 AS DECIMAL(38, 10)) AS quantity_derived,
+            CAST(core.gross_amount AS DECIMAL(38, 10)) AS gross_amount,
+            CAST(NULL AS DECIMAL(38, 10)) AS net_amount,
+            CAST(NULL AS STRING) AS currency,
+            CAST(10 AS DECIMAL(38, 10)) AS unit_price,
+            CAST(1 AS BIGINT) AS n_investment_ids,
+            filter(split(core.ids, ','), f -> f <> '') AS investment_ids,
+            filter(split(core.flags, ','), f -> f <> '') AS data_quality_flags
+        FROM (
+            SELECT 'NK_due' AS holding_key, 10 AS quantity, 100 AS gross_amount, 'due1' AS ids, 'holding:matured' AS flags
+            UNION ALL SELECT 'NK_open', 10, 100, 'open1', ''
+            UNION ALL SELECT 'NK_today', 10, 100, 'today1', ''
+            UNION ALL SELECT 'NK_null', 10, 100, 'null1', ''
+            UNION ALL SELECT 'NK_settled', 0, 0, 'settled1', 'quantity_reported:stale'
+        ) AS core

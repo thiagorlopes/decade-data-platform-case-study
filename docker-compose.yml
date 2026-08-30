@@ -4,6 +4,13 @@ services:
     working_dir: /workspace
     volumes:
       - .:/workspace
+    # Databricks credentials come from .env (gitignored); empty defaults keep
+    # local DuckDB targets working without one.
+    environment:
+      DATABRICKS_HOST: ${DATABRICKS_HOST:-}
+      DATABRICKS_HTTP_PATH: ${DATABRICKS_HTTP_PATH:-}
+      DATABRICKS_TOKEN: ${DATABRICKS_TOKEN:-}
+      DATABRICKS_CATALOG: ${DATABRICKS_CATALOG:-workspace}
     # only bound when started with `--service-ports` (make docs-serve)
     ports:
       - "8080:8080"

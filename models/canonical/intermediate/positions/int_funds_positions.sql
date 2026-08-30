@@ -40,9 +40,9 @@ WITH joined AS (
 -- fund_cnpj is clean in today's data; the repair is kept as a guard because
 -- it is also the natural key, and a decimal-tailed copy would split a fund.
 repaired AS (
-    SELECT * REPLACE (
-        {{ clean_cnpj('fund_cnpj') }} AS fund_cnpj
-    )
+    SELECT {{ decade.star_replace({
+        'fund_cnpj': clean_cnpj('fund_cnpj')
+    }) }}
     FROM joined
 ),
 

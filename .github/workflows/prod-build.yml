@@ -1,0 +1,62 @@
+# This job deploys to prod. It runs the two commands the README's
+# orchestration section describes, against the Databricks target. The
+# credentials come from repository secrets, so no personal token reaches
+# prod and every prod build points to a commit on master.
+#
+# The schedule is daily because the workspace holds a static sample. With
+# live feeds, only the cron line changes: the watermark keeps overlapping
+# runs idempotent, so a tighter cadence is safe.
+#
+# The repository check keeps forks from failing on missing secrets.
+name: prod build
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: models + tests on Databricks
+    runs-on: ubuntu-latest
+    if: github.repository == 'thiagorlopes/decade-data-platform-case-study'
+    timeout-minutes: 30
+
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: make install
+
+      - name: Install dbt packages
+        run: make deps
+
+      - name: Run models and tests
+        run: |
+          set -o pipefail
+          docker compose run --rm -u $(id -u):$(id -g) dbt \
+            dbt build --target prod 2>&1 | tee /tmp/build.log
+
+      # On the static sample this always reports stale. That is the signal
+      # working, so it never fails the job.
+      - name: Check source freshness
+        continue-on-error: true
+        run: |
+          docker compose run --rm -u $(id -u):$(id -g) dbt \
+            dbt source freshness --target prod
+
+      - name: Report the test tally
+        if: always()
+        run: |
+          {
+            echo '### dbt build --target prod'
+            echo '```'
+            sed -e 's/\x1b\[[0-9;]*m//g' /tmp/build.log \
+              | grep -E 'Done\.|Completed with' | tail -n 3
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" || true

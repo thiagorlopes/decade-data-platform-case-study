@@ -55,7 +55,7 @@ Run `make install` once, then `make build`. Everything else works from the built
 
 Run `make help` for the full list, including partial variants like `make run` (models only), `make test` (tests only), and `make deps` (install dbt packages; every compiling target runs it first).
 
-`make build` is idempotent. Canonical models are incremental with an `ingested_at` watermark, so reruns only process rows at or past the newest arrival. Positions and holdings dedupe on `(snapshot_id, investment_id)`; transactions dedupe on `transaction_id`. To reprocess everything after a transform change, run `make clean && make build`. This equals `dbt build --full-refresh` on a fresh warehouse.
+`make build` is idempotent. Canonical models are incremental with an `ingested_at` watermark, so reruns only process rows at or past the newest arrival. Positions and holdings dedupe on `(snapshot_id, investment_id)`; transactions dedupe on `transaction_id`. To reprocess everything after a transform change, run `make clean && make build`. This equals `dbt build --full-refresh` on a fresh warehouse. To reprocess a bounded window instead, pass `--vars '{"backfill_from": "2024-01-01"}'`: every watermark reopens to that point, the affected snapshots are re-judged, and the upserts absorb the re-touched rows, so no full refresh is needed.
 
 ## Querying the warehouse
 
@@ -123,7 +123,28 @@ Decade runs its data workflows on Databricks, so the target architecture for thi
 
 <img width="720" height="596" alt="image" src="https://github.com/user-attachments/assets/73081923-a49f-4392-99d1-86f3e6cad1c1" />
 
-This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required; the same dbt models run against Databricks when promoted. The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. That way, we would be able to close one tradeoff this shortcut carries: SQL dialect drift between the two engines. In that shared workspace, Asset Bundles deploy each engineer's job under their own prefix and the dev profile writes to a per-user schema, so concurrent runs from different branches cannot overwrite each other.
+This case study solution ships a two-environment slice of that target: **DuckDB for dev, Databricks for prod**. DuckDB keeps the pipeline reproducible on any computer with no account required. The same models build on Databricks with `--target prod`. Where the two engines disagree on SQL spelling, a small set of `adapter.dispatch` macros carries the difference, so the model files stay engine-neutral.
+
+The two targets lay out schemas differently, on purpose:
+
+- **Prod fans out by layer.** On Databricks each layer lands in its own schema: `staging`, `canonical`, `consumption`, plus `dbt_test__audit` for stored test failures. That makes the layer boundary from the [Compliance](#compliance) section a grant target: consumers get `consumption` and nothing else.
+- **Dev stays flat.** The local warehouse is one DuckDB file per developer, so schema fan-out buys no isolation there and the consumer queries keep their bare table names.
+
+The upgrade path to the full target is replacing DuckDB with a Databricks dev workspace through a profile change. In that shared workspace, Asset Bundles deploy each engineer's job under their own prefix and the dev profile writes to a per-user schema, so concurrent runs from different branches cannot overwrite each other. `generate_schema_name` in [`macros/schemas.sql`](macros/schemas.sql) is the seam where that per-user prefix goes; it is documented there and deliberately not built, because the single current workspace is prod only.
+
+#### Deploying to prod
+
+Deploys to prod run from CI, never from a laptop. A scheduled GitHub Actions job ([`.github/workflows/prod-build.yml`](.github/workflows/prod-build.yml)) runs `dbt build --target prod` and `dbt source freshness`, the same two commands the [Orchestration](#orchestration) section describes. The job reads its Databricks credentials from repository secrets. No personal token reaches prod, and every prod build points to a commit on `master`.
+
+You can still run the prod build yourself. Set three environment variables (`DATABRICKS_HOST`, `DATABRICKS_HTTP_PATH`, `DATABRICKS_TOKEN`), then pass the target:
+
+```bash
+dbt build --target prod
+```
+
+This path is for verification, not for deploys. It lets a reviewer reproduce the prod build without waiting for the schedule.
+
+Everything runs on both engines: contracts, data tests, unit tests, and the incremental merges. The unit test fixtures build their arrays through `filter(split(...))`, a spelling both engines parse the same way. Running the unit tests on Databricks caught a real cross-engine bug: the two engines read the backslash in a regex literal differently, which silently turned every fund CNPJ to NULL in prod. The fix and the rationale live next to `clean_cnpj` in [`macros/openfinance.sql`](macros/openfinance.sql).
 
 ### Two kinds of incremental
 
@@ -166,10 +187,11 @@ The layout serves four query patterns:
 | Portfolio analytics | many customers, bounded dates | analysts and services |
 | The build itself | whole snapshots at or past the watermark | the incremental job |
 
-Three decisions serve them:
+Four decisions serve them:
 
-- **Cluster by customer, then time.** Both facts are Delta tables with [liquid clustering](https://docs.databricks.com/aws/en/tables/clustering): `(party_id, snapshot_created_at)` for holdings, `(party_id, transaction_date)` for movements. Every product query filters on one customer first, so file skipping cuts a point lookup to a handful of files. Hive-style partitioning on `party_id` would create the small-file problem by design: one folder per customer.
-- **Compact toward ~128 MB files.** A build every few minutes writes small files all day. Auto compaction and optimized writes keep files near target, so the file count tracks data volume, not run count.
+- **Cluster by customer, then time.** Both facts are Delta tables with [liquid clustering](https://docs.databricks.com/aws/en/tables/clustering): `(party_id, snapshot_created_at)` for holdings, `(party_id, transaction_date)` for movements. Every product query filters on one customer first, so file skipping cuts a point lookup to a handful of files. Hive-style partitioning on `party_id` would create the small-file problem by design: one folder per customer. The clustering keys live in `dbt_project.yml` (`liquid_clustered_by`); the DuckDB adapter ignores them.
+- **Compact toward ~128 MB files.** A build every few minutes writes small files all day. Auto compaction and optimized writes keep files near target, so the file count tracks data volume, not run count. They are set as Delta table properties in `dbt_project.yml`; the DuckDB adapter ignores them.
+- **Size compute by role.** Builds and readers get separate compute. The build runs on a jobs cluster sized by arrivals per window, because the watermark bounds each run's work no matter how large the tables grow. Readers share a SQL warehouse that autoscales with concurrent queries, so a burst of analysts scales the warehouse and never the build. Neither workload pays for the other.
 - **Let cost grow with customers, not history.** Storage grows linearly with customers, a point query reads one cluster, and build compute follows the arrival rate. At ten times the customers: ten times the storage, the same wealth-page latency, builds still sized by arrivals per window.
 
 ## Compliance

@@ -31,7 +31,7 @@ lots AS (
         )                                               AS unit_price,
         max(due_date)                                   AS due_date,
         count(*)                                        AS n_investment_ids,
-        array_agg(admitted.investment_id ORDER BY admitted.investment_id) AS investment_ids,
+        array_sort(array_agg(admitted.investment_id)) AS investment_ids,
         bool_or(coalesce(gross_amount, 0) = 0)          AS has_zero_lot,
         flatten(array_agg(data_quality_flags))                    AS lot_flags
     FROM admitted
