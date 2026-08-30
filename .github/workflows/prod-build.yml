@@ -36,6 +36,13 @@ jobs:
       - name: Install dbt packages
         run: make deps
 
+      # Static parquet sample lives in the repo, not in Unity Catalog. Upload
+      # it into decade.raw_openfinance so the sources resolve. Idempotent.
+      - name: Bootstrap raw tables on Databricks
+        run: |
+          docker compose run --rm -u $(id -u):$(id -g) dbt \
+            python scripts/bootstrap_databricks_raw.py
+
       - name: Run models and tests
         run: |
           set -o pipefail
