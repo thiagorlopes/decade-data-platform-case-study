@@ -35,6 +35,7 @@ consumers:  ## Regenerate the wealth output CSVs from the committed queries
 	$(RUN) python consumers/wealth/export_output.py
 
 shell:  ## Open duckdb CLI on the warehouse
+	@test -f warehouse.duckdb || { echo "warehouse.duckdb missing. Run: make build"; exit 1; }
 	$(RUN) duckdb warehouse.duckdb
 
 ui:  ## Browse warehouse.duckdb read-only at http://localhost:4213 (close before builds)

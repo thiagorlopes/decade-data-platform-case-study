@@ -231,3 +231,10 @@ logs/
 # Local duckdb warehouse
 warehouse.duckdb
 warehouse.duckdb.wal
+dev.duckdb
+.duckdb/
+.duckdb_history
+
+# Notebook and consumer local artifacts
+notebooks/.ofb_specs/
+consumers/wealth/output/*.html
