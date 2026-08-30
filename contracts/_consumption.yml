@@ -259,10 +259,10 @@ models:
       - name: holding_key
         data_type: string
         description: >-
-          Same value as fct_holdings.holding_key for this investment_id. This
-          is the equi-join key from a movement to its holding. Resolved from the
-          family's natural key on any snapshot in which the investment appears;
-          falls back to investment_id when no natural key is available.
+          Same value as fct_holdings.holding_key for this investment_id. Join
+          a movement to its holding on this column. Resolved from the family's
+          natural key on any snapshot in which the investment appears; falls
+          back to investment_id when no natural key is available.
       - name: investment_id
         data_type: string
         description: '{{ doc("ofb_investment_id") }}'
