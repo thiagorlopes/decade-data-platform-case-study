@@ -3,6 +3,7 @@
 SELECT
     fct.party_id,
     fct.institution_name,
+    fct.institution_id,
     fct.account_id,
     fct.product_family,
     dim.holding_name,

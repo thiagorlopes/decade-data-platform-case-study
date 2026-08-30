@@ -15,6 +15,7 @@ SELECT
     mov.party_id,
     mov.transaction_date,
     mov.institution_name,
+    mov.institution_id,
     mov.account_id,
     mov.product_family,
     dim.holding_name,
