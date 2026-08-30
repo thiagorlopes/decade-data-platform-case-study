@@ -1,5 +1,5 @@
 -- 1:1 flatten of raw BANK_FIXED_INCOMES balances payloads into typed columns, in spec order.
--- API: GET /investments/{investmentId}/balances (bank-fixed-incomes v1.1.0)
+-- API: GET /investments/{investmentId}/balances — bank-fixed-incomes v1.1.0
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/bank-fixed-incomes/1.1.0.yml#L129
 -- Payload schema #/components/schemas/ResponseBankFixedIncomesBalances.data: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/bank-fixed-incomes/1.1.0.yml#L406
 SELECT

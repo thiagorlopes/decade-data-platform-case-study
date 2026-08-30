@@ -1,5 +1,5 @@
 -- 1:1 flatten of raw TREASURE_TITLES transaction payloads into typed columns, in spec order.
--- API: GET /investments/{investmentId}/transactions (and /transactions-current) (treasure-titles v1.1.0)
+-- API: GET /investments/{investmentId}/transactions (and /transactions-current) — treasure-titles v1.1.0
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/treasure-titles/1.1.0.yml#L191
 -- Payload schema #/components/schemas/TreasureTitlesProductTransaction: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/treasure-titles/1.1.0.yml#L476
 SELECT

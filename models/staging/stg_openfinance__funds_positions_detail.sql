@@ -1,5 +1,5 @@
 -- 1:1 flatten of raw FUNDS detail payloads into typed columns, in spec order.
--- API: GET /investments/{investmentId} (funds v1.1.0)
+-- API: GET /investments/{investmentId} — funds v1.1.0
 -- Endpoint in spec: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/funds/1.1.0.yml#L98
 -- Payload schema #/components/schemas/ResponseFundsProductIdentificationData: https://github.com/OpenBanking-Brasil/draft-openapi/blob/main/swagger-apis/funds/1.1.0.yml#L457
 SELECT
