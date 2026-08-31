@@ -2,7 +2,7 @@
 
 [![build](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml/badge.svg)](https://github.com/thiagorlopes/decade-data-platform-case-study/actions/workflows/build.yml)
 
-This repository contains Thiago Portugues's solution for the hiring process at Decade.
+This repository contains Thiago Portugues's solution for the hiring process at Decade. Video walkthrough available at [https://www.youtube.com/watch?x=z_pQfxIT6DI](https://www.youtube.com/watch?v=z_pQfxlT6DI).
 
 ## Table of Contents
 
