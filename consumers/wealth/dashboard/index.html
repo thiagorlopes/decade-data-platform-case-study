@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decade · Seu Patrimônio</title>
+<style>
+  :root {
+    --bg: #F3F1F0;
+    --panel: #EEECEA;
+    --card: #FCFBFA;
+    --ink: #1F1D1A;
+    --muted: #7A766E;
+    --border: #DFDCD5;
+    --green: #17753C;
+    --red: #B3372E;
+    --seg-1: #454F3D;
+    --seg-2: #8AA37F;
+    --seg-3: #C9D2BE;
+    --serif: "Palatino Linotype", "Book Antiqua", Georgia, "Times New Roman", serif;
+    --sans: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); font-size: 14px; line-height: 1.45;
+  }
+  a { color: inherit; }
+
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ---------- sidebar ---------- */
+  aside {
+    width: 320px; flex: 0 0 320px; background: var(--panel);
+    padding: 24px 28px; display: flex; flex-direction: column; gap: 26px;
+    border-right: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; justify-content: space-between; }
+  .brand-left { display: flex; align-items: center; gap: 9px; }
+  .brand-left img.icon { height: 20px; }
+  .brand-left img.word { height: 19px; }
+  .brand-icons { display: flex; gap: 14px; color: var(--muted); }
+  .brand-icons svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+
+  .side-label { color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  .side-total { font-family: var(--serif); font-size: 26px; letter-spacing: .2px; }
+  .allocbar { display: flex; gap: 4px; height: 7px; margin-top: 14px; }
+  .allocbar span { border-radius: 4px; }
+
+  .side-section { border-top: 1px solid var(--border); padding-top: 18px; }
+  .side-row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; }
+  .side-row .nm { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .side-row .val { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .side-row .pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .side-flow { font-size: 20px; font-family: var(--serif); }
+  .side-note { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .side-foot { margin-top: auto; color: var(--muted); font-size: 12px; }
+
+  /* ---------- main ---------- */
+  main { flex: 1; padding: 28px 56px 64px; max-width: 1180px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; color: var(--muted); }
+  .back { font-size: 20px; text-decoration: none; }
+  select.party {
+    appearance: none; background: var(--card); border: 1px solid var(--border);
+    border-radius: 999px; padding: 7px 34px 7px 16px; font: inherit; color: var(--ink);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%237A766E' fill='none' stroke-width='1.5'/></svg>");
+    background-repeat: no-repeat; background-position: right 14px center; cursor: pointer;
+  }
+  h1 { font-family: var(--serif); font-weight: 500; font-size: 44px; margin: 26px 0 22px; }
+
+  .controls { display: flex; align-items: center; gap: 26px; border-bottom: 1px solid var(--border); }
+  .saldo { display: flex; align-items: center; gap: 6px; color: var(--ink); padding-bottom: 12px; }
+  .saldo svg { width: 10px; height: 6px; }
+  .tabs { display: flex; gap: 22px; }
+  .tab {
+    background: none; border: none; font: inherit; color: var(--muted);
+    padding: 0 2px 12px; cursor: pointer; border-bottom: 2px solid transparent;
+  }
+  .tab.active { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); }
+  .share {
+    margin-left: auto; background: var(--card); border: 1px solid var(--border);
+    border-radius: 999px; padding: 7px 18px; font: inherit; cursor: default;
+  }
+
+  .headline { margin-top: 26px; }
+  .headline .big { font-family: var(--serif); font-size: 40px; }
+  .headline .delta { margin-top: 6px; font-size: 15px; }
+  .delta.up { color: var(--green); }
+  .delta.down { color: var(--red); }
+  .headline .when { color: var(--muted); font-size: 12px; letter-spacing: .6px; margin-top: 6px; }
+
+  .chart-wrap { margin-top: 10px; }
+  .chart-wrap svg { width: 100%; height: auto; display: block; }
+
+  /* ---------- table ---------- */
+  .assets-head { display: flex; align-items: baseline; justify-content: space-between; margin: 54px 0 18px; }
+  .assets-head h2 { font-family: var(--serif); font-weight: 500; font-size: 30px; margin: 0; }
+  .assets-head .count { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 10px; overflow: hidden; }
+  thead th {
+    background: var(--panel); color: var(--muted); font-weight: 500; font-size: 13px;
+    text-align: left; padding: 11px 14px; white-space: nowrap;
+  }
+  tbody td { padding: 11px 14px; border-top: 1px solid #ECEAE4; vertical-align: top; }
+  tbody td:nth-child(2), tbody td:nth-child(3), tbody td:nth-child(4), tbody td:nth-child(5) { white-space: nowrap; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .sub { color: var(--muted); font-size: 12px; }
+  .chip {
+    display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--border); color: var(--muted); font-size: 11px;
+    cursor: help;
+  }
+  tfoot td { padding: 12px 14px; background: var(--panel); color: var(--muted); }
+  tfoot td.num { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand">
+      <div class="brand-left">
+        <img class="icon" src="assets/decade-icon.png" alt="">
+        <img class="word" src="assets/decade-wordmark.png" alt="Decade">
+      </div>
+      <div class="brand-icons">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="2.5"/></svg>
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+      </div>
+    </div>
+
+    <div>
+      <div class="side-label">Patrimônio &rsaquo;</div>
+      <div class="side-total" id="sideTotal"></div>
+      <div class="allocbar" id="allocBar"></div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Alocação</div>
+      <div id="allocList"></div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Instituições</div>
+      <div id="instList"></div>
+    </div>
+
+    <div class="side-section">
+      <div class="side-label">Fluxo de caixa</div>
+      <div class="side-flow" id="flow12"></div>
+      <div class="side-note">Aportes líquidos nos últimos 12 meses</div>
+    </div>
+
+    <div class="side-foot">Fontes de informação · Open Finance</div>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <a class="back" href="#">&larr;</a>
+      <select class="party" id="partySelect"></select>
+    </div>
+
+    <h1>Seu Patrimônio</h1>
+
+    <div class="controls">
+      <div class="saldo">Saldo total
+        <svg viewBox="0 0 10 6"><path d="M1 1l4 4 4-4" stroke="#7A766E" fill="none" stroke-width="1.5"/></svg>
+      </div>
+      <div class="tabs" id="tabs">
+        <button class="tab" data-m="1">1 mês</button>
+        <button class="tab" data-m="3">3 meses</button>
+        <button class="tab" data-m="6">6 meses</button>
+        <button class="tab" data-m="12">12 meses</button>
+        <button class="tab active" data-m="all">Tempo total</button>
+      </div>
+      <button class="share">Compartilhar</button>
+    </div>
+
+    <div class="headline">
+      <div class="big" id="bigValue"></div>
+      <div class="delta" id="delta"></div>
+      <div class="when" id="when"></div>
+    </div>
+
+    <div class="chart-wrap" id="chart"></div>
+
+    <div class="assets-head">
+      <h2>Todos os Ativos</h2>
+      <div class="count" id="assetCount"></div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Nome</th><th>Instituição</th><th>Risco</th><th>Classe</th><th>Instrumento</th>
+          <th class="num">% carteira</th><th class="num">Valor em R$</th><th class="num">Valor reportado</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+      <tfoot>
+        <tr><td colspan="6" id="footCount"></td><td class="num" id="footTotal"></td><td></td></tr>
+      </tfoot>
+    </table>
+  </main>
+</div>
+
+<script src="data.js"></script>
+<script>
+const DATA = window.DECADE_DATA;
+const FAM = {
+  bank_fixed_incomes:   { classe: 'Renda fixa',     risco: 'Segurança', instr: h => h.name },
+  credit_fixed_incomes: { classe: 'Renda fixa',     risco: 'Moderado',  instr: h => h.name },
+  treasure_titles:      { classe: 'Renda fixa',     risco: 'Moderado',  instr: () => 'Tesouro Direto' },
+  funds:                { classe: 'Fundos',         risco: 'Moderado',  instr: () => 'Fundo' },
+  variable_incomes:     { classe: 'Renda variável', risco: 'Volátil',   instr: () => 'Ações / ETF' },
+};
+const CLASS_COLORS = { 'Renda fixa': 'var(--seg-1)', 'Fundos': 'var(--seg-2)', 'Renda variável': 'var(--seg-3)' };
+const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+const MONTHS_UP = ['JAN','FEV','MAR','ABR','MAI','JUN','JUL','AGO','SET','OUT','NOV','DEZ'];
+
+const brl = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const pct2 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtAxis = v => v >= 1e6
+  ? 'R$' + (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi'
+  : 'R$' + Math.round(v / 1e3) + ' mil';
+const parseDate = s => new Date(s + 'T00:00:00');
+
+const state = {
+  party: DATA[location.hash.slice(1)] ? location.hash.slice(1) : Object.keys(DATA)[0],
+  window: 'all',
+};
+
+function partyView(id) {
+  const raw = DATA[id];
+  const valuation = raw.holdings.reduce((acc, h) => acc + h.value, 0);
+  const series = raw.series.map(p => ({ t: parseDate(p.date), v: p.value }));
+  series.push({ t: parseDate(raw.valuation_date), v: valuation });
+  return { ...raw, valuation, series };
+}
+
+function windowed(series, months) {
+  if (months === 'all') return series;
+  const end = series[series.length - 1].t;
+  const cut = new Date(end); cut.setMonth(cut.getMonth() - Number(months));
+  const win = series.filter(p => p.t >= cut);
+  return win.length >= 2 ? win : series.slice(-2);
+}
+
+function render() {
+  const pv = partyView(state.party);
+  renderSidebar(pv);
+  renderHeadline(pv);
+  renderChart(windowed(pv.series, state.window));
+  renderTable(pv);
+}
+
+function renderSidebar(pv) {
+  document.getElementById('sideTotal').textContent = brl.format(pv.valuation);
+
+  const byClass = {};
+  const byInst = {};
+  for (const h of pv.holdings) {
+    const cls = FAM[h.family].classe;
+    byClass[cls] = (byClass[cls] || 0) + h.value;
+    byInst[h.institution] = (byInst[h.institution] || 0) + h.value;
+  }
+  const classes = Object.entries(byClass).sort((a, b) => b[1] - a[1]);
+  document.getElementById('allocBar').innerHTML = classes.map(([cls, v]) =>
+    `<span style="flex:${(v / pv.valuation).toFixed(4)};background:${CLASS_COLORS[cls]}"></span>`).join('');
+  document.getElementById('allocList').innerHTML = classes.map(([cls, v]) =>
+    `<div class="side-row"><span class="nm"><span class="dot" style="background:${CLASS_COLORS[cls]}"></span>${cls}</span>
+     <span class="pct">${Math.round(v / pv.valuation * 100)}%</span></div>`).join('');
+  document.getElementById('instList').innerHTML = Object.entries(byInst).sort((a, b) => b[1] - a[1])
+    .map(([inst, v]) => `<div class="side-row"><span class="nm">${inst}</span><span class="val">${fmtAxis(v)}</span></div>`).join('');
+
+  const flows = pv.series.slice(0, -1);
+  const end = flows[flows.length - 1];
+  const cut = new Date(end.t); cut.setMonth(cut.getMonth() - 12);
+  const base = flows.filter(p => p.t <= cut).pop() || flows[0];
+  const flow12 = end.v - base.v;
+  const el = document.getElementById('flow12');
+  el.textContent = (flow12 >= 0 ? '+' : '') + brl.format(flow12);
+  el.style.color = flow12 >= 0 ? 'var(--green)' : 'var(--red)';
+}
+
+function renderHeadline(pv) {
+  const win = windowed(pv.series, state.window);
+  const first = win[0], last = win[win.length - 1];
+  document.getElementById('bigValue').textContent = brl.format(last.v);
+  const diff = last.v - first.v;
+  const up = diff >= 0;
+  const el = document.getElementById('delta');
+  el.className = 'delta ' + (up ? 'up' : 'down');
+  el.textContent = `${brl.format(Math.abs(diff))} ${up ? '↑' : '↓'} (${pct2.format(diff / first.v * 100)}%)`;
+  const d = last.t;
+  document.getElementById('when').textContent =
+    `${String(d.getDate()).padStart(2, '0')} ${MONTHS_UP[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function renderChart(series) {
+  const W = 980, H = 380, top = 16, bottom = 40, left = 10, right = 90;
+  const xs = series.map(p => p.t.getTime());
+  const ys = series.map(p => p.v);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  const lo = Math.min(...ys) * 0.9, hi = Math.max(...ys) * 1.04;
+  const X = t => left + (t - x0) / (x1 - x0) * (W - left - right);
+  const Y = v => top + (1 - (v - lo) / (hi - lo)) * (H - top - bottom);
+
+  const path = series.map((p, i) => `${i ? 'L' : 'M'}${X(p.t.getTime()).toFixed(1)},${Y(p.v).toFixed(1)}`).join('');
+  const area = path + `L${X(x1).toFixed(1)},${Y(lo)}L${X(x0).toFixed(1)},${Y(lo)}Z`;
+
+  const step = niceStep((hi - lo) / 3);
+  let grid = '';
+  for (let v = Math.ceil(lo / step) * step; v < hi; v += step) {
+    grid += `<line x1="${left}" x2="${W - right + 14}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#E4E1DA" stroke-width="1"/>
+             <text x="${W - right + 20}" y="${(Y(v) + 4).toFixed(1)}" fill="#7A766E" font-size="12">${fmtAxis(v)}</text>`;
+  }
+
+  const nTicks = Math.min(7, series.length);
+  let xlab = '';
+  for (let i = 0; i < nTicks; i++) {
+    const tick = new Date(x0 + i * (x1 - x0) / (nTicks - 1));
+    const lbl = `${MONTHS[tick.getMonth()]} de ${String(tick.getFullYear()).slice(2)}`;
+    const anchor = i === 0 ? 'start' : (i === nTicks - 1 ? 'end' : 'middle');
+    xlab += `<text x="${X(tick.getTime()).toFixed(1)}" y="${H - 12}" fill="#7A766E" font-size="12" text-anchor="${anchor}">${lbl}</text>`;
+  }
+
+  const last = series[series.length - 1];
+  document.getElementById('chart').innerHTML = `
+  <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#17753C" stop-opacity="0.14"/>
+        <stop offset="1" stop-color="#17753C" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${grid}
+    <path d="${area}" fill="url(#fill)"/>
+    <path d="${path}" fill="none" stroke="var(--green)" stroke-width="2"/>
+    <line x1="${left}" x2="${W - right + 14}" y1="${Y(lo)}" y2="${Y(lo)}" stroke="#CFCBC2" stroke-width="1"/>
+    <circle cx="${X(last.t.getTime()).toFixed(1)}" cy="${Y(last.v).toFixed(1)}" r="5" fill="var(--green)" stroke="#fff" stroke-width="2"/>
+    ${xlab}
+  </svg>`;
+}
+
+function niceStep(rough) {
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  for (const m of [1, 2, 2.5, 5, 10]) if (rough <= m * mag) return m * mag;
+  return 10 * mag;
+}
+
+function renderTable(pv) {
+  const rows = pv.holdings.map(h => {
+    const fam = FAM[h.family];
+    const parts = (h.key || '').split('|');
+    const venc = parts.length === 4 ? `<span class="sub"> · venc. ${parts[3].slice(5, 7)}/${parts[3].slice(0, 4)}</span>` : '';
+    const flags = h.flags && h.flags !== '[]'
+      ? `<span class="chip" title="${h.flags.slice(1, -1)}">&#9873; ${h.flags.split(',').length}</span>` : '';
+    return `<tr>
+      <td>${h.name}${venc}${flags}</td>
+      <td>${h.institution}</td>
+      <td>${fam.risco}</td>
+      <td>${fam.classe}</td>
+      <td>${fam.instr(h)}</td>
+      <td class="num">${(h.value / pv.valuation * 100).toFixed(1).replace('.', ',')}%</td>
+      <td class="num">${brl.format(h.value)}</td>
+      <td class="num">${h.reported == null ? '–' : brl.format(h.reported)}</td>
+    </tr>`;
+  });
+  document.getElementById('tbody').innerHTML = rows.join('');
+  document.getElementById('assetCount').textContent = `${pv.holdings.length} ativos`;
+  document.getElementById('footCount').textContent = `Mostrando ${pv.holdings.length} de ${pv.holdings.length} ativos`;
+  document.getElementById('footTotal').textContent = brl.format(pv.valuation);
+}
+
+const sel = document.getElementById('partySelect');
+Object.keys(DATA).forEach((id, i) => {
+  const opt = document.createElement('option');
+  opt.value = id;
+  opt.textContent = `Cliente ${i + 1} · ${id.slice(0, 8)}`;
+  sel.appendChild(opt);
+});
+sel.value = state.party;
+sel.addEventListener('change', () => { state.party = sel.value; render(); });
+
+document.getElementById('tabs').addEventListener('click', ev => {
+  const btn = ev.target.closest('.tab');
+  if (!btn) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t === btn));
+  state.window = btn.dataset.m;
+  render();
+});
+
+render();
+</script>
+</body>
+</html>

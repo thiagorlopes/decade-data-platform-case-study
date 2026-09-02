@@ -28,6 +28,7 @@ WAREHOUSE = WEALTH_DIR.parent.parent / "decade.duckdb"
 EXPORTS = [
     ("holdings.sql", "holdings.csv", "QUALIFY dense_rank() OVER (", "WHERE fct.party_id = '{party_id}'"),
     ("movements.sql", "movements.csv", "ORDER BY mov.transaction_date", "WHERE mov.party_id = '{party_id}'"),
+    ("net_worth_over_time.sql", "net_worth_over_time.csv", "GROUP BY mov.party_id", "AND mov.party_id = '{party_id}'"),
 ]
 
 
