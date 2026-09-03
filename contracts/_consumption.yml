@@ -11,11 +11,12 @@ version: 2
 #                  investment_id of the same holding collapses to one copy
 #                  flagged transaction_id:reissued; dropped twins stay in
 #                  int_*_transactions. Unions int_*_transactions.
-#   dim_holding:   one row per (product_family, holding_key). Static contract
-#                  of the security: name, isin, maturity, indexer, rate,
-#                  issuer, ticker, fund_cnpj. Descriptive attributes live here
-#                  only; the facts carry keys and measures. Join either fact
-#                  on (product_family, holding_key).
+#   dim_holding:   one row per (product_family, holding_key). Instrument-level
+#                  attributes only: name, isin, issuer, maturity, indexer,
+#                  ticker, fund_cnpj. Purchase-time attributes (purchase_date,
+#                  negotiated rate) belong on the fact, not the dim. Descriptive
+#                  attributes live here only; the facts carry keys and measures.
+#                  Join either fact on (product_family, holding_key).
 #
 # institution_name stays denormalized on both facts on purpose: cardinality is
 # tiny and the value is stable, so the extra column is cheaper than a dim join
@@ -139,12 +140,13 @@ models:
 
   - name: dim_holding
     description: >
-      Static contract of each holding across families. Grain: one row per
-      (product_family, holding_key). Attributes reflect the latest observed
-      values across admitted lots; no SCD, later provider corrections overwrite
-      earlier ones. Join fct_holdings on (product_family, holding_key) to get
+      Instrument-level dimension: one row per (product_family, holding_key).
+      Attributes describe the security itself, not any client's purchase.
+      Purchase-time attributes (purchase_date, negotiated rate) belong on the
+      fact, not the dim. Later provider corrections overwrite earlier ones; no
+      SCD. Join fct_holdings on (product_family, holding_key) to get
       per-snapshot balances alongside static security attributes (maturity,
-      indexer, rate, issuer, ticker, fund_cnpj).
+      indexer, issuer, ticker, fund_cnpj).
     config:
       contract:
         enforced: true
@@ -195,21 +197,12 @@ models:
       - name: indexer
         data_type: string
         description: Indexer name for fixed incomes (bank/credit/treasure); NULL for funds and variable incomes.
-      - name: pre_fixed_rate
-        data_type: decimal(12,6)
-        description: '{{ doc("ofb_pre_fixed_rate") }} NULL for funds and variable incomes.'
-      - name: post_fixed_indexer_percentage
-        data_type: decimal(12,6)
-        description: Post-fixed indexer percentage for fixed incomes. NULL for funds and variable incomes.
       - name: issue_date
         data_type: date
         description: Issue date of the security (bank/credit fixed incomes only).
       - name: due_date
         data_type: date
         description: Maturity date of the security (bank/credit/treasure fixed incomes only; NULL for funds and variable incomes, which do not mature).
-      - name: purchase_date
-        data_type: date
-        description: Date the customer acquired the security (bank/credit/treasure fixed incomes only).
 
   - name: fct_movements
     description: >
