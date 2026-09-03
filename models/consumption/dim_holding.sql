@@ -1,6 +1,7 @@
--- Static contract of each holding across families. Grain: one row per
--- (product_family, holding_key). Attributes are latest observed values across
--- admitted lots; no SCD, later provider corrections overwrite earlier ones.
+-- Instrument-level dimension: one row per (product_family, holding_key).
+-- Attributes describe the security itself, not any client's purchase.
+-- Purchase-time attributes (purchase_date, negotiated rate) live on the
+-- fact, not here. Later provider corrections overwrite earlier ones; no SCD.
 -- Join fct_holdings on (product_family, holding_key).
 
 WITH bank AS (
@@ -16,11 +17,8 @@ WITH bank AS (
         CAST(NULL AS STRING)                                  AS ticker,
         max_by(investment_type, snapshot_created_at)          AS investment_type,
         max_by(indexer, snapshot_created_at)                  AS indexer,
-        max_by(pre_fixed_rate, snapshot_created_at)           AS pre_fixed_rate,
-        max_by(post_fixed_indexer_percentage, snapshot_created_at) AS post_fixed_indexer_percentage,
         max_by(issue_date, snapshot_created_at)               AS issue_date,
-        max_by(due_date, snapshot_created_at)                 AS due_date,
-        max_by(purchase_date, snapshot_created_at)            AS purchase_date
+        max_by(due_date, snapshot_created_at)                 AS due_date
     FROM {{ ref('int_bank_fixed_incomes_positions') }}
     WHERE admission = 'admit'
     GROUP BY 1, 2
@@ -39,11 +37,8 @@ credit AS (
         CAST(NULL AS STRING)                                  AS ticker,
         max_by(investment_type, snapshot_created_at)          AS investment_type,
         max_by(indexer, snapshot_created_at)                  AS indexer,
-        max_by(pre_fixed_rate, snapshot_created_at)           AS pre_fixed_rate,
-        max_by(post_fixed_indexer_percentage, snapshot_created_at) AS post_fixed_indexer_percentage,
         max_by(issue_date, snapshot_created_at)               AS issue_date,
-        max_by(due_date, snapshot_created_at)                 AS due_date,
-        max_by(purchase_date, snapshot_created_at)            AS purchase_date
+        max_by(due_date, snapshot_created_at)                 AS due_date
     FROM {{ ref('int_credit_fixed_incomes_positions') }}
     WHERE admission = 'admit'
     GROUP BY 1, 2
@@ -62,11 +57,8 @@ funds AS (
         CAST(NULL AS STRING)                                  AS ticker,
         CAST(NULL AS STRING)                                  AS investment_type,
         CAST(NULL AS STRING)                                  AS indexer,
-        CAST(NULL AS DECIMAL(12,6))                            AS pre_fixed_rate,
-        CAST(NULL AS DECIMAL(12,6))                            AS post_fixed_indexer_percentage,
         CAST(NULL AS DATE)                                     AS issue_date,
-        CAST(NULL AS DATE)                                     AS due_date,
-        CAST(NULL AS DATE)                                     AS purchase_date
+        CAST(NULL AS DATE)                                     AS due_date
     FROM {{ ref('int_funds_positions') }}
     WHERE admission = 'admit'
     GROUP BY 1, 2
@@ -85,11 +77,8 @@ treasure AS (
         CAST(NULL AS STRING)                                  AS ticker,
         CAST(NULL AS STRING)                                  AS investment_type,
         max_by(indexer, snapshot_created_at)                  AS indexer,
-        max_by(pre_fixed_rate, snapshot_created_at)           AS pre_fixed_rate,
-        max_by(post_fixed_indexer_percentage, snapshot_created_at) AS post_fixed_indexer_percentage,
         CAST(NULL AS DATE)                                     AS issue_date,
-        max_by(due_date, snapshot_created_at)                 AS due_date,
-        max_by(purchase_date, snapshot_created_at)            AS purchase_date
+        max_by(due_date, snapshot_created_at)                 AS due_date
     FROM {{ ref('int_treasure_titles_positions') }}
     WHERE admission = 'admit'
     GROUP BY 1, 2
@@ -108,11 +97,8 @@ variable AS (
         max_by(ticker, snapshot_created_at)                   AS ticker,
         CAST(NULL AS STRING)                                  AS investment_type,
         CAST(NULL AS STRING)                                  AS indexer,
-        CAST(NULL AS DECIMAL(12,6))                            AS pre_fixed_rate,
-        CAST(NULL AS DECIMAL(12,6))                            AS post_fixed_indexer_percentage,
         CAST(NULL AS DATE)                                     AS issue_date,
-        CAST(NULL AS DATE)                                     AS due_date,
-        CAST(NULL AS DATE)                                     AS purchase_date
+        CAST(NULL AS DATE)                                     AS due_date
     FROM {{ ref('int_variable_incomes_positions') }}
     WHERE admission = 'admit'
     GROUP BY 1, 2
