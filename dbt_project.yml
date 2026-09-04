@@ -18,6 +18,9 @@ models:
     canonical:
       +materialized: incremental
       +unique_key: [snapshot_id, investment_id]
+      # new columns land in the Delta table on the next incremental run instead
+      # of being silently dropped by the default (ignore)
+      +on_schema_change: append_new_columns
       +schema: canonical
       intermediate:
         # file sizing rationale: README.md § Physical layout. A merge every few

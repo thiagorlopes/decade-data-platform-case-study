@@ -38,6 +38,11 @@ Lot-grain, added in int_*_positions:
   non-repairable NULL in a column the OFB spec marks required. The
   per-family list is the `extra_flags` argument of each int_*_positions
   model.
+- `isin_code:imputed`: the payload's isin_code was blank and was filled in
+  from int_variable_incomes_instruments, the ticker-to-ISIN map derived
+  from the well-formed ISINs seen elsewhere in the feed. The row is safe
+  to use; the flag lets consumers segregate delivered vs inferred
+  identifiers. Applies to variable incomes only.
 - `natural_key:missing`: the record carries no identity to merge on (no ISIN,
   ticker, or equivalent). It becomes its own holding, keyed by its
   investment_id, and never merges with other records of the same security.
