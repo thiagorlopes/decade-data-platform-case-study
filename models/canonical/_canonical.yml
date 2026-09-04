@@ -31,7 +31,9 @@ models:
       Equity positions, one row per (snapshot_id, investment_id). Detail and
       balance staging rows joined for the same lot, repaired and classified.
       Holding identity is the ticker (notebook 03 §1.2: ISIN is blank in ~900
-      rows and no account quotes two real ISINs under one ticker).
+      rows and no account quotes two real ISINs under one ticker). Blank ISINs
+      are imputed from int_variable_incomes_instruments, with is_isin_imputed
+      as provenance and the isin_code:imputed flag on affected rows.
     data_tests:
       - &lot_grain
         dbt_utils.unique_combination_of_columns:
@@ -91,6 +93,12 @@ models:
         description: '{{ doc("ofb_position_quantity") }}'
       - name: closing_price
         description: '{{ doc("ofb_closing_price") }}'
+      - name: is_isin_imputed
+        description: >
+          True when isin_code was blank in the delivered payload and filled
+          in from int_variable_incomes_instruments. Provenance for the
+          isin_code:imputed data quality flag.
+        data_tests: [not_null]
       - &c_natural_key
         name: natural_key
         description: >-
@@ -109,6 +117,31 @@ models:
         name: data_quality_flags
         description: '{{ doc("data_quality_flags") }}'
         data_tests: [not_null]
+
+  - name: int_variable_incomes_instruments
+    description: >
+      Instrument identifier map, one row per ticker with its single
+      well-formed ISIN observed across the whole detail feed. Supports ISIN
+      imputation in int_variable_incomes_positions. A ticker with
+      conflicting well-formed ISINs stays out of the map, so imputation
+      never picks between conflicting values silently.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          name: int_variable_instruments_isin_well_formed
+          expression: "{{ decade.regex_matches('isin_code', '^BR[A-Z0-9]{9}[0-9]$') }}"
+    columns:
+      - name: ticker
+        description: '{{ doc("ofb_ticker") }}'
+        data_tests: [unique, not_null]
+      - name: isin_code
+        description: '{{ doc("ofb_isin_code") }}'
+        data_tests: [not_null]
+      - name: observation_count
+        description: Number of detail rows that quote this ticker with this ISIN.
+      - name: first_seen_at
+        description: Earliest snapshot_created_at that quotes this pair.
+      - name: last_seen_at
+        description: Latest snapshot_created_at that quotes this pair.
 
   - name: int_funds_positions
     description: >

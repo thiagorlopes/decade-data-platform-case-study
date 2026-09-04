@@ -42,15 +42,46 @@ repaired AS (
     FROM joined
 ),
 
+-- Impute isin_code from the instrument map when the delivered value was
+-- blank. The map's HAVING guard keeps ambiguous tickers out, so imputation
+-- never picks between conflicting values silently. Column list mirrors joined.
+imputed AS (
+    SELECT
+        rep.snapshot_id,
+        rep.investment_id,
+        rep.snapshot_created_at,
+        rep.institution_id,
+        rep.institution_name,
+        rep.party_id,
+        rep.account_id,
+        rep.connection_id,
+        rep.ingested_at,
+        rep.issuer_cnpj,
+        coalesce(rep.isin_code, map.isin_code) AS isin_code,
+        rep.ticker,
+        rep.reference_date,
+        rep.price_factor,
+        rep.gross_amount,
+        rep.currency,
+        rep.blocked_amount,
+        rep.quantity,
+        rep.closing_price,
+        (rep.isin_code IS NULL AND map.isin_code IS NOT NULL) AS is_isin_imputed
+    FROM repaired AS rep
+    LEFT JOIN {{ ref('int_variable_incomes_instruments') }} AS map
+        ON rep.ticker = map.ticker
+),
+
 -- ticker alone: ISIN is blank in ~900 rows and would fragment the key; no
 -- account quotes two real ISINs under one ticker (notebook 03 §1.2).
 with_natural_key AS (
     SELECT *, ticker AS natural_key
-    FROM repaired
+    FROM imputed
 ),
 
 {{ resolve_duplicate_investments(extra_flags=[
     ('ticker IS NULL',    'ticker:missing'),
     ('isin_code IS NULL', 'isin_code:missing'),
+    ('is_isin_imputed',   'isin_code:imputed'),
     ('abs(gross_amount::DOUBLE - quantity::DOUBLE * closing_price::DOUBLE / coalesce(price_factor::DOUBLE, 1)) > greatest(abs(gross_amount::DOUBLE) * 0.005, 0.02)', 'gross:not_quantity_times_price'),
 ]) }}
